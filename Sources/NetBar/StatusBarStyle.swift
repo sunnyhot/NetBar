@@ -307,8 +307,11 @@ enum StatusBarDisplayRenderer {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = settings.alignment.nsTextAlignment
         paragraphStyle.lineBreakMode = .byClipping
-        paragraphStyle.minimumLineHeight = max(layout.font.ascender - layout.font.descender + settings.clampedLineSpacing, 8)
-        paragraphStyle.maximumLineHeight = paragraphStyle.minimumLineHeight
+        let naturalLineHeight = layout.font.ascender - layout.font.descender
+        let constrainedLineHeight = max(naturalLineHeight + settings.clampedLineSpacing, 8)
+        paragraphStyle.minimumLineHeight = constrainedLineHeight
+        paragraphStyle.maximumLineHeight = constrainedLineHeight
+        let baselineOffset = -(max(naturalLineHeight - constrainedLineHeight, 0) / 2)
 
         let text = layout.lines.joined(separator: "\n")
         return NSAttributedString(
@@ -316,7 +319,8 @@ enum StatusBarDisplayRenderer {
             attributes: [
                 .font: layout.font,
                 .foregroundColor: settings.effectiveTextColor,
-                .paragraphStyle: paragraphStyle
+                .paragraphStyle: paragraphStyle,
+                .baselineOffset: NSNumber(value: Double(baselineOffset))
             ]
         )
     }
