@@ -4,15 +4,20 @@ import SwiftUI
 @MainActor
 final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let monitor: NetworkMonitor
-    private let settings: StatusBarSettings
-    private let updater: AppUpdater
+    private let appPreferences: AppPreferences
+    private let openPreferences: () -> Void
     private var window: NSWindow?
-    private let windowSize = NSSize(width: 460, height: 660)
+    private let defaultWindowSize = NSSize(width: 520, height: 680)
+    private let minimumWindowSize = NSSize(width: 460, height: 540)
 
-    init(monitor: NetworkMonitor, settings: StatusBarSettings, updater: AppUpdater) {
+    init(
+        monitor: NetworkMonitor,
+        appPreferences: AppPreferences,
+        openPreferences: @escaping () -> Void
+    ) {
         self.monitor = monitor
-        self.settings = settings
-        self.updater = updater
+        self.appPreferences = appPreferences
+        self.openPreferences = openPreferences
     }
 
     func toggle(anchor: NSStatusBarButton?) {
@@ -38,16 +43,21 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         }
 
         let detailsWindow = NSWindow(
-            contentRect: NSRect(origin: .zero, size: windowSize),
-            styleMask: [.titled, .closable, .miniaturizable],
+            contentRect: NSRect(origin: .zero, size: defaultWindowSize),
+            styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         detailsWindow.title = "NetBar 网络流量"
         detailsWindow.isReleasedWhenClosed = false
+        detailsWindow.minSize = minimumWindowSize
         detailsWindow.delegate = self
         detailsWindow.contentViewController = NSHostingController(
-            rootView: NetworkPopoverView(monitor: monitor, settings: settings, updater: updater)
+            rootView: NetworkPopoverView(
+                monitor: monitor,
+                appPreferences: appPreferences,
+                openPreferences: openPreferences
+            )
         )
         detailsWindow.collectionBehavior = [.moveToActiveSpace]
 
@@ -68,6 +78,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         let visibleFrame = screen.visibleFrame
         let anchorFrame = anchorWindow.convertToScreen(anchor.frame)
         let padding: CGFloat = 10
+        let windowSize = window.frame.size
         let x = clamp(
             anchorFrame.midX - windowSize.width / 2,
             min: visibleFrame.minX + padding,

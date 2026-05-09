@@ -6,20 +6,31 @@ import SwiftUI
 final class StatusBarController {
     private let monitor: NetworkMonitor
     private let settings: StatusBarSettings
-    private let updater: AppUpdater
+    private let appPreferences: AppPreferences
+    private let openPreferences: () -> Void
+    private let showAbout: () -> Void
     private let statusItem: NSStatusItem
     private let detailsWindowController: DetailsWindowController
     private var cancellables: Set<AnyCancellable> = []
+    private var lastRenderSignature: StatusBarRenderSignature?
 
-    init(monitor: NetworkMonitor, settings: StatusBarSettings, updater: AppUpdater) {
+    init(
+        monitor: NetworkMonitor,
+        settings: StatusBarSettings,
+        appPreferences: AppPreferences,
+        openPreferences: @escaping () -> Void,
+        showAbout: @escaping () -> Void
+    ) {
         self.monitor = monitor
         self.settings = settings
-        self.updater = updater
+        self.appPreferences = appPreferences
+        self.openPreferences = openPreferences
+        self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         self.detailsWindowController = DetailsWindowController(
             monitor: monitor,
-            settings: settings,
-            updater: updater
+            appPreferences: appPreferences,
+            openPreferences: openPreferences
         )
 
         configureStatusItem()
@@ -32,7 +43,8 @@ final class StatusBarController {
         guard let button = statusItem.button else { return }
         button.action = #selector(toggleDetailsWindow(_:))
         button.target = self
-        button.imagePosition = .imageOnly
+        button.sendAction(on: [.leftMouseUp, .rightMouseUp])
+        button.imagePosition = .noImage
         button.imageScaling = .scaleNone
         button.title = ""
         button.wantsLayer = false
@@ -55,9 +67,42 @@ final class StatusBarController {
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
-        let image = StatusBarImageRenderer.image(snapshot: monitor.snapshot, settings: settings)
-        statusItem.length = image.size.width
-        button.image = image
+        let appearanceName = button.effectiveAppearance.name.rawValue
+        let signature = StatusBarDisplayRenderer.signature(
+            snapshot: monitor.snapshot,
+            settings: settings,
+            appearanceName: appearanceName
+        )
+        guard signature != lastRenderSignature else { return }
+
+        let presentation = signature.presentation
+        statusItem.length = presentation.width
+
+        switch presentation.kind {
+        case .nativeTitle:
+            button.image = nil
+            button.imagePosition = .noImage
+            button.alignment = settings.alignment.nsTextAlignment
+            button.lineBreakMode = .byClipping
+            button.attributedTitle = StatusBarDisplayRenderer.attributedTitle(
+                snapshot: monitor.snapshot,
+                settings: settings
+            )
+        case .retinaImage:
+            let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            let image = StatusBarDisplayRenderer.image(
+                snapshot: monitor.snapshot,
+                settings: settings,
+                scale: scale
+            )
+            button.attributedTitle = NSAttributedString(string: "")
+            button.title = ""
+            button.imagePosition = .imageOnly
+            button.imageScaling = .scaleNone
+            button.image = image
+        }
+
+        lastRenderSignature = signature
     }
 
     func showDetailsWindow(anchorToMenuBar: Bool = false) {
@@ -65,6 +110,61 @@ final class StatusBarController {
     }
 
     @objc private func toggleDetailsWindow(_ sender: AnyObject?) {
+        if NSApplication.shared.currentEvent?.type == .rightMouseUp {
+            showStatusMenu()
+            return
+        }
         detailsWindowController.toggle(anchor: statusItem.button)
+    }
+
+    private func showStatusMenu() {
+        let menu = NSMenu()
+        menu.addItem(NSMenuItem(
+            title: text("打开流量窗口", "Open Traffic Window"),
+            action: #selector(openDetailsFromMenu(_:)),
+            keyEquivalent: ""
+        ))
+        menu.addItem(NSMenuItem(
+            title: text("偏好设置...", "Preferences..."),
+            action: #selector(openPreferencesFromMenu(_:)),
+            keyEquivalent: ","
+        ))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(
+            title: text("关于 NetBar", "About NetBar"),
+            action: #selector(showAboutFromMenu(_:)),
+            keyEquivalent: ""
+        ))
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(
+            title: text("退出 NetBar", "Quit NetBar"),
+            action: #selector(quitFromMenu(_:)),
+            keyEquivalent: "q"
+        ))
+        menu.items.forEach { $0.target = self }
+
+        statusItem.menu = menu
+        statusItem.button?.performClick(nil)
+        statusItem.menu = nil
+    }
+
+    @objc private func openDetailsFromMenu(_ sender: AnyObject?) {
+        showDetailsWindow()
+    }
+
+    @objc private func openPreferencesFromMenu(_ sender: AnyObject?) {
+        openPreferences()
+    }
+
+    @objc private func showAboutFromMenu(_ sender: AnyObject?) {
+        showAbout()
+    }
+
+    @objc private func quitFromMenu(_ sender: AnyObject?) {
+        NSApplication.shared.terminate(nil)
+    }
+
+    private func text(_ simplifiedChinese: String, _ english: String) -> String {
+        appPreferences.text(simplifiedChinese, english)
     }
 }

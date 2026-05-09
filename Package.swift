@@ -17,6 +17,14 @@ let package = Package(
             swiftSettings: [
                 .swiftLanguageMode(.v5)
             ]
+        ),
+        .testTarget(
+            name: "NetBarTests",
+            dependencies: ["NetBar"],
+            path: "Tests/NetBarTests",
+            swiftSettings: [
+                .swiftLanguageMode(.v5)
+            ]
         )
     ]
 )

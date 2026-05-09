@@ -50,11 +50,15 @@ enum StatusBarOrder: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        title(language: .simplifiedChinese)
+    }
+
+    func title(language: AppLanguage) -> String {
         switch self {
         case .uploadFirst:
-            return "上传在上"
+            return language.text("上传在上", "Upload first")
         case .downloadFirst:
-            return "下载在上"
+            return language.text("下载在上", "Download first")
         }
     }
 }
@@ -67,13 +71,17 @@ enum StatusBarAlignment: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 
     var title: String {
+        title(language: .simplifiedChinese)
+    }
+
+    func title(language: AppLanguage) -> String {
         switch self {
         case .leading:
-            return "左对齐"
+            return language.text("左对齐", "Leading")
         case .center:
-            return "居中"
+            return language.text("居中", "Center")
         case .trailing:
-            return "右对齐"
+            return language.text("右对齐", "Trailing")
         }
     }
 
@@ -101,6 +109,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var isBold: Bool { didSet { save() } }
     @Published var showsBackground: Bool { didSet { save() } }
     @Published var backgroundOpacity: Double { didSet { save() } }
+    @Published var usesSystemTextColor: Bool { didSet { save() } }
     @Published var textColor: PersistedColor { didSet { save() } }
     @Published var backgroundColor: PersistedColor { didSet { save() } }
 
@@ -118,6 +127,7 @@ final class StatusBarSettings: ObservableObject {
         isBold = defaults.object(forKey: Keys.isBold) as? Bool ?? Defaults.isBold
         showsBackground = defaults.object(forKey: Keys.showsBackground) as? Bool ?? Defaults.showsBackground
         backgroundOpacity = defaults.object(forKey: Keys.backgroundOpacity) as? Double ?? Defaults.backgroundOpacity
+        usesSystemTextColor = defaults.object(forKey: Keys.usesSystemTextColor) as? Bool ?? Defaults.usesSystemTextColor
         textColor = Self.color(prefix: Keys.textColor, defaults: defaults, fallback: Defaults.textColor)
         backgroundColor = Self.color(prefix: Keys.backgroundColor, defaults: defaults, fallback: Defaults.backgroundColor)
     }
@@ -138,6 +148,10 @@ final class StatusBarSettings: ObservableObject {
         isBold ? .semibold : .medium
     }
 
+    var effectiveTextColor: NSColor {
+        usesSystemTextColor ? .labelColor : textColor.nsColor
+    }
+
     func reset() {
         fontSize = Defaults.fontSize
         itemWidth = Defaults.itemWidth
@@ -149,6 +163,7 @@ final class StatusBarSettings: ObservableObject {
         isBold = Defaults.isBold
         showsBackground = Defaults.showsBackground
         backgroundOpacity = Defaults.backgroundOpacity
+        usesSystemTextColor = Defaults.usesSystemTextColor
         textColor = Defaults.textColor
         backgroundColor = Defaults.backgroundColor
     }
@@ -164,6 +179,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(isBold, forKey: Keys.isBold)
         defaults.set(showsBackground, forKey: Keys.showsBackground)
         defaults.set(backgroundOpacity, forKey: Keys.backgroundOpacity)
+        defaults.set(usesSystemTextColor, forKey: Keys.usesSystemTextColor)
         save(textColor, prefix: Keys.textColor)
         save(backgroundColor, prefix: Keys.backgroundColor)
     }
@@ -199,6 +215,7 @@ final class StatusBarSettings: ObservableObject {
         static let isBold = true
         static let showsBackground = false
         static let backgroundOpacity = 0.0
+        static let usesSystemTextColor = true
         static let textColor = PersistedColor.white
         static let backgroundColor = PersistedColor.olive
     }
@@ -214,22 +231,129 @@ final class StatusBarSettings: ObservableObject {
         static let isBold = "statusBar.isBold"
         static let showsBackground = "statusBar.showsBackground"
         static let backgroundOpacity = "statusBar.backgroundOpacity"
+        static let usesSystemTextColor = "statusBar.usesSystemTextColor"
         static let textColor = "statusBar.textColor"
         static let backgroundColor = "statusBar.backgroundColor"
     }
 }
 
 @MainActor
-enum StatusBarImageRenderer {
+enum StatusBarPresentationKind: Equatable {
+    case nativeTitle
+    case retinaImage
+}
+
+struct StatusBarPresentation: Equatable {
+    let kind: StatusBarPresentationKind
+    let width: CGFloat
+    let lines: [String]
+}
+
+struct StatusBarRenderSignature: Equatable {
+    let presentation: StatusBarPresentation
+    let fontSize: Double
+    let itemWidth: Double
+    let usesAutomaticWidth: Bool
+    let lineSpacing: Double
+    let order: StatusBarOrder
+    let alignment: StatusBarAlignment
+    let showsArrows: Bool
+    let isBold: Bool
+    let showsBackground: Bool
+    let backgroundOpacity: Double
+    let usesSystemTextColor: Bool
+    let textColor: PersistedColor
+    let backgroundColor: PersistedColor
+    let appearanceName: String
+}
+
+@MainActor
+enum StatusBarDisplayRenderer {
+    static func presentation(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> StatusBarPresentation {
+        let layout = layout(snapshot: snapshot, settings: settings)
+        return StatusBarPresentation(
+            kind: settings.showsBackground ? .retinaImage : .nativeTitle,
+            width: layout.width,
+            lines: layout.lines
+        )
+    }
+
+    static func signature(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        appearanceName: String
+    ) -> StatusBarRenderSignature {
+        StatusBarRenderSignature(
+            presentation: presentation(snapshot: snapshot, settings: settings),
+            fontSize: settings.fontSize,
+            itemWidth: settings.itemWidth,
+            usesAutomaticWidth: settings.usesAutomaticWidth,
+            lineSpacing: settings.lineSpacing,
+            order: settings.order,
+            alignment: settings.alignment,
+            showsArrows: settings.showsArrows,
+            isBold: settings.isBold,
+            showsBackground: settings.showsBackground,
+            backgroundOpacity: settings.backgroundOpacity,
+            usesSystemTextColor: settings.usesSystemTextColor,
+            textColor: settings.textColor,
+            backgroundColor: settings.backgroundColor,
+            appearanceName: appearanceName
+        )
+    }
+
+    static func attributedTitle(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSAttributedString {
+        let layout = layout(snapshot: snapshot, settings: settings)
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = settings.alignment.nsTextAlignment
+        paragraphStyle.lineBreakMode = .byClipping
+        paragraphStyle.minimumLineHeight = max(layout.font.ascender - layout.font.descender + settings.clampedLineSpacing, 8)
+        paragraphStyle.maximumLineHeight = paragraphStyle.minimumLineHeight
+
+        let text = layout.lines.joined(separator: "\n")
+        return NSAttributedString(
+            string: text,
+            attributes: [
+                .font: layout.font,
+                .foregroundColor: settings.effectiveTextColor,
+                .paragraphStyle: paragraphStyle
+            ]
+        )
+    }
+
     static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSImage {
+        image(snapshot: snapshot, settings: settings, scale: NSScreen.main?.backingScaleFactor ?? 2)
+    }
+
+    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, scale: CGFloat) -> NSImage {
         let layout = layout(snapshot: snapshot, settings: settings)
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
         let size = NSSize(width: width, height: height)
-        let image = NSImage(size: size)
+        let safeScale = max(scale, 1)
+        let pixelsWide = max(Int(ceil(width * safeScale)), 1)
+        let pixelsHigh = max(Int(ceil(height * safeScale)), 1)
+        guard let representation = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: pixelsWide,
+            pixelsHigh: pixelsHigh,
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else {
+            return NSImage(size: size)
+        }
 
-        image.lockFocus()
-        defer { image.unlockFocus() }
+        representation.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: representation)
+        defer {
+            NSGraphicsContext.restoreGraphicsState()
+        }
 
         NSColor.clear.setFill()
         NSRect(origin: .zero, size: size).fill()
@@ -247,7 +371,7 @@ enum StatusBarImageRenderer {
 
         let attributes: [NSAttributedString.Key: Any] = [
             .font: layout.font,
-            .foregroundColor: settings.textColor.nsColor,
+            .foregroundColor: settings.effectiveTextColor,
             .paragraphStyle: paragraphStyle
         ]
 
@@ -275,12 +399,26 @@ enum StatusBarImageRenderer {
             withAttributes: attributes
         )
 
+        let image = NSImage(size: size)
+        image.addRepresentation(representation)
         image.isTemplate = false
         return image
     }
 
     static func width(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> CGFloat {
         layout(snapshot: snapshot, settings: settings).width
+    }
+
+    static func stableMinimumWidth(settings: StatusBarSettings) -> CGFloat {
+        let font = NSFont.monospacedDigitSystemFont(
+            ofSize: settings.clampedFontSize,
+            weight: settings.fontWeight
+        )
+        let horizontalPadding: CGFloat = settings.showsBackground ? 8 : 2
+        let stableWidth = stableWidthTemplates(settings: settings)
+            .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
+            .max() ?? 1
+        return ceil(stableWidth + horizontalPadding * 2)
     }
 
     private static func line(prefix: String, value: String, settings: StatusBarSettings) -> String {

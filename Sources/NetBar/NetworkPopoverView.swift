@@ -2,78 +2,67 @@ import SwiftUI
 
 struct NetworkPopoverView: View {
     @ObservedObject var monitor: NetworkMonitor
-    @ObservedObject var settings: StatusBarSettings
-    @ObservedObject var updater: AppUpdater
-    @State private var selectedPage = DetailsPage.traffic
+    @ObservedObject var appPreferences: AppPreferences
+    let openPreferences: () -> Void
+    @State private var appSearchText = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(snapshot: monitor.snapshot)
+            HeaderView(snapshot: monitor.snapshot, appPreferences: appPreferences)
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
                 .padding(.bottom, 14)
 
-            Picker("", selection: $selectedPage) {
-                ForEach(DetailsPage.allCases) { page in
-                    Text(page.title).tag(page)
-                }
-            }
-            .pickerStyle(.segmented)
-            .padding(.horizontal, 18)
-            .padding(.bottom, 12)
-
             Divider()
 
-            switch selectedPage {
-            case .traffic:
-                ScrollView {
-                    VStack(alignment: .leading, spacing: 16) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if !appPreferences.hasCompletedOnboarding {
+                        FirstLaunchGuide(
+                            appPreferences: appPreferences,
+                            openPreferences: openPreferences,
+                            completeOnboarding: appPreferences.completeOnboarding
+                        )
+                        .padding(.top, 16)
+                    } else {
                         TrafficChart(points: monitor.recentHistory)
                             .frame(height: 90)
                             .padding(.top, 16)
-
-                        SummaryGrid(snapshot: monitor.snapshot)
-
-                        ApplicationTrafficList(appTraffic: monitor.appTraffic)
-
-                        InterfaceList(interfaces: monitor.snapshot.interfaces)
                     }
-                    .padding(.horizontal, 18)
-                    .padding(.bottom, 16)
+
+                    SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
+
+                    ApplicationTrafficList(
+                        appTraffic: monitor.appTraffic,
+                        preferences: appPreferences,
+                        searchText: $appSearchText,
+                        retry: monitor.refreshApplicationTraffic
+                    )
+
+                    InterfaceList(
+                        interfaces: monitor.snapshot.interfaces,
+                        appPreferences: appPreferences,
+                        refresh: monitor.refresh
+                    )
                 }
-            case .settings:
-                StyleSettingsView(settings: settings, updater: updater, snapshot: monitor.snapshot)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 16)
             }
 
             Divider()
 
-            FooterView(monitor: monitor)
+            FooterView(monitor: monitor, appPreferences: appPreferences, openPreferences: openPreferences)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
         }
-        .frame(width: 460, height: 660)
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 540, idealHeight: 680)
         .background(Color(nsColor: .windowBackgroundColor))
-    }
-}
-
-private enum DetailsPage: String, CaseIterable, Identifiable {
-    case traffic
-    case settings
-
-    var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .traffic:
-            return "流量"
-        case .settings:
-            return "设置"
-        }
     }
 }
 
 private struct HeaderView: View {
     let snapshot: NetworkSnapshot
+    @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -90,13 +79,13 @@ private struct HeaderView: View {
 
             HStack(spacing: 12) {
                 SpeedTile(
-                    title: "下载",
+                    title: appPreferences.text("下载", "Download"),
                     value: ByteFormat.speed(snapshot.downloadBytesPerSecond),
                     tint: .blue,
                     symbol: "arrow.down"
                 )
                 SpeedTile(
-                    title: "上传",
+                    title: appPreferences.text("上传", "Upload"),
                     value: ByteFormat.speed(snapshot.uploadBytesPerSecond),
                     tint: .orange,
                     symbol: "arrow.up"
@@ -106,256 +95,49 @@ private struct HeaderView: View {
     }
 }
 
-private struct StyleSettingsView: View {
-    @ObservedObject var settings: StatusBarSettings
-    @ObservedObject var updater: AppUpdater
-    let snapshot: NetworkSnapshot
-
-    private var textColorBinding: Binding<Color> {
-        Binding(
-            get: { settings.textColor.swiftUIColor },
-            set: { settings.textColor = PersistedColor(color: $0) }
-        )
-    }
-
-    private var backgroundColorBinding: Binding<Color> {
-        Binding(
-            get: { settings.backgroundColor.swiftUIColor },
-            set: { settings.backgroundColor = PersistedColor(color: $0) }
-        )
-    }
-
-    private var transparentBackgroundBinding: Binding<Bool> {
-        Binding(
-            get: { !settings.showsBackground },
-            set: { isTransparent in
-                settings.showsBackground = !isTransparent
-                if isTransparent {
-                    settings.backgroundOpacity = 0
-                } else if settings.backgroundOpacity == 0 {
-                    settings.backgroundOpacity = 0.8
-                }
-            }
-        )
-    }
+private struct FirstLaunchGuide: View {
+    @ObservedObject var appPreferences: AppPreferences
+    let openPreferences: () -> Void
+    let completeOnboarding: () -> Void
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                MenuBarPreview(settings: settings, snapshot: snapshot)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 12) {
+                Image(systemName: "menubar.rectangle")
+                    .font(.system(size: 22, weight: .semibold))
+                    .foregroundStyle(Color.accentColor)
+                    .frame(width: 30, height: 30)
 
-                SettingsGroup(title: "文字") {
-                    SliderSetting(
-                        title: "字号",
-                        value: $settings.fontSize,
-                        range: 8...18,
-                        displayValue: "\(Int(settings.fontSize.rounded()))"
-                    )
-
-                    Toggle("自动宽度", isOn: $settings.usesAutomaticWidth)
-
-                    if !settings.usesAutomaticWidth {
-                        SliderSetting(
-                            title: "手动宽度",
-                            value: $settings.itemWidth,
-                            range: 36...220,
-                            displayValue: "\(Int(settings.itemWidth.rounded()))"
-                        )
-                    }
-
-                    SliderSetting(
-                        title: "行距",
-                        value: $settings.lineSpacing,
-                        range: -5...8,
-                        displayValue: String(format: "%.1f", settings.lineSpacing)
-                    )
-
-                    ColorPicker("文字颜色", selection: textColorBinding, supportsOpacity: true)
-
-                    Toggle("加粗", isOn: $settings.isBold)
-                    Toggle("显示箭头", isOn: $settings.showsArrows)
-                }
-
-                SettingsGroup(title: "布局") {
-                    Picker("排列", selection: $settings.order) {
-                        ForEach(StatusBarOrder.allCases) { order in
-                            Text(order.title).tag(order)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker("对齐", selection: $settings.alignment) {
-                        ForEach(StatusBarAlignment.allCases) { alignment in
-                            Text(alignment.title).tag(alignment)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                SettingsGroup(title: "背景") {
-                    Toggle("透明背景", isOn: transparentBackgroundBinding)
-
-                    if settings.showsBackground {
-                        ColorPicker("背景颜色", selection: backgroundColorBinding, supportsOpacity: true)
-
-                        SliderSetting(
-                            title: "不透明度",
-                            value: $settings.backgroundOpacity,
-                            range: 0...1,
-                            displayValue: "\(Int((settings.backgroundOpacity * 100).rounded()))%"
-                        )
-                    }
-                }
-
-                UpdateSettingsView(updater: updater)
-
-                HStack {
-                    Spacer()
-                    Button("恢复默认") {
-                        settings.reset()
-                    }
-                    .buttonStyle(.bordered)
-                }
-            }
-            .padding(18)
-        }
-    }
-}
-
-private struct UpdateSettingsView: View {
-    @ObservedObject var updater: AppUpdater
-
-    var body: some View {
-        SettingsGroup(title: "更新") {
-            HStack {
-                Text("当前版本")
-                Spacer()
-                Text(updater.currentVersionText)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.system(size: 12, weight: .medium))
-
-            Toggle("自动检测更新", isOn: $updater.automaticallyChecksForUpdates)
-
-            VStack(alignment: .leading, spacing: 6) {
-                Text(updater.statusMessage)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                if let lastCheckedAt = updater.lastCheckedAt {
-                    Text("上次检查：\(lastCheckedAt, style: .time)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.tertiary)
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(appPreferences.text("欢迎使用 NetBar", "Welcome to NetBar"))
+                        .font(.system(size: 15, weight: .semibold))
+                    Text(appPreferences.text(
+                        "菜单栏会每秒更新网络速度；应用流量来自 macOS nettop，首次采样需要几秒。你可以在偏好设置里打开开机启动、隐藏 Dock 图标，并调整应用列表筛选。",
+                        "The menu bar updates network speed every second. Application traffic comes from macOS nettop, so the first sample can take a few seconds. Preferences include launch at login, Dock visibility, and app filtering."
+                    ))
+                        .font(.system(size: 12))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
             }
 
             HStack(spacing: 10) {
                 Button {
-                    Task {
-                        await updater.checkForUpdates(isManual: true)
-                    }
+                    openPreferences()
                 } label: {
-                    Label(updater.isChecking ? "检查中" : "检查更新", systemImage: "arrow.clockwise")
-                }
-                .disabled(updater.isChecking || updater.isDownloading)
-
-                if updater.availableUpdate != nil {
-                    Button {
-                        Task {
-                            await updater.downloadAndInstall()
-                        }
-                    } label: {
-                        Label(updater.isDownloading ? "下载中" : "下载并安装", systemImage: "square.and.arrow.down")
-                    }
-                    .disabled(updater.isChecking || updater.isDownloading)
-                    .buttonStyle(.borderedProminent)
+                    Label(appPreferences.text("打开偏好设置", "Open Preferences"), systemImage: "gearshape")
                 }
 
-                Spacer()
-
-                if let releasePageURL = updater.releasePageURL {
-                    Link(destination: releasePageURL) {
-                        Image(systemName: "safari")
-                    }
-                    .help("打开 GitHub Releases")
+                Button(appPreferences.text("知道了", "Got It")) {
+                    completeOnboarding()
                 }
-            }
-        }
-    }
-}
+                .keyboardShortcut(.defaultAction)
 
-private struct MenuBarPreview: View {
-    @ObservedObject var settings: StatusBarSettings
-    let snapshot: NetworkSnapshot
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("菜单栏预览")
-                .font(.system(size: 13, weight: .semibold))
-
-            HStack {
-                Spacer()
-                Image(nsImage: StatusBarImageRenderer.image(snapshot: snapshot, settings: settings))
-                    .frame(
-                        width: StatusBarImageRenderer.width(snapshot: snapshot, settings: settings),
-                        height: max(NSStatusBar.system.thickness, 24)
-                    )
                 Spacer()
             }
-            .frame(height: 52)
-            .background(
-                LinearGradient(
-                    colors: [
-                        Color(red: 0.27, green: 0.28, blue: 0.14),
-                        Color(red: 0.18, green: 0.19, blue: 0.12)
-                    ],
-                    startPoint: .leading,
-                    endPoint: .trailing
-                ),
-                in: RoundedRectangle(cornerRadius: 8)
-            )
         }
-    }
-}
-
-private struct SettingsGroup<Content: View>: View {
-    let title: String
-    @ViewBuilder var content: Content
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(title)
-                .font(.system(size: 13, weight: .semibold))
-            VStack(alignment: .leading, spacing: 12) {
-                content
-            }
-            .padding(12)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-        }
-    }
-}
-
-private struct SliderSetting: View {
-    let title: String
-    @Binding var value: Double
-    let range: ClosedRange<Double>
-    let displayValue: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(title)
-                Spacer()
-                Text(displayValue)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-            .font(.system(size: 12, weight: .medium))
-
-            Slider(value: $value, in: range)
-        }
+        .padding(14)
+        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 
@@ -391,16 +173,17 @@ private struct SpeedTile: View {
 
 private struct SummaryGrid: View {
     let snapshot: NetworkSnapshot
+    @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
         Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
             GridRow {
-                SummaryCell(title: "总下载", value: ByteFormat.bytes(snapshot.totalReceivedBytes))
-                SummaryCell(title: "总上传", value: ByteFormat.bytes(snapshot.totalSentBytes))
+                SummaryCell(title: appPreferences.text("总下载", "Total Download"), value: ByteFormat.bytes(snapshot.totalReceivedBytes))
+                SummaryCell(title: appPreferences.text("总上传", "Total Upload"), value: ByteFormat.bytes(snapshot.totalSentBytes))
             }
             GridRow {
-                SummaryCell(title: "活动接口", value: "\(snapshot.interfaces.count)")
-                SummaryCell(title: "采样次数", value: "\(snapshot.sampleCount)")
+                SummaryCell(title: appPreferences.text("活动接口", "Active Interfaces"), value: "\(snapshot.interfaces.count)")
+                SummaryCell(title: appPreferences.text("采样次数", "Samples"), value: "\(snapshot.sampleCount)")
             }
         }
     }
@@ -408,21 +191,28 @@ private struct SummaryGrid: View {
 
 private struct ApplicationTrafficList: View {
     let appTraffic: ApplicationTrafficState
+    @ObservedObject var preferences: AppPreferences
+    @Binding var searchText: String
+    let retry: () -> Void
 
     private var visibleApplications: [ApplicationTrafficRate] {
-        Array(appTraffic.applications.prefix(18))
+        ApplicationTrafficPresentation.visibleApplications(
+            from: appTraffic,
+            preferences: preferences,
+            searchText: searchText
+        )
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Text("应用流量")
+                Text(preferences.text("应用流量", "Application Traffic"))
                     .font(.system(size: 14, weight: .semibold))
 
                 Spacer()
 
                 if let timestamp = appTraffic.timestamp {
-                    Text("更新于 \(timestamp, style: .time)")
+                    Text("\(preferences.text("更新于", "Updated")) \(timestamp, style: .time)")
                         .font(.system(size: 11, weight: .medium))
                         .foregroundStyle(.secondary)
                 }
@@ -431,23 +221,71 @@ private struct ApplicationTrafficList: View {
             if let errorMessage = appTraffic.errorMessage {
                 AppTrafficNotice(
                     symbol: "exclamationmark.triangle",
-                    title: "无法读取应用流量",
-                    message: errorMessage
-                )
-            } else if visibleApplications.isEmpty {
-                AppTrafficNotice(
-                    symbol: appTraffic.isRefreshing ? "arrow.triangle.2.circlepath" : "app.dashed",
-                    title: appTraffic.isRefreshing ? "正在读取应用流量" : "暂无应用流量",
-                    message: "应用级数据来自 macOS nettop，首次采样后会显示实时速率。"
+                    title: preferences.text("无法读取应用流量", "Unable to Read Application Traffic"),
+                    message: "\(errorMessage)\n\(preferences.text("可重试读取；如果仍失败，请确认系统自带 nettop 可运行。", "Try again. If it still fails, confirm that the built-in nettop command can run."))",
+                    actionTitle: preferences.text("重试", "Retry"),
+                    action: retry
                 )
             } else {
-                VStack(spacing: 8) {
-                    ForEach(visibleApplications) { application in
-                        ApplicationTrafficRow(application: application)
+                if shouldShowControls {
+                    HStack(spacing: 10) {
+                        TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
+                            .textFieldStyle(.roundedBorder)
+
+                        Picker(preferences.text("排序", "Sort"), selection: $preferences.applicationSort) {
+                            ForEach(ApplicationSortMode.allCases) { sortMode in
+                                Text(sortMode.title(language: preferences.resolvedLanguage)).tag(sortMode)
+                            }
+                        }
+                        .labelsHidden()
+                        .frame(width: 118)
+                    }
+                }
+
+                if visibleApplications.isEmpty {
+                    AppTrafficNotice(
+                        symbol: appTraffic.isRefreshing ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
+                        title: appTraffic.isRefreshing ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
+                        message: emptyMessage
+                    )
+                } else {
+                    VStack(spacing: 8) {
+                        ForEach(visibleApplications) { application in
+                            ApplicationTrafficRow(application: application)
+                        }
                     }
                 }
             }
         }
+    }
+
+    private var emptyTitle: String {
+        searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            ? preferences.text("暂无应用流量", "No Application Traffic Yet")
+            : preferences.text("没有匹配的应用", "No Matching Apps")
+    }
+
+    private var shouldShowControls: Bool {
+        !appTraffic.applications.isEmpty || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private var emptyMessage: String {
+        if appTraffic.isRefreshing {
+            return preferences.text(
+                "应用级数据来自 macOS nettop，首次采样后会显示实时速率。",
+                "Application-level data comes from macOS nettop. Live rates appear after the first sample."
+            )
+        }
+        if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return preferences.text(
+                "请调整搜索关键字，或在偏好设置里关闭隐藏系统进程。",
+                "Adjust the search term, or disable hidden system processes in Preferences."
+            )
+        }
+        return preferences.text(
+            "保持 NetBar 运行几秒后会显示有网络活动的应用。代理或 VPN 可能会把流量归到代理进程下。",
+            "Keep NetBar running for a few seconds to show apps with network activity. Proxies and VPNs may attribute traffic to the proxy process."
+        )
     }
 }
 
@@ -455,6 +293,8 @@ private struct AppTrafficNotice: View {
     let symbol: String
     let title: String
     let message: String
+    var actionTitle: String? = nil
+    var action: (() -> Void)? = nil
 
     var body: some View {
         HStack(spacing: 10) {
@@ -470,6 +310,13 @@ private struct AppTrafficNotice: View {
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer()
+
+            if let actionTitle, let action {
+                Button(actionTitle, action: action)
+                    .buttonStyle(.bordered)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -563,14 +410,16 @@ private struct SummaryCell: View {
 
 private struct InterfaceList: View {
     let interfaces: [InterfaceRate]
+    @ObservedObject var appPreferences: AppPreferences
+    let refresh: () -> Void
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("接口明细")
+            Text(appPreferences.text("接口明细", "Interfaces"))
                 .font(.system(size: 13, weight: .semibold))
 
             if interfaces.isEmpty {
-                EmptyInterfacesView()
+                EmptyInterfacesView(appPreferences: appPreferences, refresh: refresh)
             } else {
                 VStack(spacing: 8) {
                     ForEach(interfaces) { item in
@@ -583,16 +432,25 @@ private struct InterfaceList: View {
 }
 
 private struct EmptyInterfacesView: View {
+    @ObservedObject var appPreferences: AppPreferences
+    let refresh: () -> Void
+
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "network.slash")
                 .font(.system(size: 26, weight: .medium))
                 .foregroundStyle(.secondary)
-            Text("暂无网络接口")
+            Text(appPreferences.text("暂无网络接口", "No Network Interfaces"))
                 .font(.system(size: 13, weight: .semibold))
-            Text("请确认网络连接可用。")
+            Text(appPreferences.text("请确认网络连接可用。", "Check that a network connection is available."))
                 .font(.system(size: 12))
                 .foregroundStyle(.secondary)
+            Button {
+                refresh()
+            } label: {
+                Label(appPreferences.text("重新读取接口", "Read Interfaces Again"), systemImage: "arrow.clockwise")
+            }
+            .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, minHeight: 140)
         .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
@@ -671,14 +529,27 @@ private struct MetricPill: View {
 
 private struct FooterView: View {
     @ObservedObject var monitor: NetworkMonitor
+    @ObservedObject var appPreferences: AppPreferences
+    let openPreferences: () -> Void
 
     var body: some View {
         HStack {
-            Label(monitor.isRunning ? "实时监控中" : "已暂停", systemImage: monitor.isRunning ? "dot.radiowaves.left.and.right" : "pause.circle")
+            Label(
+                monitor.isRunning ? appPreferences.text("实时监控中", "Monitoring") : appPreferences.text("已暂停", "Paused"),
+                systemImage: monitor.isRunning ? "dot.radiowaves.left.and.right" : "pause.circle"
+            )
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(.secondary)
 
             Spacer()
+
+            Button {
+                openPreferences()
+            } label: {
+                Image(systemName: "gearshape")
+            }
+            .buttonStyle(.borderless)
+            .help(appPreferences.text("偏好设置", "Preferences"))
 
             Button {
                 monitor.refresh()
@@ -687,7 +558,7 @@ private struct FooterView: View {
                 Image(systemName: "arrow.clockwise")
             }
             .buttonStyle(.borderless)
-            .help("立即刷新")
+            .help(appPreferences.text("立即刷新", "Refresh Now"))
 
             Button {
                 NSApplication.shared.terminate(nil)
@@ -695,7 +566,7 @@ private struct FooterView: View {
                 Image(systemName: "power")
             }
             .buttonStyle(.borderless)
-            .help("退出 NetBar")
+            .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
         }
     }
 }
