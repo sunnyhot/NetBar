@@ -272,7 +272,7 @@ enum StatusBarDisplayRenderer {
     static func presentation(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> StatusBarPresentation {
         let layout = layout(snapshot: snapshot, settings: settings)
         return StatusBarPresentation(
-            kind: settings.showsBackground ? .retinaImage : .nativeTitle,
+            kind: .retinaImage,
             width: layout.width,
             lines: layout.lines
         )
@@ -351,7 +351,9 @@ enum StatusBarDisplayRenderer {
             NSRect(origin: .zero, size: size).fill()
         }
 
-        let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings)
+        let useTemplate = settings.usesSystemTextColor && !settings.showsBackground
+        let textColor = useTemplate ? NSColor.black : settings.effectiveTextColor
+        let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings, color: textColor)
         let textHeight = lineHeight(for: layout.font, settings: settings) * CGFloat(layout.lines.count)
         text.draw(
             with: NSRect(
@@ -365,7 +367,7 @@ enum StatusBarDisplayRenderer {
 
         let image = NSImage(size: size)
         image.addRepresentation(representation)
-        image.isTemplate = false
+        image.isTemplate = useTemplate
         return image
     }
 
@@ -438,7 +440,8 @@ enum StatusBarDisplayRenderer {
     private static func attributedText(
         _ text: String,
         layout: Layout,
-        settings: StatusBarSettings
+        settings: StatusBarSettings,
+        color: NSColor? = nil
     ) -> NSAttributedString {
         let paragraphStyle = NSMutableParagraphStyle()
         paragraphStyle.alignment = settings.alignment.nsTextAlignment
@@ -453,7 +456,7 @@ enum StatusBarDisplayRenderer {
             string: text,
             attributes: [
                 .font: layout.font,
-                .foregroundColor: settings.effectiveTextColor,
+                .foregroundColor: color ?? settings.effectiveTextColor,
                 .paragraphStyle: paragraphStyle,
                 .baselineOffset: NSNumber(value: Double(baselineOffset))
             ]

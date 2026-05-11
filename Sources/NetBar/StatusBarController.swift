@@ -78,29 +78,17 @@ final class StatusBarController {
         let presentation = signature.presentation
         statusItem.length = presentation.width
 
-        switch presentation.kind {
-        case .nativeTitle:
-            button.image = nil
-            button.imagePosition = .noImage
-            button.alignment = settings.alignment.nsTextAlignment
-            button.lineBreakMode = .byClipping
-            button.attributedTitle = StatusBarDisplayRenderer.attributedTitle(
-                snapshot: monitor.snapshot,
-                settings: settings
-            )
-        case .retinaImage:
-            let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-            let image = StatusBarDisplayRenderer.image(
-                snapshot: monitor.snapshot,
-                settings: settings,
-                scale: scale
-            )
-            button.attributedTitle = NSAttributedString(string: "")
-            button.title = ""
-            button.imagePosition = .imageOnly
-            button.imageScaling = .scaleNone
-            button.image = image
-        }
+        let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: monitor.snapshot,
+            settings: settings,
+            scale: scale
+        )
+        button.attributedTitle = NSAttributedString(string: "")
+        button.title = ""
+        button.imagePosition = .imageOnly
+        button.imageScaling = .scaleNone
+        button.image = image
 
         lastRenderSignature = signature
     }

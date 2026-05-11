@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class PreferencesAndPresentationTests: XCTestCase {
-    func testStatusBarUsesNativeTitleByDefault() {
+    func testStatusBarAlwaysUsesRetinaImage() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = false
 
@@ -13,7 +13,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             settings: settings
         )
 
-        XCTAssertEqual(presentation.kind, .nativeTitle)
+        XCTAssertEqual(presentation.kind, .retinaImage)
         XCTAssertEqual(presentation.lines.count, 2)
         XCTAssertGreaterThanOrEqual(
             presentation.width,
@@ -21,7 +21,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
-    func testStatusBarFallsBackToRetinaImageOnlyForBackgrounds() {
+    func testStatusBarRetinaImageWithBackground() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true
         settings.backgroundOpacity = 0.7
