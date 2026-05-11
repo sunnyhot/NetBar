@@ -130,6 +130,23 @@ private struct GeneralPreferencesView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                PreferenceSection(title: appPreferences.text("外观", "Appearance")) {
+                    Picker(appPreferences.text("显示模式", "Display mode"), selection: $appPreferences.appearanceMode) {
+                        ForEach(AppAppearanceMode.allCases) { appearanceMode in
+                            Text(appearanceMode.title(language: appPreferences.resolvedLanguage)).tag(appearanceMode)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(appPreferences.text(
+                        "跟随系统会使用 macOS 当前外观；浅色和暗黑会立即应用到偏好设置、流量窗口和菜单。",
+                        "System follows the current macOS appearance. Light and Dark apply immediately to preferences, the traffic window, and menus."
+                    ))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 HStack {
                     Spacer()
                     Button(appPreferences.text("恢复通用默认值", "Restore General Defaults")) {

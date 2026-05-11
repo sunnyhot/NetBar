@@ -1,3 +1,4 @@
+import AppKit
 import XCTest
 @testable import NetBar
 
@@ -49,6 +50,44 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let textBounds = foregroundPixelBounds(in: image, background: settings.backgroundColor)
 
         XCTAssertLessThanOrEqual(abs(textBounds.topMargin - textBounds.bottomMargin), 2)
+    }
+
+    func testDetailsWindowLayoutKeepsTallAnchoredWindowVisible() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 960, height: 560)
+        let anchorFrame = NSRect(x: 470, y: 540, width: 20, height: 20)
+
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(width: 520, height: 700),
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: 10
+        )
+
+        XCTAssertGreaterThanOrEqual(frame.minY, visibleFrame.minY + 10)
+        XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY - 10)
+    }
+
+    func testAppearanceModeDefaultsToSystemAndPersistsSelection() {
+        let defaults = isolatedDefaults()
+        var preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertEqual(preferences.appearanceMode, .system)
+
+        preferences.appearanceMode = .dark
+        preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+
+        XCTAssertEqual(preferences.appearanceMode, .dark)
+    }
+
+    func testAppearanceModeMapsToMacOSAppearanceNames() {
+        XCTAssertNil(AppAppearanceMode.system.nsAppearanceName)
+        XCTAssertEqual(AppAppearanceMode.light.nsAppearanceName, .aqua)
+        XCTAssertEqual(AppAppearanceMode.dark.nsAppearanceName, .darkAqua)
     }
 
     func testApplicationListSearchSortAndHideSystemProcesses() {

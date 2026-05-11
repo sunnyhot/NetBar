@@ -8,7 +8,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let openPreferences: () -> Void
     private var window: NSWindow?
     private let defaultWindowSize = NSSize(width: 520, height: 680)
-    private let minimumWindowSize = NSSize(width: 460, height: 540)
+    private let minimumWindowSize = NSSize(width: 460, height: 500)
 
     init(
         monitor: NetworkMonitor,
@@ -66,34 +66,95 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     }
 
     private func position(_ window: NSWindow, near anchor: NSStatusBarButton?) {
-        guard
-            let anchor,
-            let anchorWindow = anchor.window,
-            let screen = anchorWindow.screen
-        else {
+        let screen = anchor?.window?.screen ?? window.screen ?? NSScreen.main
+        guard let screen else {
             window.center()
             return
         }
 
         let visibleFrame = screen.visibleFrame
-        let anchorFrame = anchorWindow.convertToScreen(anchor.frame)
         let padding: CGFloat = 10
-        let windowSize = window.frame.size
-        let x = clamp(
-            anchorFrame.midX - windowSize.width / 2,
-            min: visibleFrame.minX + padding,
-            max: visibleFrame.maxX - windowSize.width - padding
+        let minimumSize = DetailsWindowLayout.minimumSize(
+            baseMinimumSize: minimumWindowSize,
+            visibleFrame: visibleFrame,
+            padding: padding
         )
-        let y = clamp(
-            anchorFrame.minY - windowSize.height - padding,
-            min: visibleFrame.minY + padding,
-            max: visibleFrame.maxY - windowSize.height - padding
+        window.minSize = minimumSize
+
+        let anchorFrame = anchor.flatMap { anchor in
+            anchor.window?.convertToScreen(anchor.frame)
+        }
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: window.frame.size,
+            minimumSize: minimumSize,
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: padding
         )
 
-        window.setFrame(NSRect(origin: CGPoint(x: x, y: y), size: windowSize), display: true)
+        window.setFrame(frame, display: true)
+    }
+}
+
+enum DetailsWindowLayout {
+    static func minimumSize(
+        baseMinimumSize: NSSize,
+        visibleFrame: NSRect,
+        padding: CGFloat
+    ) -> NSSize {
+        let availableWidth = max(visibleFrame.width - padding * 2, 1)
+        let availableHeight = max(visibleFrame.height - padding * 2, 1)
+
+        return NSSize(
+            width: min(baseMinimumSize.width, availableWidth),
+            height: min(baseMinimumSize.height, availableHeight)
+        )
     }
 
-    private func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
+    static func frame(
+        forWindowSize windowSize: NSSize,
+        minimumSize: NSSize = .zero,
+        visibleFrame: NSRect,
+        anchorFrame: NSRect?,
+        padding: CGFloat
+    ) -> NSRect {
+        let availableWidth = max(visibleFrame.width - padding * 2, 1)
+        let availableHeight = max(visibleFrame.height - padding * 2, 1)
+        let fittedSize = NSSize(
+            width: min(max(windowSize.width, minimumSize.width), availableWidth),
+            height: min(max(windowSize.height, minimumSize.height), availableHeight)
+        )
+        let x: CGFloat
+        let y: CGFloat
+
+        if let anchorFrame {
+            x = clamp(
+                anchorFrame.midX - fittedSize.width / 2,
+                min: visibleFrame.minX + padding,
+                max: visibleFrame.maxX - fittedSize.width - padding
+            )
+            y = clamp(
+                anchorFrame.minY - fittedSize.height - padding,
+                min: visibleFrame.minY + padding,
+                max: visibleFrame.maxY - fittedSize.height - padding
+            )
+        } else {
+            x = clamp(
+                visibleFrame.midX - fittedSize.width / 2,
+                min: visibleFrame.minX + padding,
+                max: visibleFrame.maxX - fittedSize.width - padding
+            )
+            y = clamp(
+                visibleFrame.midY - fittedSize.height / 2,
+                min: visibleFrame.minY + padding,
+                max: visibleFrame.maxY - fittedSize.height - padding
+            )
+        }
+
+        return NSRect(origin: CGPoint(x: x, y: y), size: fittedSize)
+    }
+
+    private static func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {
         Swift.max(minimum, Swift.min(value, maximum))
     }
 }

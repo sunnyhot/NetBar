@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import ServiceManagement
 
 enum ApplicationSortMode: String, CaseIterable, Identifiable {
@@ -67,6 +67,44 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+enum AppAppearanceMode: String, CaseIterable, Identifiable {
+    case system
+    case light
+    case dark
+
+    var id: String { rawValue }
+
+    var title: String {
+        title(language: .simplifiedChinese)
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .system:
+            return language.text("跟随系统", "System")
+        case .light:
+            return language.text("浅色", "Light")
+        case .dark:
+            return language.text("暗黑", "Dark")
+        }
+    }
+
+    var nsAppearanceName: NSAppearance.Name? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return .aqua
+        case .dark:
+            return .darkAqua
+        }
+    }
+
+    var nsAppearance: NSAppearance? {
+        nsAppearanceName.flatMap { NSAppearance(named: $0) }
+    }
+}
+
 protocol LoginItemManaging: AnyObject {
     func refreshStatus() -> Bool
     func setEnabled(_ isEnabled: Bool) throws
@@ -92,6 +130,7 @@ final class AppPreferences: ObservableObject {
     @Published var hidesSystemProcesses: Bool { didSet { save() } }
     @Published var applicationSort: ApplicationSortMode { didSet { save() } }
     @Published var language: AppLanguage { didSet { save() } }
+    @Published var appearanceMode: AppAppearanceMode { didSet { save() } }
     @Published private(set) var hasCompletedOnboarding: Bool { didSet { save() } }
     @Published private(set) var launchesAtLogin: Bool
     @Published private(set) var loginItemErrorMessage: String?
@@ -109,6 +148,7 @@ final class AppPreferences: ObservableObject {
         hidesSystemProcesses = defaults.object(forKey: Keys.hidesSystemProcesses) as? Bool ?? Defaults.hidesSystemProcesses
         applicationSort = ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? Defaults.language
+        appearanceMode = AppAppearanceMode(rawValue: defaults.string(forKey: Keys.appearanceMode) ?? "") ?? Defaults.appearanceMode
         hasCompletedOnboarding = defaults.object(forKey: Keys.hasCompletedOnboarding) as? Bool ?? Defaults.hasCompletedOnboarding
         launchesAtLogin = loginItemManager.refreshStatus()
     }
@@ -145,6 +185,7 @@ final class AppPreferences: ObservableObject {
         hidesSystemProcesses = Defaults.hidesSystemProcesses
         applicationSort = Defaults.applicationSort
         language = Defaults.language
+        appearanceMode = Defaults.appearanceMode
     }
 
     private func save() {
@@ -152,6 +193,7 @@ final class AppPreferences: ObservableObject {
         defaults.set(hidesSystemProcesses, forKey: Keys.hidesSystemProcesses)
         defaults.set(applicationSort.rawValue, forKey: Keys.applicationSort)
         defaults.set(language.rawValue, forKey: Keys.language)
+        defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
         defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding)
     }
 
@@ -160,6 +202,7 @@ final class AppPreferences: ObservableObject {
         static let hidesSystemProcesses = true
         static let applicationSort = ApplicationSortMode.activity
         static let language = AppLanguage.system
+        static let appearanceMode = AppAppearanceMode.system
         static let hasCompletedOnboarding = false
     }
 
@@ -168,6 +211,7 @@ final class AppPreferences: ObservableObject {
         static let hidesSystemProcesses = "app.hidesSystemProcesses"
         static let applicationSort = "app.applicationSort"
         static let language = "app.language"
+        static let appearanceMode = "app.appearanceMode"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
     }
 }

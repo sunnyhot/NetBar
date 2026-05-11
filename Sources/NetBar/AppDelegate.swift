@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        applyAppAppearance()
         configureMainMenu()
         applyActivationPolicy()
         configurePreferenceObservers()
@@ -49,7 +50,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout(_ sender: Any?) {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .applicationName: "NetBar",
-            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.1",
+            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.2",
             .credits: NSAttributedString(
                 string: "A local menu bar network monitor for macOS.",
                 attributes: [.font: NSFont.systemFont(ofSize: 12)]
@@ -85,10 +86,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self?.configureMainMenu()
             }
             .store(in: &cancellables)
+
+        appPreferences.$appearanceMode
+            .sink { [weak self] _ in
+                self?.applyAppAppearance()
+            }
+            .store(in: &cancellables)
     }
 
     private func applyActivationPolicy() {
         NSApplication.shared.setActivationPolicy(appPreferences.showsDockIcon ? .regular : .accessory)
+    }
+
+    private func applyAppAppearance() {
+        let appearance = appPreferences.appearanceMode.nsAppearance
+        NSApplication.shared.appearance = appearance
+        NSApplication.shared.windows.forEach { window in
+            window.appearance = appearance
+        }
     }
 
     private func configureMainMenu() {

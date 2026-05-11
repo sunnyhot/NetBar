@@ -12,6 +12,7 @@ struct NetworkPopoverView: View {
                 .padding(.horizontal, 18)
                 .padding(.top, 18)
                 .padding(.bottom, 14)
+                .layoutPriority(1)
 
             Divider()
 
@@ -48,14 +49,17 @@ struct NetworkPopoverView: View {
                 .padding(.horizontal, 18)
                 .padding(.bottom, 16)
             }
+            .frame(minHeight: 0)
 
             Divider()
 
             FooterView(monitor: monitor, appPreferences: appPreferences, openPreferences: openPreferences)
                 .padding(.horizontal, 18)
                 .padding(.vertical, 12)
+                .fixedSize(horizontal: false, vertical: true)
+                .layoutPriority(1)
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 540, idealHeight: 680)
+        .frame(minWidth: 460, idealWidth: 520, minHeight: 460, idealHeight: 680)
         .background(Color(nsColor: .windowBackgroundColor))
     }
 }
