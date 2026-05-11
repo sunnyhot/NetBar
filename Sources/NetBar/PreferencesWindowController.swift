@@ -328,7 +328,17 @@ private struct UpdatePreferencesView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Toggle(appPreferences.text("自动检测更新", "Automatically check for updates"), isOn: $updater.automaticallyChecksForUpdates)
+                Toggle(appPreferences.text("自动检测并下载更新", "Automatically check and download updates"), isOn: $updater.automaticallyChecksForUpdates)
+
+                if updater.isDownloading {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ProgressView(value: updater.downloadProgress)
+                            .progressViewStyle(.linear)
+                        Text("\(Int(updater.downloadProgress * 100))%")
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.tertiary)
+                    }
+                }
 
                 VStack(alignment: .leading, spacing: 4) {
                     Text(updater.statusMessage)
@@ -353,7 +363,16 @@ private struct UpdatePreferencesView: View {
                     }
                     .disabled(updater.isChecking || updater.isDownloading)
 
-                    if updater.availableUpdate != nil {
+                    if updater.isUpdateReadyToInstall {
+                        Button {
+                            Task {
+                                await updater.downloadAndInstall()
+                            }
+                        } label: {
+                            Label(appPreferences.text("安装并重启", "Install and Restart"), systemImage: "arrow.triangle.2.circlepath")
+                        }
+                        .buttonStyle(.borderedProminent)
+                    } else if updater.availableUpdate != nil {
                         Button {
                             Task {
                                 await updater.downloadAndInstall()

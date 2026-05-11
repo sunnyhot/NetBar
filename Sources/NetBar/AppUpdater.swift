@@ -43,7 +43,9 @@ final class AppUpdater: ObservableObject {
     @Published var automaticallyChecksForUpdates: Bool { didSet { saveSettings() } }
     @Published private(set) var isChecking = false
     @Published private(set) var isDownloading = false
+    @Published private(set) var downloadProgress: Double = 0
     @Published private(set) var availableUpdate: AvailableUpdate?
+    @Published private(set) var isUpdateReadyToInstall = false
     @Published private(set) var statusMessage = "尚未检查更新"
     @Published private(set) var lastCheckedAt: Date?
 
@@ -53,6 +55,7 @@ final class AppUpdater: ObservableObject {
     private let currentVersion: String
     private let currentBundleIdentifier: String
     private var automaticTimer: Timer?
+    private var preparedAppURL: URL?
 
     init(defaults: UserDefaults = .standard, bundle: Bundle = .main) {
         self.defaults = defaults
@@ -88,7 +91,7 @@ final class AppUpdater: ObservableObject {
     }
 
     func checkForUpdates(isManual: Bool) async {
-        guard !isChecking, !isDownloading else { return }
+        guard !isChecking, !isDownloading, !isUpdateReadyToInstall else { return }
 
         isChecking = true
         if isManual {
@@ -115,23 +118,40 @@ final class AppUpdater: ObservableObject {
 
             availableUpdate = AvailableUpdate(release: release, asset: asset)
             statusMessage = "发现新版本 \(release.tagName)"
+            isChecking = false
+
+            if automaticallyChecksForUpdates {
+                await autoDownloadAndPrepare()
+            }
         } catch {
+            isChecking = false
             if isManual {
                 statusMessage = "检查更新失败：\(error.localizedDescription)"
             }
         }
-
-        isChecking = false
     }
 
     func downloadAndInstall() async {
+        if let preparedAppURL, isUpdateReadyToInstall {
+            do {
+                statusMessage = "准备安装并重启..."
+                try installAndRelaunch(from: preparedAppURL)
+            } catch {
+                self.preparedAppURL = nil
+                isUpdateReadyToInstall = false
+                statusMessage = "安装失败：\(error.localizedDescription)"
+            }
+            return
+        }
+
         guard let availableUpdate, !isChecking, !isDownloading else { return }
 
         isDownloading = true
+        downloadProgress = 0
         statusMessage = "正在下载 \(availableUpdate.asset.name)..."
 
         do {
-            let downloadedZip = try await download(asset: availableUpdate.asset)
+            let downloadedZip = try await downloadWithProgress(asset: availableUpdate.asset)
             statusMessage = "正在解压更新..."
             let appURL = try unzipApp(from: downloadedZip)
             try validateDownloadedApp(appURL, expectedVersion: availableUpdate.versionText)
@@ -140,9 +160,63 @@ final class AppUpdater: ObservableObject {
             try installAndRelaunch(from: appURL)
         } catch {
             isDownloading = false
+            downloadProgress = 0
             statusMessage = "更新失败：\(error.localizedDescription)"
         }
     }
+
+    // MARK: - Auto Download
+
+    private func autoDownloadAndPrepare() async {
+        guard let availableUpdate else { return }
+
+        isDownloading = true
+        downloadProgress = 0
+        statusMessage = "正在自动下载更新..."
+
+        do {
+            let downloadedZip = try await downloadWithProgress(asset: availableUpdate.asset)
+            statusMessage = "正在解压..."
+            let appURL = try unzipApp(from: downloadedZip)
+            try validateDownloadedApp(appURL, expectedVersion: availableUpdate.versionText)
+
+            preparedAppURL = appURL
+            isDownloading = false
+            isUpdateReadyToInstall = true
+            downloadProgress = 1.0
+            statusMessage = "新版本已就绪，点击安装并重启"
+
+            showUpdateReadyAlert()
+        } catch {
+            isDownloading = false
+            downloadProgress = 0
+            statusMessage = "自动下载失败：\(error.localizedDescription)"
+        }
+    }
+
+    private func showUpdateReadyAlert() {
+        let version = availableUpdate?.versionText ?? ""
+        let alert = NSAlert()
+        alert.messageText = "新版本 \(version) 已下载完成"
+        alert.informativeText = "需要重启 NetBar 以完成安装。"
+        alert.addButton(withTitle: "安装并重启")
+        alert.addButton(withTitle: "稍后提醒")
+        alert.alertStyle = .informational
+
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+
+        if response == .alertFirstButtonReturn {
+            try? installPreparedUpdate()
+        }
+    }
+
+    private func installPreparedUpdate() throws {
+        guard let preparedAppURL else { return }
+        try installAndRelaunch(from: preparedAppURL)
+    }
+
+    // MARK: - Network
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
         guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
@@ -156,6 +230,27 @@ final class AppUpdater: ObservableObject {
         let (data, response) = try await URLSession.shared.data(for: request)
         try validateHTTPResponse(response)
         return try JSONDecoder().decode(GitHubRelease.self, from: data)
+    }
+
+    private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
+        try await withCheckedThrowingContinuation { continuation in
+            let delegate = UpdateDownloadDelegate(
+                expectedSize: Double(asset.size),
+                onProgress: { [weak self] progress in
+                    Task { @MainActor [weak self] in
+                        self?.downloadProgress = progress
+                    }
+                },
+                completion: { result in
+                    continuation.resume(with: result)
+                }
+            )
+
+            let session = URLSession(configuration: .default, delegate: delegate, delegateQueue: nil)
+            var request = URLRequest(url: asset.browserDownloadURL)
+            request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+            session.downloadTask(with: request).resume()
+        }
     }
 
     private func download(asset: GitHubReleaseAsset) async throws -> URL {
@@ -175,6 +270,8 @@ final class AppUpdater: ObservableObject {
         try FileManager.default.moveItem(at: temporaryURL, to: destination)
         return destination
     }
+
+    // MARK: - Install
 
     private func unzipApp(from zipURL: URL) throws -> URL {
         let destination = zipURL.deletingLastPathComponent().appendingPathComponent("expanded")
@@ -314,6 +411,56 @@ final class AppUpdater: ObservableObject {
 
     private enum Keys {
         static let automaticallyChecksForUpdates = "updates.automaticallyChecksForUpdates"
+    }
+}
+
+// MARK: - Download Progress Delegate
+
+private final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate {
+    private let expectedSize: Double
+    private let onProgress: @Sendable (Double) -> Void
+    private let completion: @Sendable (Result<URL, Error>) -> Void
+    private var hasCompleted = false
+
+    init(
+        expectedSize: Double,
+        onProgress: @Sendable @escaping (Double) -> Void,
+        completion: @Sendable @escaping (Result<URL, Error>) -> Void
+    ) {
+        self.expectedSize = expectedSize
+        self.onProgress = onProgress
+        self.completion = completion
+        super.init()
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didFinishDownloadingTo location: URL) {
+        guard !hasCompleted else { return }
+        hasCompleted = true
+
+        do {
+            let dest = FileManager.default.temporaryDirectory
+                .appendingPathComponent("NetBar-\(UUID().uuidString)")
+                .appendingPathComponent("NetBar.app.zip")
+            try FileManager.default.createDirectory(at: dest.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try FileManager.default.moveItem(at: location, to: dest)
+            completion(.success(dest))
+        } catch {
+            completion(.failure(error))
+        }
+        session.finishTasksAndInvalidate()
+    }
+
+    func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
+        guard !hasCompleted, let error else { return }
+        hasCompleted = true
+        completion(.failure(error))
+        session.finishTasksAndInvalidate()
+    }
+
+    func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask, didWriteData bytesWritten: Int64, totalBytesWritten: Int64, totalBytesExpectedToWrite: Int64) {
+        let total = totalBytesExpectedToWrite > 0 ? Double(totalBytesExpectedToWrite) : expectedSize
+        guard total > 0 else { return }
+        onProgress(min(Double(totalBytesWritten) / total, 1.0))
     }
 }
 
