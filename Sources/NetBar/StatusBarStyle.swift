@@ -447,7 +447,7 @@ enum StatusBarDisplayRenderer {
         let constrainedLineHeight = lineHeight(for: layout.font, settings: settings)
         paragraphStyle.minimumLineHeight = constrainedLineHeight
         paragraphStyle.maximumLineHeight = constrainedLineHeight
-        let baselineOffset = -(max(naturalLineHeight - constrainedLineHeight, 0) / 2)
+        let baselineOffset = (constrainedLineHeight - naturalLineHeight) / 2
 
         return NSAttributedString(
             string: text,
