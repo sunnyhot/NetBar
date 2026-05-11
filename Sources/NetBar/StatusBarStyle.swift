@@ -304,25 +304,7 @@ enum StatusBarDisplayRenderer {
 
     static func attributedTitle(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSAttributedString {
         let layout = layout(snapshot: snapshot, settings: settings)
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = settings.alignment.nsTextAlignment
-        paragraphStyle.lineBreakMode = .byClipping
-        let naturalLineHeight = layout.font.ascender - layout.font.descender
-        let constrainedLineHeight = max(naturalLineHeight + settings.clampedLineSpacing, 8)
-        paragraphStyle.minimumLineHeight = constrainedLineHeight
-        paragraphStyle.maximumLineHeight = constrainedLineHeight
-        let baselineOffset = -(max(naturalLineHeight - constrainedLineHeight, 0) / 2)
-
-        let text = layout.lines.joined(separator: "\n")
-        return NSAttributedString(
-            string: text,
-            attributes: [
-                .font: layout.font,
-                .foregroundColor: settings.effectiveTextColor,
-                .paragraphStyle: paragraphStyle,
-                .baselineOffset: NSNumber(value: Double(baselineOffset))
-            ]
-        )
+        return attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings)
     }
 
     static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSImage {
@@ -369,38 +351,16 @@ enum StatusBarDisplayRenderer {
             NSRect(origin: .zero, size: size).fill()
         }
 
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.alignment = settings.alignment.nsTextAlignment
-        paragraphStyle.lineBreakMode = .byClipping
-
-        let attributes: [NSAttributedString.Key: Any] = [
-            .font: layout.font,
-            .foregroundColor: settings.effectiveTextColor,
-            .paragraphStyle: paragraphStyle
-        ]
-
-        let lineHeight = layout.font.ascender - layout.font.descender
-        let totalHeight = lineHeight * 2 + settings.clampedLineSpacing
-        let firstY = (height - totalHeight) / 2 + lineHeight + settings.clampedLineSpacing - 1
-        let secondY = firstY - lineHeight - settings.clampedLineSpacing
-
-        NSString(string: layout.lines[0]).draw(
-            in: NSRect(
+        let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings)
+        let textHeight = lineHeight(for: layout.font, settings: settings) * CGFloat(layout.lines.count)
+        text.draw(
+            with: NSRect(
                 x: layout.horizontalPadding,
-                y: firstY,
+                y: (height - textHeight) / 2,
                 width: width - layout.horizontalPadding * 2,
-                height: lineHeight
+                height: textHeight
             ),
-            withAttributes: attributes
-        )
-        NSString(string: layout.lines[1]).draw(
-            in: NSRect(
-                x: layout.horizontalPadding,
-                y: secondY,
-                width: width - layout.horizontalPadding * 2,
-                height: lineHeight
-            ),
-            withAttributes: attributes
+            options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]
         )
 
         let image = NSImage(size: size)
@@ -473,6 +433,36 @@ enum StatusBarDisplayRenderer {
         return values.flatMap { value in
             ["↑ \(value)", "↓ \(value)"]
         }
+    }
+
+    private static func attributedText(
+        _ text: String,
+        layout: Layout,
+        settings: StatusBarSettings
+    ) -> NSAttributedString {
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.alignment = settings.alignment.nsTextAlignment
+        paragraphStyle.lineBreakMode = .byClipping
+        let naturalLineHeight = layout.font.ascender - layout.font.descender
+        let constrainedLineHeight = lineHeight(for: layout.font, settings: settings)
+        paragraphStyle.minimumLineHeight = constrainedLineHeight
+        paragraphStyle.maximumLineHeight = constrainedLineHeight
+        let baselineOffset = -(max(naturalLineHeight - constrainedLineHeight, 0) / 2)
+
+        return NSAttributedString(
+            string: text,
+            attributes: [
+                .font: layout.font,
+                .foregroundColor: settings.effectiveTextColor,
+                .paragraphStyle: paragraphStyle,
+                .baselineOffset: NSNumber(value: Double(baselineOffset))
+            ]
+        )
+    }
+
+    private static func lineHeight(for font: NSFont, settings: StatusBarSettings) -> CGFloat {
+        let naturalLineHeight = font.ascender - font.descender
+        return max(naturalLineHeight + settings.clampedLineSpacing, 8)
     }
 }
 

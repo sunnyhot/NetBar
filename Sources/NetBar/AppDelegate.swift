@@ -49,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout(_ sender: Any?) {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .applicationName: "NetBar",
-            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.0",
+            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.4.1",
             .credits: NSAttributedString(
                 string: "A local menu bar network monitor for macOS.",
                 attributes: [.font: NSFont.systemFont(ofSize: 12)]

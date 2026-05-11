@@ -33,6 +33,24 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.kind, .retinaImage)
     }
 
+    func testRetinaStatusBarImageCentersTextVertically() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.usesSystemTextColor = false
+        settings.textColor = .white
+        settings.backgroundColor = .olive
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 310_000, upload: 153_000),
+            settings: settings,
+            scale: 2
+        )
+        let textBounds = foregroundPixelBounds(in: image, background: settings.backgroundColor)
+
+        XCTAssertLessThanOrEqual(abs(textBounds.topMargin - textBounds.bottomMargin), 2)
+    }
+
     func testApplicationListSearchSortAndHideSystemProcesses() {
         let preferences = AppPreferences(
             defaults: isolatedDefaults(),
@@ -115,6 +133,50 @@ final class PreferencesAndPresentationTests: XCTestCase {
             uploadBytesPerSecond: upload,
             totalReceivedBytes: total / 2,
             totalSentBytes: total / 2
+        )
+    }
+
+    private func foregroundPixelBounds(
+        in image: NSImage,
+        background: PersistedColor,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> (topMargin: Int, bottomMargin: Int) {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation", file: file, line: line)
+            return (0, 0)
+        }
+
+        let backgroundColor = background.nsColor.usingColorSpace(.deviceRGB) ?? background.nsColor
+        var minY = bitmap.pixelsHigh
+        var maxY = -1
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5
+                else { continue }
+
+                let distanceFromBackground =
+                    abs(color.redComponent - backgroundColor.redComponent) +
+                    abs(color.greenComponent - backgroundColor.greenComponent) +
+                    abs(color.blueComponent - backgroundColor.blueComponent)
+                guard distanceFromBackground > 0.35 else { continue }
+
+                minY = min(minY, y)
+                maxY = max(maxY, y)
+            }
+        }
+
+        guard maxY >= minY else {
+            XCTFail("Expected rendered text pixels", file: file, line: line)
+            return (0, 0)
+        }
+
+        return (
+            topMargin: bitmap.pixelsHigh - 1 - maxY,
+            bottomMargin: minY
         )
     }
 }
