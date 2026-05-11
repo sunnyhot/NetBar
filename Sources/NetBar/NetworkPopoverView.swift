@@ -9,26 +9,26 @@ struct NetworkPopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             HeaderView(snapshot: monitor.snapshot, appPreferences: appPreferences)
-                .padding(.horizontal, 18)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
+                .padding(.horizontal, 16)
+                .padding(.top, 16)
+                .padding(.bottom, 12)
                 .layoutPriority(1)
 
             Divider()
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                VStack(alignment: .leading, spacing: 14) {
                     if !appPreferences.hasCompletedOnboarding {
                         FirstLaunchGuide(
                             appPreferences: appPreferences,
                             openPreferences: openPreferences,
                             completeOnboarding: appPreferences.completeOnboarding
                         )
-                        .padding(.top, 16)
+                        .padding(.top, 14)
                     } else {
                         TrafficChart(points: monitor.recentHistory)
-                            .frame(height: 90)
-                            .padding(.top, 16)
+                            .frame(height: 100)
+                            .padding(.top, 14)
                     }
 
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
@@ -46,16 +46,16 @@ struct NetworkPopoverView: View {
                         refresh: monitor.refresh
                     )
                 }
-                .padding(.horizontal, 18)
-                .padding(.bottom, 16)
+                .padding(.horizontal, 16)
+                .padding(.bottom, 14)
             }
             .frame(minHeight: 0)
 
             Divider()
 
             FooterView(monitor: monitor, appPreferences: appPreferences, openPreferences: openPreferences)
-                .padding(.horizontal, 18)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
         }
@@ -64,40 +64,52 @@ struct NetworkPopoverView: View {
     }
 }
 
+// MARK: - Header
+
 private struct HeaderView: View {
     let snapshot: NetworkSnapshot
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .firstTextBaseline) {
                 Text("NetBar")
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: 19, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
 
                 Spacer()
 
-                Text(snapshot.timestamp, style: .time)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(.secondary)
+                HStack(spacing: 4) {
+                    Circle()
+                        .fill(Color.green)
+                        .frame(width: 6, height: 6)
+                    Text(snapshot.timestamp, style: .time)
+                        .font(.system(size: 11, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
             }
 
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 SpeedTile(
                     title: appPreferences.text("下载", "Download"),
                     value: ByteFormat.speed(snapshot.downloadBytesPerSecond),
                     tint: .blue,
+                    gradient: Gradient(colors: [Color.blue, Color(red: 0.3, green: 0.7, blue: 1.0)]),
                     symbol: "arrow.down"
                 )
                 SpeedTile(
                     title: appPreferences.text("上传", "Upload"),
                     value: ByteFormat.speed(snapshot.uploadBytesPerSecond),
                     tint: .orange,
+                    gradient: Gradient(colors: [Color.orange, Color(red: 1.0, green: 0.5, blue: 0.3)]),
                     symbol: "arrow.up"
                 )
             }
         }
     }
 }
+
+// MARK: - First Launch Guide
 
 private struct FirstLaunchGuide: View {
     @ObservedObject var appPreferences: AppPreferences
@@ -108,13 +120,17 @@ private struct FirstLaunchGuide: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .top, spacing: 12) {
                 Image(systemName: "menubar.rectangle")
-                    .font(.system(size: 22, weight: .semibold))
-                    .foregroundStyle(Color.accentColor)
-                    .frame(width: 30, height: 30)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundStyle(.white)
+                    .frame(width: 32, height: 32)
+                    .background(
+                        LinearGradient(colors: [.blue, .cyan], startPoint: .topLeading, endPoint: .bottomTrailing),
+                        in: RoundedRectangle(cornerRadius: 8)
+                    )
 
-                VStack(alignment: .leading, spacing: 5) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(appPreferences.text("欢迎使用 NetBar", "Welcome to NetBar"))
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: 14, weight: .bold))
                     Text(appPreferences.text(
                         "菜单栏会每秒更新网络速度；应用流量来自 macOS nettop，首次采样需要几秒。你可以在偏好设置里打开开机启动、隐藏 Dock 图标，并调整应用列表筛选。",
                         "The menu bar updates network speed every second. Application traffic comes from macOS nettop, so the first sample can take a few seconds. Preferences include launch at login, Dock visibility, and app filtering."
@@ -126,72 +142,111 @@ private struct FirstLaunchGuide: View {
             }
 
             HStack(spacing: 10) {
-                Button {
-                    openPreferences()
-                } label: {
+                Button { openPreferences() } label: {
                     Label(appPreferences.text("打开偏好设置", "Open Preferences"), systemImage: "gearshape")
                 }
-
-                Button(appPreferences.text("知道了", "Got It")) {
-                    completeOnboarding()
-                }
-                .keyboardShortcut(.defaultAction)
-
+                Button(appPreferences.text("知道了", "Got It")) { completeOnboarding() }
+                    .keyboardShortcut(.defaultAction)
                 Spacer()
             }
         }
         .padding(14)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(cardBackground)
     }
 }
+
+// MARK: - Speed Tile
 
 private struct SpeedTile: View {
     let title: String
     let value: String
     let tint: Color
+    let gradient: Gradient
     let symbol: String
 
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 14, weight: .bold))
-                .frame(width: 26, height: 26)
+                .font(.system(size: 13, weight: .bold))
                 .foregroundStyle(.white)
-                .background(tint, in: RoundedRectangle(cornerRadius: 6))
+                .frame(width: 30, height: 30)
+                .background(
+                    LinearGradient(gradient: gradient, startPoint: .topLeading, endPoint: .bottomTrailing),
+                    in: RoundedRectangle(cornerRadius: 8)
+                )
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(.tertiary)
                 Text(value)
-                    .font(.system(size: 17, weight: .semibold, design: .rounded))
+                    .font(.system(size: 20, weight: .bold, design: .rounded))
                     .lineLimit(1)
-                    .minimumScaleFactor(0.7)
+                    .minimumScaleFactor(0.6)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(cardBackground)
+        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.1), lineWidth: 0.5))
     }
 }
+
+// MARK: - Summary Grid
 
 private struct SummaryGrid: View {
     let snapshot: NetworkSnapshot
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        Grid(alignment: .leading, horizontalSpacing: 14, verticalSpacing: 10) {
-            GridRow {
-                SummaryCell(title: appPreferences.text("总下载", "Total Download"), value: ByteFormat.bytes(snapshot.totalReceivedBytes))
-                SummaryCell(title: appPreferences.text("总上传", "Total Upload"), value: ByteFormat.bytes(snapshot.totalSentBytes))
-            }
-            GridRow {
-                SummaryCell(title: appPreferences.text("活动接口", "Active Interfaces"), value: "\(snapshot.interfaces.count)")
-                SummaryCell(title: appPreferences.text("采样次数", "Samples"), value: "\(snapshot.sampleCount)")
-            }
+        HStack(spacing: 8) {
+            SummaryCell(
+                title: appPreferences.text("总下载", "Total Down"),
+                value: ByteFormat.bytes(snapshot.totalReceivedBytes),
+                tint: .blue
+            )
+            SummaryCell(
+                title: appPreferences.text("总上传", "Total Up"),
+                value: ByteFormat.bytes(snapshot.totalSentBytes),
+                tint: .orange
+            )
+            SummaryCell(
+                title: appPreferences.text("接口", "Ifaces"),
+                value: "\(snapshot.interfaces.count)",
+                tint: .secondary
+            )
+            SummaryCell(
+                title: appPreferences.text("采样", "Samples"),
+                value: "\(snapshot.sampleCount)",
+                tint: .secondary
+            )
         }
     }
 }
+
+private struct SummaryCell: View {
+    let title: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(title)
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(.tertiary)
+            Text(value)
+                .font(.system(size: 14, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(10)
+        .background(cardBackground)
+    }
+}
+
+// MARK: - Application Traffic List
 
 private struct ApplicationTrafficList: View {
     let appTraffic: ApplicationTrafficState
@@ -211,14 +266,14 @@ private struct ApplicationTrafficList: View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
                 Text(preferences.text("应用流量", "Application Traffic"))
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: 13, weight: .bold))
 
                 Spacer()
 
                 if let timestamp = appTraffic.timestamp {
                     Text("\(preferences.text("更新于", "Updated")) \(timestamp, style: .time)")
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
                 }
             }
 
@@ -232,7 +287,7 @@ private struct ApplicationTrafficList: View {
                 )
             } else {
                 if shouldShowControls {
-                    HStack(spacing: 10) {
+                    HStack(spacing: 8) {
                         TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
                             .textFieldStyle(.roundedBorder)
 
@@ -242,7 +297,7 @@ private struct ApplicationTrafficList: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 118)
+                        .frame(width: 110)
                     }
                 }
 
@@ -253,7 +308,7 @@ private struct ApplicationTrafficList: View {
                         message: emptyMessage
                     )
                 } else {
-                    VStack(spacing: 8) {
+                    VStack(spacing: 6) {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(application: application)
                         }
@@ -303,13 +358,13 @@ private struct AppTrafficNotice: View {
     var body: some View {
         HStack(spacing: 10) {
             Image(systemName: symbol)
-                .font(.system(size: 18, weight: .semibold))
+                .font(.system(size: 16, weight: .semibold))
                 .foregroundStyle(.secondary)
-                .frame(width: 26, height: 26)
+                .frame(width: 24, height: 24)
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
                 Text(message)
                     .font(.system(size: 11))
                     .foregroundStyle(.secondary)
@@ -325,7 +380,7 @@ private struct AppTrafficNotice: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .background(cardBackground)
     }
 }
 
@@ -333,46 +388,38 @@ private struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
-            HStack(spacing: 10) {
-                AppBadge(title: application.displayName)
+        HStack(spacing: 10) {
+            AppBadge(title: application.displayName)
 
-                VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 6) {
                     Text(application.displayName)
-                        .font(.system(size: 13, weight: .semibold))
+                        .font(.system(size: 12, weight: .bold))
                         .lineLimit(1)
 
-                    Text(application.processNames.prefix(2).joined(separator: ", "))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
+                    if !application.processLabel.isEmpty {
+                        Text("PID \(application.processLabel)")
+                            .font(.system(size: 9, weight: .medium, design: .monospaced))
+                            .foregroundStyle(.quaternary)
+                            .lineLimit(1)
+                    }
                 }
 
-                Spacer()
-
-                if !application.processLabel.isEmpty {
-                    Text("PID \(application.processLabel)")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                }
+                Text(application.processNames.prefix(2).joined(separator: ", "))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
             }
 
-            HStack(spacing: 10) {
+            Spacer()
+
+            VStack(alignment: .trailing, spacing: 4) {
                 MetricPill(symbol: "arrow.down", value: ByteFormat.speed(application.downloadBytesPerSecond), tint: .blue)
                 MetricPill(symbol: "arrow.up", value: ByteFormat.speed(application.uploadBytesPerSecond), tint: .orange)
             }
-
-            HStack {
-                Text("接收 \(ByteFormat.bytes(application.totalReceivedBytes))")
-                Spacer()
-                Text("发送 \(ByteFormat.bytes(application.totalSentBytes))")
-            }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .padding(10)
+        .background(cardBackground)
     }
 }
 
@@ -381,10 +428,17 @@ private struct AppBadge: View {
 
     var body: some View {
         Text(initial)
-            .font(.system(size: 13, weight: .bold, design: .rounded))
+            .font(.system(size: 11, weight: .bold, design: .rounded))
             .foregroundStyle(.white)
-            .frame(width: 30, height: 30)
-            .background(Color(nsColor: .controlAccentColor), in: RoundedRectangle(cornerRadius: 7))
+            .frame(width: 28, height: 28)
+            .background(
+                LinearGradient(
+                    colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                in: RoundedRectangle(cornerRadius: 7)
+            )
     }
 
     private var initial: String {
@@ -392,25 +446,7 @@ private struct AppBadge: View {
     }
 }
 
-private struct SummaryCell: View {
-    let title: String
-    let value: String
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
-            Text(value)
-                .font(.system(size: 15, weight: .semibold))
-                .lineLimit(1)
-                .minimumScaleFactor(0.75)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-    }
-}
+// MARK: - Interface List
 
 private struct InterfaceList: View {
     let interfaces: [InterfaceRate]
@@ -418,14 +454,14 @@ private struct InterfaceList: View {
     let refresh: () -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(appPreferences.text("接口明细", "Interfaces"))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 13, weight: .bold))
 
             if interfaces.isEmpty {
                 EmptyInterfacesView(appPreferences: appPreferences, refresh: refresh)
             } else {
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     ForEach(interfaces) { item in
                         InterfaceRow(interface: item)
                     }
@@ -442,22 +478,20 @@ private struct EmptyInterfacesView: View {
     var body: some View {
         VStack(spacing: 8) {
             Image(systemName: "network.slash")
-                .font(.system(size: 26, weight: .medium))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(.tertiary)
             Text(appPreferences.text("暂无网络接口", "No Network Interfaces"))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .bold))
             Text(appPreferences.text("请确认网络连接可用。", "Check that a network connection is available."))
-                .font(.system(size: 12))
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-            Button {
-                refresh()
-            } label: {
+            Button { refresh() } label: {
                 Label(appPreferences.text("重新读取接口", "Read Interfaces Again"), systemImage: "arrow.clockwise")
             }
             .buttonStyle(.bordered)
         }
-        .frame(maxWidth: .infinity, minHeight: 140)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .frame(maxWidth: .infinity, minHeight: 120)
+        .background(cardBackground)
     }
 }
 
@@ -465,53 +499,84 @@ private struct InterfaceRow: View {
     let interface: InterfaceRate
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 9) {
+        VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
                 Text(interface.displayName)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
 
                 if interface.isPrimary {
                     Text("主接口")
-                        .font(.system(size: 10, weight: .bold))
+                        .font(.system(size: 9, weight: .bold))
                         .foregroundStyle(.white)
-                        .padding(.horizontal, 6)
+                        .padding(.horizontal, 5)
                         .padding(.vertical, 2)
-                        .background(Color.accentColor, in: Capsule())
+                        .background(
+                            LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing),
+                            in: Capsule()
+                        )
                 }
 
                 Spacer()
 
                 Text(interface.name)
-                    .font(.system(size: 11, weight: .medium, design: .monospaced))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundStyle(.tertiary)
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 6) {
                 MetricPill(symbol: "arrow.down", value: ByteFormat.speed(interface.downloadBytesPerSecond), tint: .blue)
                 MetricPill(symbol: "arrow.up", value: ByteFormat.speed(interface.uploadBytesPerSecond), tint: .orange)
             }
 
-            HStack {
-                Text("接收 \(ByteFormat.bytes(interface.totalReceivedBytes))")
-                Spacer()
-                Text("发送 \(ByteFormat.bytes(interface.totalSentBytes))")
-            }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.secondary)
+            HStack(spacing: 0) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text("接收")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    Text(ByteFormat.bytes(interface.totalReceivedBytes))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                }
 
-            HStack {
-                Text("入包 \(ByteFormat.packets(interface.receivedPackets))")
                 Spacer()
-                Text("出包 \(ByteFormat.packets(interface.sentPackets))")
+
+                VStack(alignment: .center, spacing: 1) {
+                    Text("入包")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.quaternary)
+                    Text(ByteFormat.packets(interface.receivedPackets))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("发送")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                    Text(ByteFormat.bytes(interface.totalSentBytes))
+                        .font(.system(size: 11, weight: .semibold, design: .rounded))
+                }
+
+                Spacer()
+
+                VStack(alignment: .trailing, spacing: 1) {
+                    Text("出包")
+                        .font(.system(size: 9, weight: .medium))
+                        .foregroundStyle(.quaternary)
+                    Text(ByteFormat.packets(interface.sentPackets))
+                        .font(.system(size: 10, weight: .medium, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                }
             }
-            .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(.tertiary)
         }
-        .padding(12)
-        .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+        .padding(10)
+        .background(cardBackground)
     }
 }
+
+// MARK: - Metric Pill
 
 private struct MetricPill: View {
     let symbol: String
@@ -520,16 +585,23 @@ private struct MetricPill: View {
 
     var body: some View {
         Label(value, systemImage: symbol)
-            .font(.system(size: 12, weight: .semibold, design: .rounded))
+            .font(.system(size: 10, weight: .bold, design: .rounded))
             .foregroundStyle(tint)
             .lineLimit(1)
-            .minimumScaleFactor(0.75)
+            .minimumScaleFactor(0.7)
             .frame(maxWidth: .infinity)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(tint.opacity(0.11), in: RoundedRectangle(cornerRadius: 6))
+            .padding(.horizontal, 8)
+            .padding(.vertical, 5)
+            .background(
+                RoundedRectangle(cornerRadius: 5)
+                    .fill(.ultraThinMaterial)
+                    .overlay(RoundedRectangle(cornerRadius: 5).fill(tint.opacity(0.08)))
+            )
+            .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(tint.opacity(0.15), lineWidth: 0.5))
     }
 }
+
+// MARK: - Footer
 
 private struct FooterView: View {
     @ObservedObject var monitor: NetworkMonitor
@@ -538,53 +610,63 @@ private struct FooterView: View {
 
     var body: some View {
         HStack {
-            Label(
-                monitor.isRunning ? appPreferences.text("实时监控中", "Monitoring") : appPreferences.text("已暂停", "Paused"),
-                systemImage: monitor.isRunning ? "dot.radiowaves.left.and.right" : "pause.circle"
-            )
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
+            HStack(spacing: 5) {
+                Circle()
+                    .fill(monitor.isRunning ? Color.green : Color.orange)
+                    .frame(width: 6, height: 6)
+                Text(
+                    monitor.isRunning
+                        ? appPreferences.text("实时监控中", "Monitoring")
+                        : appPreferences.text("已暂停", "Paused")
+                )
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
 
             Spacer()
 
-            Button {
-                openPreferences()
-            } label: {
-                Image(systemName: "gearshape")
-            }
-            .buttonStyle(.borderless)
-            .help(appPreferences.text("偏好设置", "Preferences"))
+            HStack(spacing: 12) {
+                Button { openPreferences() } label: {
+                    Image(systemName: "gearshape")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(appPreferences.text("偏好设置", "Preferences"))
 
-            Button {
-                monitor.refresh()
-                monitor.refreshApplicationTraffic()
-            } label: {
-                Image(systemName: "arrow.clockwise")
-            }
-            .buttonStyle(.borderless)
-            .help(appPreferences.text("立即刷新", "Refresh Now"))
+                Button {
+                    monitor.refresh()
+                    monitor.refreshApplicationTraffic()
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .foregroundStyle(.secondary)
+                }
+                .buttonStyle(.borderless)
+                .help(appPreferences.text("立即刷新", "Refresh Now"))
 
-            Button {
-                NSApplication.shared.terminate(nil)
-            } label: {
-                Image(systemName: "power")
+                Button { NSApplication.shared.terminate(nil) } label: {
+                    Image(systemName: "power")
+                        .foregroundStyle(.red.opacity(0.6))
+                }
+                .buttonStyle(.borderless)
+                .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
             }
-            .buttonStyle(.borderless)
-            .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
         }
     }
 }
+
+// MARK: - Traffic Chart
 
 private struct TrafficChart: View {
     let points: [RatePoint]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: 6) {
             HStack {
                 Text("最近 90 秒")
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(.secondary)
                 Spacer()
-                HStack(spacing: 12) {
+                HStack(spacing: 10) {
                     LegendDot(title: "下载", color: .blue)
                     LegendDot(title: "上传", color: .orange)
                 }
@@ -592,18 +674,18 @@ private struct TrafficChart: View {
 
             GeometryReader { geometry in
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
+                    RoundedRectangle(cornerRadius: 10)
                         .fill(Color(nsColor: .controlBackgroundColor))
 
-                    ChartLine(
-                        points: points.map(\.downloadBytesPerSecond),
-                        size: geometry.size,
-                        color: .blue
-                    )
                     ChartLine(
                         points: points.map(\.uploadBytesPerSecond),
                         size: geometry.size,
                         color: .orange
+                    )
+                    ChartLine(
+                        points: points.map(\.downloadBytesPerSecond),
+                        size: geometry.size,
+                        color: .blue
                     )
                 }
             }
@@ -616,13 +698,13 @@ private struct LegendDot: View {
     let color: Color
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 4) {
             Circle()
                 .fill(color)
-                .frame(width: 7, height: 7)
+                .frame(width: 6, height: 6)
             Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.secondary)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
         }
     }
 }
@@ -633,24 +715,54 @@ private struct ChartLine: View {
     let color: Color
 
     var body: some View {
+        ZStack {
+            filledPath
+                .fill(LinearGradient(
+                    colors: [color.opacity(0.25), color.opacity(0.02)],
+                    startPoint: .top,
+                    endPoint: .bottom
+                ))
+            linePath
+                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+        }
+        .padding(.horizontal, 8)
+        .padding(.vertical, 8)
+    }
+
+    private var linePath: Path {
         Path { path in
             guard points.count > 1 else { return }
             let maxValue = max(points.max() ?? 1, 1)
             let step = size.width / CGFloat(points.count - 1)
-
-            for index in points.indices {
-                let x = CGFloat(index) * step
-                let ratio = CGFloat(points[index] / maxValue)
-                let y = size.height - (ratio * (size.height - 12)) - 6
-                if index == points.startIndex {
-                    path.move(to: CGPoint(x: x, y: y))
-                } else {
-                    path.addLine(to: CGPoint(x: x, y: y))
-                }
+            for i in points.indices {
+                let x = CGFloat(i) * step
+                let y = size.height - (CGFloat(points[i] / maxValue) * (size.height - 12)) - 6
+                if i == points.startIndex { path.move(to: CGPoint(x: x, y: y)) }
+                else { path.addLine(to: CGPoint(x: x, y: y)) }
             }
         }
-        .stroke(color, style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
     }
+
+    private var filledPath: Path {
+        Path { path in
+            guard points.count > 1 else { return }
+            let maxValue = max(points.max() ?? 1, 1)
+            let step = size.width / CGFloat(points.count - 1)
+            for i in points.indices {
+                let x = CGFloat(i) * step
+                let y = size.height - (CGFloat(points[i] / maxValue) * (size.height - 12)) - 6
+                if i == points.startIndex { path.move(to: CGPoint(x: x, y: y)) }
+                else { path.addLine(to: CGPoint(x: x, y: y)) }
+            }
+            path.addLine(to: CGPoint(x: CGFloat(points.count - 1) * step, y: size.height))
+            path.addLine(to: CGPoint(x: 0, y: size.height))
+            path.closeSubpath()
+        }
+    }
+}
+
+// MARK: - Shared Styles
+
+private var cardBackground: some ShapeStyle {
+    Color(nsColor: .controlBackgroundColor)
 }

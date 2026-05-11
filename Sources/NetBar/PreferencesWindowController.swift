@@ -84,7 +84,7 @@ private struct GeneralPreferencesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 PreferenceSection(title: appPreferences.text("启动与窗口", "Startup and Windows")) {
                     Toggle(appPreferences.text("开机启动", "Launch at login"), isOn: Binding(
                         get: { appPreferences.launchesAtLogin },
@@ -102,7 +102,7 @@ private struct GeneralPreferencesView: View {
                         "When the Dock icon is hidden, NetBar runs as a menu bar app. You can still right-click the menu bar item to open the traffic window or preferences."
                     ))
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
 
                     if let loginItemErrorMessage = appPreferences.loginItemErrorMessage {
@@ -126,7 +126,7 @@ private struct GeneralPreferencesView: View {
                         "Menus, preferences, and primary status copy follow this language. System uses your macOS preferred language."
                     ))
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -143,7 +143,7 @@ private struct GeneralPreferencesView: View {
                         "System follows the current macOS appearance. Light and Dark apply immediately to preferences, the traffic window, and menus."
                     ))
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(.tertiary)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
@@ -193,7 +193,7 @@ private struct MenuBarPreferencesView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
+            VStack(alignment: .leading, spacing: 16) {
                 StatusBarPreview(settings: settings, appPreferences: appPreferences)
 
                 PreferenceSection(title: appPreferences.text("文字", "Text")) {
@@ -266,7 +266,7 @@ private struct MenuBarPreferencesView: View {
                             "Backgrounds use Retina bitmap rendering. Transparent mode uses native menu bar text for steadier performance and clarity."
                         ))
                             .font(.system(size: 11))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
                     }
                 }
@@ -287,7 +287,7 @@ private struct ApplicationPreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             PreferenceSection(title: appPreferences.text("应用列表", "Application List")) {
                 Toggle(appPreferences.text("隐藏系统进程", "Hide system processes"), isOn: $appPreferences.hidesSystemProcesses)
 
@@ -303,7 +303,7 @@ private struct ApplicationPreferencesView: View {
                     "Hiding system processes filters services such as networkd and mDNSResponder. Browsers, IDEs, and other user apps remain visible."
                 ))
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
                     .fixedSize(horizontal: false, vertical: true)
             }
 
@@ -317,19 +317,20 @@ private struct UpdatePreferencesView: View {
     @ObservedObject var updater: AppUpdater
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        VStack(alignment: .leading, spacing: 16) {
             PreferenceSection(title: appPreferences.text("软件更新", "Software Update")) {
                 HStack {
                     Text(appPreferences.text("当前版本", "Current version"))
+                        .font(.system(size: 12, weight: .medium))
                     Spacer()
                     Text(updater.currentVersionText)
-                        .font(.system(size: 12, weight: .medium, design: .monospaced))
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
                         .foregroundStyle(.secondary)
                 }
 
                 Toggle(appPreferences.text("自动检测更新", "Automatically check for updates"), isOn: $updater.automaticallyChecksForUpdates)
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(updater.statusMessage)
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -337,7 +338,7 @@ private struct UpdatePreferencesView: View {
 
                     if let lastCheckedAt = updater.lastCheckedAt {
                         Text("\(appPreferences.text("上次检查", "Last checked")): \(lastCheckedAt, style: .time)")
-                            .font(.system(size: 11, weight: .medium))
+                            .font(.system(size: 10, weight: .medium, design: .monospaced))
                             .foregroundStyle(.tertiary)
                     }
                 }
@@ -369,6 +370,7 @@ private struct UpdatePreferencesView: View {
                     if let releasePageURL = updater.releasePageURL {
                         Link(destination: releasePageURL) {
                             Image(systemName: "safari")
+                                .foregroundStyle(.secondary)
                         }
                         .help("打开 GitHub Releases")
                     }
@@ -395,9 +397,9 @@ private struct StatusBarPreview: View {
     )
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 8) {
             Text(appPreferences.text("菜单栏预览", "Menu Bar Preview"))
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .bold))
 
             HStack {
                 Spacer()
@@ -417,11 +419,14 @@ private struct StatusBarPreview: View {
                 }
                 Spacer()
             }
-            .frame(height: 52)
-            .background(Color(nsColor: .underPageBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
-            .overlay(
+            .frame(height: 48)
+            .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .stroke(Color(nsColor: .separatorColor).opacity(0.45), lineWidth: 1)
+                    .fill(Color(nsColor: .underPageBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    )
             )
         }
     }
@@ -443,16 +448,23 @@ private struct PreferenceSection<Content: View>: View {
     @ViewBuilder var content: Content
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             Text(title)
-                .font(.system(size: 13, weight: .semibold))
+                .font(.system(size: 12, weight: .bold))
 
-            VStack(alignment: .leading, spacing: 12) {
+            VStack(alignment: .leading, spacing: 10) {
                 content
             }
             .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(Color(nsColor: .controlBackgroundColor), in: RoundedRectangle(cornerRadius: 8))
+            .background(
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .controlBackgroundColor))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.04), lineWidth: 0.5)
+            )
         }
     }
 }
@@ -464,15 +476,15 @@ private struct SliderPreference: View {
     let displayValue: String
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 5) {
             HStack {
                 Text(title)
+                    .font(.system(size: 12, weight: .medium))
                 Spacer()
                 Text(displayValue)
-                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .font(.system(size: 11, weight: .bold, design: .monospaced))
                     .foregroundStyle(.secondary)
             }
-            .font(.system(size: 12, weight: .medium))
 
             Slider(value: $value, in: range)
         }
