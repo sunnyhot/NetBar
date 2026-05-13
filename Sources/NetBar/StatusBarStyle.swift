@@ -241,22 +241,23 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             // Change color on each frame change — truly random-feeling jumps
             // Use a hash of frameIndex + time bucket for variety
             let timeBucket = Int(time * 2)  // Change color ~2x per second
-            let seed = UInt32(frameIndex &+ timeBucket &* 2654435761)
+            // Keep hash within UInt32 range to avoid overflow crash
+            let mixed = UInt32(truncatingIfNeeded: timeBucket &* 2654435761 &+ Int(frameIndex))
+            let seed = mixed &+ mixed &>> 16  // extra mixing (Murmur-style)
             let hue = CGFloat(Double(seed % 360) / 360.0)
             let sat = 0.7 + 0.3 * CGFloat(Double((seed >> 8) % 100) / 100.0)
             let bright = 0.8 + 0.2 * CGFloat(Double((seed >> 16) % 100) / 100.0)
-            return NSColor(calibratedHue: hue, saturation: sat, brightness: bright, alpha: 1.0)
+            return NSColor(calibratedHue: hue, saturation: sat.clamped(to: 0...1), brightness: bright.clamped(to: 0...1), alpha: 1.0)
 
         case .randomCycle:
             // Smoothly cycle through unpredictable color combinations
             // Use multiple incommensurate sine frequencies for non-repeating feel
             let t = time
-            let hue = CGFloat(
-                (0.5 + 0.5 * sin(t * 0.47 + 1.3) * cos(t * 0.31 + 0.7)).truncatingRemainder(dividingBy: 1.0)
-            )
-            let sat = 0.6 + 0.4 * (0.5 + 0.5 * sin(t * 0.73 + 2.8))
-            let bright = 0.7 + 0.3 * (0.5 + 0.5 * sin(t * 0.59 + 4.1))
-            return NSColor(calibratedHue: abs(hue), saturation: sat, brightness: bright, alpha: 1.0)
+            let rawHue = 0.5 + 0.5 * sin(t * 0.47 + 1.3) * cos(t * 0.31 + 0.7)
+            let hue = CGFloat(max(0.0, min(1.0, rawHue)))
+            let sat = CGFloat(max(0.0, min(1.0, 0.6 + 0.4 * (0.5 + 0.5 * sin(t * 0.73 + 2.8)))))
+            let bright = CGFloat(max(0.0, min(1.0, 0.7 + 0.3 * (0.5 + 0.5 * sin(t * 0.59 + 4.1)))))
+            return NSColor(calibratedHue: hue, saturation: sat, brightness: bright, alpha: 1.0)
         }
     }
 }
