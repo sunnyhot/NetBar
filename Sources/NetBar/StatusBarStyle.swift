@@ -54,6 +54,14 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     case ocean           // Ocean gradient (dark blue → cyan → white)
     case aurora          // Northern lights (green → cyan → purple)
     case sakura          // Cherry blossom (pink → white → light pink)
+    case cyber           // Cyberpunk (magenta ↔ electric blue)
+    case sunset          // Sunset (deep red → orange → purple)
+    case forest          // Forest (dark green → lime → golden)
+    case candy           // Candy pastels (soft colors cycling)
+    case lava            // Lava (dark red → bright orange → yellow → dark)
+    case galaxy          // Galaxy (deep purple → blue → pink → white)
+    case matrix          // Matrix (green shades)
+    case roseGold        // Rose gold (warm pink → gold → copper)
     case randomPop       // Random color per frame change (拼色)
     case randomCycle     // Smooth random color cycling (随机炫彩)
 
@@ -68,6 +76,14 @@ enum CatColorMode: String, CaseIterable, Identifiable {
         case .ocean:       return zh ? "海洋" : "Ocean"
         case .aurora:      return zh ? "极光" : "Aurora"
         case .sakura:      return zh ? "樱花" : "Sakura"
+        case .cyber:       return zh ? "赛博" : "Cyber"
+        case .sunset:      return zh ? "日落" : "Sunset"
+        case .forest:      return zh ? "森林" : "Forest"
+        case .candy:       return zh ? "糖果" : "Candy"
+        case .lava:        return zh ? "熔岩" : "Lava"
+        case .galaxy:      return zh ? "星河" : "Galaxy"
+        case .matrix:      return zh ? "黑客" : "Matrix"
+        case .roseGold:    return zh ? "玫瑰金" : "Rose Gold"
         case .randomPop:   return zh ? "随机拼色" : "Random Pop"
         case .randomCycle: return zh ? "随机炫彩" : "Random Cycle"
         }
@@ -108,7 +124,6 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             // Red → orange → yellow cycle
             let cycleTime = time.truncatingRemainder(dividingBy: 2.0)
             let progress = CGFloat(cycleTime / 2.0)
-            // Hue goes from 0.0 (red) to 0.12 (orange-yellow) and back
             let hue = 0.0 + 0.12 * (0.5 + 0.5 * sin(progress * .pi * 2))
             return NSColor(calibratedHue: hue, saturation: 1.0, brightness: 1.0, alpha: 1.0)
 
@@ -116,7 +131,7 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             // Dark blue → cyan → white foam
             let cycleTime = time.truncatingRemainder(dividingBy: 3.0)
             let progress = CGFloat(cycleTime / 3.0)
-            let hue = 0.55 + 0.1 * sin(progress * .pi * 2)  // blue-cyan range
+            let hue = 0.55 + 0.1 * sin(progress * .pi * 2)
             let brightness = 0.7 + 0.3 * sin(progress * .pi * 4)
             return NSColor(calibratedHue: hue, saturation: 0.8, brightness: brightness, alpha: 1.0)
 
@@ -135,19 +150,113 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             let saturation = 0.3 + 0.4 * (0.5 + 0.5 * cos(progress * .pi * 2))
             return NSColor(calibratedHue: hue, saturation: saturation, brightness: 1.0, alpha: 1.0)
 
+        case .cyber:
+            // Cyberpunk: magenta ↔ electric blue with flicker
+            let cycleTime = time.truncatingRemainder(dividingBy: 2.5)
+            let progress = CGFloat(cycleTime / 2.5)
+            let hue = 0.83 + 0.17 * (0.5 + 0.5 * sin(progress * .pi * 2))
+            // Occasional brightness flicker
+            let flicker = 0.85 + 0.15 * sin(progress * .pi * 12)
+            return NSColor(calibratedHue: hue, saturation: 1.0, brightness: flicker, alpha: 1.0)
+
+        case .sunset:
+            // Deep red → orange → purple dusk
+            let cycleTime = time.truncatingRemainder(dividingBy: 5.0)
+            let progress = CGFloat(cycleTime / 5.0)
+            let hue = 0.02 + 0.08 * sin(progress * .pi * 2)
+            let brightness = 0.8 + 0.2 * cos(progress * .pi * 4)
+            // Brief purple phase near the end of cycle
+            let purpleMix = max(0, sin(progress * .pi * 2 - .pi / 2))
+            let finalHue = hue + 0.7 * purpleMix
+            return NSColor(calibratedHue: finalHue, saturation: 0.9, brightness: brightness, alpha: 1.0)
+
+        case .forest:
+            // Dark green → lime → golden
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.0)
+            let progress = CGFloat(cycleTime / 4.0)
+            let hue = 0.25 + 0.2 * (0.5 + 0.5 * sin(progress * .pi * 2))
+            let saturation = 0.6 + 0.3 * cos(progress * .pi * 2)
+            return NSColor(calibratedHue: hue, saturation: saturation, brightness: 0.7, alpha: 1.0)
+
+        case .candy:
+            // Pastel colors cycling: soft pink → mint → lavender → peach → baby blue
+            let candyHues: [CGFloat] = [0.95, 0.45, 0.75, 0.08, 0.58]
+            let candySats: [CGFloat] = [0.4, 0.35, 0.3, 0.45, 0.35]
+            let cycleTime = time.truncatingRemainder(dividingBy: 5.0)
+            let progress = cycleTime / 5.0
+            let segment = progress * CGFloat(candyHues.count)
+            let idx = Int(segment) % candyHues.count
+            let nextIdx = (idx + 1) % candyHues.count
+            let frac = segment - CGFloat(Int(segment))
+            let hue = candyHues[idx] + (candyHues[nextIdx] - candyHues[idx]) * frac
+            let sat = candySats[idx] + (candySats[nextIdx] - candySats[idx]) * frac
+            return NSColor(calibratedHue: hue, saturation: sat, brightness: 1.0, alpha: 1.0)
+
+        case .lava:
+            // Dark red → bright orange → yellow → back to dark
+            let cycleTime = time.truncatingRemainder(dividingBy: 3.0)
+            let progress = CGFloat(cycleTime / 3.0)
+            // Hue: 0.0 (red) → 0.08 (orange) → 0.15 (yellow-orange)
+            let hue = 0.0 + 0.15 * (0.5 + 0.5 * sin(progress * .pi * 2))
+            // Brightness pulses: dark → bright → dark
+            let brightness = 0.5 + 0.5 * sin(progress * .pi * 2)
+            return NSColor(calibratedHue: hue, saturation: 1.0, brightness: max(0.3, brightness), alpha: 1.0)
+
+        case .galaxy:
+            // Deep purple → blue → pink → white sparkle
+            let cycleTime = time.truncatingRemainder(dividingBy: 6.0)
+            let progress = CGFloat(cycleTime / 6.0)
+            // Multi-phase: purple → blue → pink → white flash
+            let phase = progress * 3.0
+            let phaseIdx = Int(phase) % 3
+            let phaseFrac = phase - CGFloat(Int(phase))
+            let hues: [CGFloat] = [0.75, 0.6, 0.9]
+            let sats: [CGFloat] = [0.7, 0.8, 0.5]
+            let brights: [CGFloat] = [0.6, 0.7, 1.0]
+            let nextIdx = (phaseIdx + 1) % 3
+            let hue = hues[phaseIdx] + (hues[nextIdx] - hues[phaseIdx]) * phaseFrac
+            let sat = sats[phaseIdx] + (sats[nextIdx] - sats[phaseIdx]) * phaseFrac
+            let bright = brights[phaseIdx] + (brights[nextIdx] - brights[phaseIdx]) * phaseFrac
+            return NSColor(calibratedHue: hue, saturation: sat, brightness: bright, alpha: 1.0)
+
+        case .matrix:
+            // Green shades cycling (Matrix digital rain)
+            let cycleTime = time.truncatingRemainder(dividingBy: 2.0)
+            let progress = CGFloat(cycleTime / 2.0)
+            let brightness = 0.4 + 0.6 * sin(progress * .pi * 2)
+            // Stay in green hue range with tiny variation
+            let hue = 0.33 + 0.02 * sin(progress * .pi * 6)
+            return NSColor(calibratedHue: hue, saturation: 0.9, brightness: brightness, alpha: 1.0)
+
+        case .roseGold:
+            // Warm pink → gold → copper
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.0)
+            let progress = CGFloat(cycleTime / 4.0)
+            // Hue oscillates between pink (0.95) and gold/amber (0.1)
+            let hue = 0.05 + 0.9 * (0.5 + 0.5 * cos(progress * .pi * 2))
+            let saturation = 0.4 + 0.3 * sin(progress * .pi * 2)
+            return NSColor(calibratedHue: hue, saturation: saturation, brightness: 0.85, alpha: 1.0)
+
         case .randomPop:
-            // Change color on each frame change — use frameIndex as seed
-            // Deterministic per-frame: same frame = same color
-            let hue = CGFloat(Double(frameIndex % 12) / 12.0)
-            return NSColor(calibratedHue: hue, saturation: 0.9, brightness: 1.0, alpha: 1.0)
+            // Change color on each frame change — truly random-feeling jumps
+            // Use a hash of frameIndex + time bucket for variety
+            let timeBucket = Int(time * 2)  // Change color ~2x per second
+            let seed = UInt32(frameIndex &+ timeBucket &* 2654435761)
+            let hue = CGFloat(Double(seed % 360) / 360.0)
+            let sat = 0.7 + 0.3 * CGFloat(Double((seed >> 8) % 100) / 100.0)
+            let bright = 0.8 + 0.2 * CGFloat(Double((seed >> 16) % 100) / 100.0)
+            return NSColor(calibratedHue: hue, saturation: sat, brightness: bright, alpha: 1.0)
 
         case .randomCycle:
-            // Smoothly cycle through random-ish colors using a combination of sin waves
+            // Smoothly cycle through unpredictable color combinations
+            // Use multiple incommensurate sine frequencies for non-repeating feel
             let t = time
-            let r = 0.5 + 0.5 * sin(t * 0.7 + 0.0)
-            let g = 0.5 + 0.5 * sin(t * 0.5 + 2.1)
-            let b = 0.5 + 0.5 * sin(t * 0.3 + 4.2)
-            return NSColor(calibratedRed: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: 1.0)
+            let hue = CGFloat(
+                (0.5 + 0.5 * sin(t * 0.47 + 1.3) * cos(t * 0.31 + 0.7)).truncatingRemainder(dividingBy: 1.0)
+            )
+            let sat = 0.6 + 0.4 * (0.5 + 0.5 * sin(t * 0.73 + 2.8))
+            let bright = 0.7 + 0.3 * (0.5 + 0.5 * sin(t * 0.59 + 4.1))
+            return NSColor(calibratedHue: abs(hue), saturation: sat, brightness: bright, alpha: 1.0)
         }
     }
 }
