@@ -163,6 +163,14 @@ private struct MenuBarPreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
 
+    private func applyCatColor(_ color: Color) {
+        let newColor = PersistedColor(color: color)
+        settings.catColor = newColor
+        if newColor != PersistedColor.white && settings.usesSystemTextColor {
+            settings.usesSystemTextColor = false
+        }
+    }
+
     private var textColorBinding: Binding<Color> {
         Binding(
             get: { settings.textColor.swiftUIColor },
@@ -268,6 +276,13 @@ private struct MenuBarPreferencesView: View {
                                         }
                                         .labelsHidden()
                                         .frame(maxWidth: 200)
+                                        .onChange(of: settings.catColorMode) { newMode in
+                                            // Auto-disable system text color when fancy mode is selected
+                                            // because template rendering would override the custom colors
+                                            if newMode != CatColorMode.solid.rawValue && settings.usesSystemTextColor {
+                                                settings.usesSystemTextColor = false
+                                            }
+                                        }
                                     }
 
                                     // Solid color picker (only shown in solid mode)
@@ -277,35 +292,27 @@ private struct MenuBarPreferencesView: View {
                                                 .font(.subheadline)
                                             ColorPicker("", selection: Binding(
                                                 get: { settings.catColor.swiftUIColor },
-                                                set: { settings.catColor = PersistedColor(color: $0) }
+                                                set: {
+                                                    settings.catColor = PersistedColor(color: $0)
+                                                    // Auto-disable system text color when choosing a non-white color
+                                                    if PersistedColor(color: $0) != PersistedColor.white && settings.usesSystemTextColor {
+                                                        settings.usesSystemTextColor = false
+                                                    }
+                                                }
                                             ))
                                             .labelsHidden()
 
                                             // Preset colors (with black and white)
                                             HStack(spacing: 4) {
-                                                ForEach([
-                                                    (Color.white, "白"),
-                                                    (Color.black, "黑"),
-                                                    (Color.red, "红"),
-                                                    (Color.orange, "橙"),
-                                                    (Color.yellow, "黄"),
-                                                    (Color.green, "绿"),
-                                                    (Color.cyan, "青"),
-                                                    (Color.blue, "蓝"),
-                                                    (Color.purple, "紫"),
-                                                ], id: \.1) { color, label in
-                                                    Button(action: {
-                                                        settings.catColor = PersistedColor(color: color)
-                                                    }) {
-                                                        Circle()
-                                                            .fill(color)
-                                                            .frame(width: 16, height: 16)
-                                                            .overlay(
-                                                                Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
-                                                            )
-                                                    }
-                                                    .buttonStyle(.plain)
-                                                }
+                                                PresetColorButton(color: Color.white, label: "白", settings: settings)
+                                                PresetColorButton(color: Color.black, label: "黑", settings: settings)
+                                                PresetColorButton(color: Color.red, label: "红", settings: settings)
+                                                PresetColorButton(color: Color.orange, label: "橙", settings: settings)
+                                                PresetColorButton(color: Color.yellow, label: "黄", settings: settings)
+                                                PresetColorButton(color: Color.green, label: "绿", settings: settings)
+                                                PresetColorButton(color: Color.cyan, label: "青", settings: settings)
+                                                PresetColorButton(color: Color.blue, label: "蓝", settings: settings)
+                                                PresetColorButton(color: Color.purple, label: "紫", settings: settings)
                                             }
 
                                             // Reset to white
@@ -324,6 +331,21 @@ private struct MenuBarPreferencesView: View {
                                         ))
                                         .font(.system(size: 10))
                                         .foregroundColor(.secondary)
+                                    }
+
+                                    // Warning when usesSystemTextColor is on but cat has custom color
+                                    if settings.usesSystemTextColor && (settings.catColorMode != CatColorMode.solid.rawValue || settings.catColor != PersistedColor.white) {
+                                        HStack(spacing: 4) {
+                                            Image(systemName: "exclamationmark.triangle.fill")
+                                                .foregroundColor(.orange)
+                                                .font(.system(size: 10))
+                                            Text(appPreferences.text(
+                                                "系统文字颜色会覆盖角色颜色，已自动切换为自定义颜色",
+                                                "System text color overrides character color, auto-switched to custom color"
+                                            ))
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.orange)
+                                        }
                                     }
                                 }
                             }
@@ -640,5 +662,27 @@ private struct SliderPreference: View {
 
             Slider(value: $value, in: range)
         }
+    }
+}
+
+private struct PresetColorButton: View {
+    let color: Color
+    let label: String
+    @ObservedObject var settings: StatusBarSettings
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 16, height: 16)
+            .overlay(
+                Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
+            )
+            .onTapGesture {
+                let newColor = PersistedColor(color: color)
+                settings.catColor = newColor
+                if newColor != PersistedColor.white && settings.usesSystemTextColor {
+                    settings.usesSystemTextColor = false
+                }
+            }
     }
 }

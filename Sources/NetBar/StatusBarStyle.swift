@@ -260,6 +260,180 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             return NSColor(calibratedHue: hue, saturation: sat, brightness: bright, alpha: 1.0)
         }
     }
+
+    // MARK: - Gradient Colors for Multi-Color Tinting
+
+    /// Returns an array of (color, position) pairs for gradient tinting.
+    /// Each fancy mode produces a vertical gradient that makes the character
+    /// appear with multiple colors simultaneously (not just a flat solid color).
+    /// - Parameters:
+    ///   - time: Current time for cycling
+    ///   - frameIndex: Animation frame index
+    ///   - baseColor: Base color (for solid fallback)
+    ///   - size: Image size (for positioning)
+    /// - Returns: Array of (NSColor, CGFloat position 0-1) tuples
+    func gradientColors(at time: TimeInterval, frameIndex: Int, baseColor: PersistedColor, size: NSSize) -> [(color: NSColor, position: CGFloat)] {
+        switch self {
+        case .solid:
+            // Solid mode: uniform single color (no gradient needed)
+            return [(color: baseColor.nsColor, position: 0.0), (color: baseColor.nsColor, position: 1.0)]
+
+        case .rainbow:
+            // Full rainbow across the character body
+            let hue = CGFloat((time.truncatingRemainder(dividingBy: 3.0)) / 3.0)
+            return [
+                (color: NSColor(calibratedHue: hue, saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: (hue + 0.15).truncatingRemainder(dividingBy: 1.0), saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: (hue + 0.3).truncatingRemainder(dividingBy: 1.0), saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 1.0),
+            ]
+
+        case .neon:
+            let neonHues: [CGFloat] = [0.83, 0.5, 0.33, 0.17]
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.0)
+            let idx = Int((cycleTime / 1.0)) % neonHues.count
+            let nextIdx = (idx + 1) % neonHues.count
+            return [
+                (color: NSColor(calibratedHue: neonHues[idx], saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: neonHues[nextIdx], saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 1.0),
+            ]
+
+        case .flame:
+            // Fire: bottom yellow → middle orange → top red
+            return [
+                (color: NSColor(calibratedHue: 0.12, saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.06, saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.0, saturation: 1.0, brightness: 0.9, alpha: 1.0), position: 1.0),
+            ]
+
+        case .ocean:
+            // Ocean: top cyan → middle blue → bottom deep navy
+            return [
+                (color: NSColor(calibratedHue: 0.52, saturation: 0.7, brightness: 0.95, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.6, saturation: 0.9, brightness: 0.8, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.65, saturation: 1.0, brightness: 0.5, alpha: 1.0), position: 1.0),
+            ]
+
+        case .aurora:
+            // Northern lights: green → cyan → purple flowing across
+            return [
+                (color: NSColor(calibratedHue: 0.33, saturation: 0.7, brightness: 0.9, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.5, saturation: 0.8, brightness: 0.95, alpha: 1.0), position: 0.4),
+                (color: NSColor(calibratedHue: 0.75, saturation: 0.6, brightness: 0.9, alpha: 1.0), position: 0.7),
+                (color: NSColor(calibratedHue: 0.85, saturation: 0.5, brightness: 0.85, alpha: 1.0), position: 1.0),
+            ]
+
+        case .sakura:
+            // Cherry blossom: top pink → middle white → bottom light pink
+            return [
+                (color: NSColor(calibratedHue: 0.95, saturation: 0.5, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.95, saturation: 0.15, brightness: 1.0, alpha: 1.0), position: 0.4),
+                (color: NSColor(calibratedHue: 0.93, saturation: 0.4, brightness: 1.0, alpha: 1.0), position: 1.0),
+            ]
+
+        case .cyber:
+            // Cyberpunk: magenta ↔ electric blue split
+            return [
+                (color: NSColor(calibratedHue: 0.83, saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.7, saturation: 0.9, brightness: 0.9, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.58, saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 1.0),
+            ]
+
+        case .sunset:
+            // Sunset: top purple → middle orange → bottom deep red
+            return [
+                (color: NSColor(calibratedHue: 0.8, saturation: 0.7, brightness: 0.85, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.08, saturation: 0.95, brightness: 1.0, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.0, saturation: 1.0, brightness: 0.8, alpha: 1.0), position: 1.0),
+            ]
+
+        case .forest:
+            // Forest: top golden → middle lime → bottom dark green
+            return [
+                (color: NSColor(calibratedHue: 0.12, saturation: 0.7, brightness: 0.8, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.25, saturation: 0.8, brightness: 0.7, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.35, saturation: 0.9, brightness: 0.5, alpha: 1.0), position: 1.0),
+            ]
+
+        case .candy:
+            let candyHues: [CGFloat] = [0.95, 0.08, 0.5, 0.75]
+            let candySats: [CGFloat] = [0.6, 0.7, 0.5, 0.6]
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.0)
+            let idx = Int(cycleTime) % candyHues.count
+            return [
+                (color: NSColor(calibratedHue: candyHues[idx], saturation: candySats[idx], brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: candyHues[(idx + 1) % candyHues.count], saturation: candySats[(idx + 1) % candySats.count], brightness: 1.0, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: candyHues[(idx + 2) % candyHues.count], saturation: candySats[(idx + 2) % candySats.count], brightness: 1.0, alpha: 1.0), position: 1.0),
+            ]
+
+        case .lava:
+            // Lava: top bright yellow → middle orange → bottom dark red
+            return [
+                (color: NSColor(calibratedHue: 0.13, saturation: 1.0, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.06, saturation: 1.0, brightness: 0.9, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.0, saturation: 1.0, brightness: 0.5, alpha: 1.0), position: 1.0),
+            ]
+
+        case .galaxy:
+            // Galaxy: top white sparkle → middle pink → bottom deep purple
+            return [
+                (color: NSColor(calibratedHue: 0.7, saturation: 0.15, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.85, saturation: 0.6, brightness: 0.9, alpha: 1.0), position: 0.4),
+                (color: NSColor(calibratedHue: 0.72, saturation: 0.9, brightness: 0.6, alpha: 1.0), position: 1.0),
+            ]
+
+        case .matrix:
+            // Matrix: top bright green → middle → bottom dark green
+            return [
+                (color: NSColor(calibratedHue: 0.33, saturation: 0.6, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.33, saturation: 0.9, brightness: 0.7, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.33, saturation: 1.0, brightness: 0.35, alpha: 1.0), position: 1.0),
+            ]
+
+        case .roseGold:
+            // Rose gold: top warm pink → middle gold → bottom copper
+            return [
+                (color: NSColor(calibratedHue: 0.95, saturation: 0.45, brightness: 0.95, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.1, saturation: 0.6, brightness: 0.9, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: 0.06, saturation: 0.7, brightness: 0.75, alpha: 1.0), position: 1.0),
+            ]
+
+        case .randomPop:
+            // Random: 2-3 random colors split across the body
+            let timeBucket = Int(time * 2)
+            let mixed = UInt32(truncatingIfNeeded: timeBucket &* 2654435761 &+ Int(frameIndex))
+            let seed = mixed &+ mixed &>> 16
+            let hue1 = CGFloat(Double(seed % 360) / 360.0)
+            let hue2 = CGFloat(Double((seed >> 8) % 360) / 360.0)
+            let hue3 = CGFloat(Double((seed >> 16) % 360) / 360.0)
+            return [
+                (color: NSColor(calibratedHue: hue1, saturation: 0.85, brightness: 1.0, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: hue2, saturation: 0.9, brightness: 0.95, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: hue3, saturation: 0.85, brightness: 1.0, alpha: 1.0), position: 1.0),
+            ]
+
+        case .randomCycle:
+            // Smooth cycling multi-color
+            let t = time
+            let hue1 = CGFloat(max(0.0, min(1.0, 0.5 + 0.5 * sin(t * 0.47 + 1.3))))
+            let hue2 = CGFloat(max(0.0, min(1.0, 0.5 + 0.5 * sin(t * 0.31 + 2.7))))
+            let hue3 = CGFloat(max(0.0, min(1.0, 0.5 + 0.5 * sin(t * 0.59 + 4.1))))
+            return [
+                (color: NSColor(calibratedHue: hue1, saturation: 0.8, brightness: 0.95, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: hue2, saturation: 0.9, brightness: 1.0, alpha: 1.0), position: 0.5),
+                (color: NSColor(calibratedHue: hue3, saturation: 0.85, brightness: 0.9, alpha: 1.0), position: 1.0),
+            ]
+        }
+    }
+
+    /// Whether this mode should show sparkle/star decorations on the character
+    var hasSparkles: Bool {
+        switch self {
+        case .galaxy, .neon, .aurora, .cyber, .candy, .randomPop, .rainbow:
+            return true
+        default:
+            return false
+        }
+    }
 }
 
 enum StatusBarOrder: String, CaseIterable, Identifiable {
@@ -618,7 +792,26 @@ enum StatusBarDisplayRenderer {
             NSRect(origin: .zero, size: size).fill()
         }
 
-        let useTemplate = settings.usesSystemTextColor && !settings.showsBackground
+        // Determine if cat has custom coloring (non-default-white solid or fancy mode)
+        let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
+        let catHasCustomColor: Bool
+        if settings.showsCat, catFrameIndex != nil {
+            let character = RunCatCharacter.byId(settings.catCharacter)
+            if character.isTemplate {
+                // Template character with non-solid mode, or solid mode with non-white color
+                catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white
+            } else {
+                // Color characters (gaming-cat, party-parrot, etc.) always have custom colors
+                catHasCustomColor = true
+            }
+        } else {
+            catHasCustomColor = false
+        }
+
+        // When cat has custom colors, we cannot use template image mode
+        // because macOS would re-tint the entire image, inverting custom colors.
+        // Instead, render with explicit colors for both cat and text.
+        let useTemplate = settings.usesSystemTextColor && !settings.showsBackground && !catHasCustomColor
         let textColor = useTemplate ? NSColor.black : settings.effectiveTextColor
 
         // Draw cat frame if enabled
@@ -645,28 +838,46 @@ enum StatusBarDisplayRenderer {
                 let catY = (height - catHeight) / 2
                 let catPadding: CGFloat = 3
                 let drawRect = NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight)
+                let now = Date().timeIntervalSince1970
 
                 if character.isTemplate {
                     // Template mode: tint with color from CatColorMode
-                    let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
-                    let now = Date().timeIntervalSince1970
-                    let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
-                    if let tinted = tintImage(catImg, color: tintColor) {
-                        tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                    if colorMode == .solid {
+                        // Solid color: use single-color tint
+                        let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                        if let tinted = tintImage(catImg, color: tintColor) {
+                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                        } else {
+                            catImg.isTemplate = true
+                            catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                        }
                     } else {
-                        // Fallback: draw as template
-                        catImg.isTemplate = true
-                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                        // Fancy mode: use gradient/multi-color tinting
+                        let colors = colorMode.gradientColors(at: now, frameIndex: frameIdx, baseColor: settings.catColor, size: catImg.size)
+                        if let tinted = tintImageGradient(catImg, colors: colors) {
+                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                        } else {
+                            // Fallback to single-color tint
+                            let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                            if let tinted = tintImage(catImg, color: tintColor) {
+                                tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                            } else {
+                                catImg.isTemplate = true
+                                catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                            }
+                        }
                     }
                 } else {
                     // Color mode (gaming-cat, party-parrot, etc.): draw with original colors
                     catImg.isTemplate = false
-                    if useTemplate {
-                        // In template rendering mode, draw original colors
-                        // (color characters look best with their original palette)
-                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
-                    } else {
-                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                }
+
+                // Draw sparkle decorations for modes that have them
+                if colorMode.hasSparkles {
+                    if let currentContext = NSGraphicsContext.current {
+                        let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                        drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
                     }
                 }
 
@@ -827,6 +1038,93 @@ enum StatusBarDisplayRenderer {
         let tinted = NSImage(size: size)
         tinted.addRepresentation(bitmapRep)
         return tinted
+    }
+
+    /// Tint a template image with a vertical gradient of colors.
+    /// Each color is applied at its position (0=top, 1=bottom), creating
+    /// a multi-colored effect where different parts of the character show different colors.
+    private static func tintImageGradient(_ image: NSImage, colors: [(color: NSColor, position: CGFloat)]) -> NSImage? {
+        guard colors.count >= 2 else { return nil }
+        let size = image.size
+        guard let bitmapRep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * 2),
+            pixelsHigh: Int(size.height * 2),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+
+        bitmapRep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
+
+        // Draw vertical gradient
+        let gradient = NSGradient(colors: colors.map { $0.color }, atLocations: colors.map { $0.position }, colorSpace: .deviceRGB)
+        gradient?.draw(in: NSRect(origin: .zero, size: size), angle: 270) // top-to-bottom
+
+        // Mask with the original image's alpha channel
+        image.draw(in: NSRect(origin: .zero, size: size), from: NSRect(origin: .zero, size: image.size), operation: .destinationIn, fraction: 1.0)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let tinted = NSImage(size: size)
+        tinted.addRepresentation(bitmapRep)
+        return tinted
+    }
+
+    /// Draw sparkle/star decorations on the tinted character.
+    /// Sparkles appear at pseudo-random positions based on time, creating a twinkling effect.
+    private static func drawSparkles(in context: NSGraphicsContext, rect: NSRect, time: TimeInterval, color: NSColor) {
+        // Generate 3-5 sparkle positions based on time
+        let sparkleCount = 4
+        for i in 0..<sparkleCount {
+            let timeBucket = Int(time * 3) // Change sparkle positions ~3 times/sec
+            let offset = UInt32(truncatingIfNeeded: i &* 2246822519 &+ 7919)
+            let mixed = UInt32(truncatingIfNeeded: timeBucket) &* 2654435761 &+ offset
+            let seed = mixed &+ (mixed &>> 16)
+
+            // Random position within the character bounds
+            let xNorm = CGFloat(Double(seed % 100) / 100.0)
+            let yNorm = CGFloat(Double((seed >> 7) % 100) / 100.0)
+            let sparkleX = rect.minX + rect.width * (0.1 + 0.8 * xNorm)
+            let sparkleY = rect.minY + rect.height * (0.1 + 0.8 * yNorm)
+
+            // Twinkle: vary alpha over time per sparkle
+            let phase = Double(seed &>> 3) * 0.1
+            let alpha = 0.4 + 0.6 * abs(sin(time * 4.0 + phase))
+            let sparkleColor = color.withAlphaComponent(CGFloat(alpha))
+
+            // Draw a 4-pointed star
+            let starSize: CGFloat = 2.5
+            drawStar(in: context, center: NSPoint(x: sparkleX, y: sparkleY), size: starSize, color: sparkleColor)
+        }
+    }
+
+    /// Draw a simple 4-pointed star shape
+    private static func drawStar(in context: NSGraphicsContext, center: NSPoint, size: CGFloat, color: NSColor) {
+        color.setFill()
+        let path = NSBezierPath()
+        // 4-pointed star
+        let outerR = size
+        let innerR = size * 0.35
+        for i in 0..<8 {
+            let angle = CGFloat(i) * .pi / 4.0 - .pi / 2.0
+            let r = i % 2 == 0 ? outerR : innerR
+            let x = center.x + r * cos(angle)
+            let y = center.y + r * sin(angle)
+            if i == 0 {
+                path.move(to: NSPoint(x: x, y: y))
+            } else {
+                path.line(to: NSPoint(x: x, y: y))
+            }
+        }
+        path.close()
+        path.fill()
     }
 }
 
