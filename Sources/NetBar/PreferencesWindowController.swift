@@ -366,6 +366,59 @@ private struct MenuBarPreferencesView: View {
                             .font(.system(size: 11))
                             .foregroundStyle(.tertiary)
                             .fixedSize(horizontal: false, vertical: true)
+
+                        // Rotation settings
+                        Divider()
+                        Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: $settings.catRotationEnabled)
+
+                        if settings.catRotationEnabled {
+                            SliderPreference(
+                                title: appPreferences.text("轮换间隔", "Rotation Interval"),
+                                value: $settings.catRotationIntervalMinutes,
+                                range: 1...60,
+                                displayValue: String(format: "%.0f分钟", settings.catRotationIntervalMinutes)
+                            )
+                            Text(appPreferences.text(
+                                "每隔一定时间随机切换到下一个角色。",
+                                "Randomly switch to the next character at intervals."
+                            ))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text(appPreferences.text("轮换角色池（空=全部）", "Rotation Pool (empty=all)"))
+                                    .font(.subheadline)
+                                ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(category.rawValue)
+                                            .font(.system(size: 10))
+                                            .foregroundColor(.secondary)
+                                        let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
+                                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))], spacing: 2) {
+                                            ForEach(charsInCategory) { character in
+                                                Button(action: {
+                                                    var ids = settings.catRotationPool.split(separator: ",").map(String.init)
+                                                    if ids.contains(character.id) {
+                                                        ids.removeAll { $0 == character.id }
+                                                    } else {
+                                                        ids.append(character.id)
+                                                    }
+                                                    settings.catRotationPool = ids.joined(separator: ",")
+                                                }) {
+                                                    HStack(spacing: 3) {
+                                                        Image(systemName: settings.catRotationPool.split(separator: ",").map(String.init).contains(character.id) ? "checkmark.square" : "square")
+                                                            .font(.system(size: 9))
+                                                        Text(character.displayName)
+                                                            .font(.system(size: 11))
+                                                    }
+                                                }
+                                                .buttonStyle(.plain)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
 

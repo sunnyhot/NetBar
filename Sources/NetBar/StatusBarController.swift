@@ -84,6 +84,10 @@ final class StatusBarController {
                         self?.updateStatusItem()
                     }
                 )
+                catAnimation?.onCharacterChange = { [weak self] newCharacter in
+                    self?.currentCatCharacter = newCharacter
+                    self?.settings.catCharacter = newCharacter.id
+                }
                 currentCatCharacter = character
             } else if character != currentCatCharacter {
                 // Character changed, recreate animation
@@ -96,11 +100,19 @@ final class StatusBarController {
                         self?.updateStatusItem()
                     }
                 )
+                catAnimation?.onCharacterChange = { [weak self] newCharacter in
+                    self?.currentCatCharacter = newCharacter
+                    self?.settings.catCharacter = newCharacter.id
+                }
                 currentCatCharacter = character
             } else {
                 // Same character, just update speed
                 catAnimation?.setSpeedMultiplier(settings.catSpeedMultiplier)
             }
+            // Configure rotation
+            let poolIds = settings.catRotationPool.split(separator: ",").map(String.init)
+            let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
+            catAnimation?.configureRotation(enabled: settings.catRotationEnabled, intervalMinutes: settings.catRotationIntervalMinutes, pool: pool)
             catAnimation?.setActive(true)
         } else {
             catAnimation?.setActive(false)

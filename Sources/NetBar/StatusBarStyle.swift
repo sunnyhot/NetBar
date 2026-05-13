@@ -510,6 +510,9 @@ final class StatusBarSettings: ObservableObject {
     @Published var catSpeedMultiplier: Double { didSet { save() } }
     @Published var catColor: PersistedColor { didSet { save() } }
     @Published var catColorMode: String { didSet { save() } }
+    @Published var catRotationEnabled: Bool { didSet { save() } }
+    @Published var catRotationIntervalMinutes: Double { didSet { save() } }
+    @Published var catRotationPool: String { didSet { save() } }  // comma-separated character IDs
 
     private let defaults: UserDefaults
 
@@ -533,6 +536,9 @@ final class StatusBarSettings: ObservableObject {
         catSpeedMultiplier = defaults.object(forKey: Keys.catSpeedMultiplier) as? Double ?? Defaults.catSpeedMultiplier
         catColor = Self.color(prefix: Keys.catColor, defaults: defaults, fallback: Defaults.catColor)
         catColorMode = defaults.string(forKey: Keys.catColorMode) ?? Defaults.catColorMode
+        catRotationEnabled = defaults.object(forKey: Keys.catRotationEnabled) as? Bool ?? Defaults.catRotationEnabled
+        catRotationIntervalMinutes = defaults.object(forKey: Keys.catRotationIntervalMinutes) as? Double ?? Defaults.catRotationIntervalMinutes
+        catRotationPool = defaults.string(forKey: Keys.catRotationPool) ?? Defaults.catRotationPool
     }
 
     var clampedFontSize: CGFloat {
@@ -574,6 +580,9 @@ final class StatusBarSettings: ObservableObject {
         catSpeedMultiplier = Defaults.catSpeedMultiplier
         catColor = Defaults.catColor
         catColorMode = Defaults.catColorMode
+        catRotationEnabled = Defaults.catRotationEnabled
+        catRotationIntervalMinutes = Defaults.catRotationIntervalMinutes
+        catRotationPool = Defaults.catRotationPool
     }
 
     private func save() {
@@ -595,6 +604,9 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(catSpeedMultiplier, forKey: Keys.catSpeedMultiplier)
         save(catColor, prefix: Keys.catColor)
         defaults.set(catColorMode, forKey: Keys.catColorMode)
+        defaults.set(catRotationEnabled, forKey: Keys.catRotationEnabled)
+        defaults.set(catRotationIntervalMinutes, forKey: Keys.catRotationIntervalMinutes)
+        defaults.set(catRotationPool, forKey: Keys.catRotationPool)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -636,6 +648,9 @@ final class StatusBarSettings: ObservableObject {
         static let catSpeedMultiplier = 1.0
         static let catColor = PersistedColor.white
         static let catColorMode = CatColorMode.solid.rawValue
+        static let catRotationEnabled = false
+        static let catRotationIntervalMinutes = 5.0
+        static let catRotationPool = ""  // empty = all characters
     }
 
     private enum Keys {
@@ -657,6 +672,9 @@ final class StatusBarSettings: ObservableObject {
         static let catSpeedMultiplier = "statusBar.catSpeedMultiplier"
         static let catColor = "statusBar.catColor"
         static let catColorMode = "statusBar.catColorMode"
+        static let catRotationEnabled = "statusBar.catRotationEnabled"
+        static let catRotationIntervalMinutes = "statusBar.catRotationIntervalMinutes"
+        static let catRotationPool = "statusBar.catRotationPool"
     }
 }
 

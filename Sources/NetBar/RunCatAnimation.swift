@@ -102,13 +102,20 @@ struct RunCatCharacter: Equatable, Identifiable {
 // MARK: - RunCat Animation Controller
 
 final class RunCatAnimation {
-    private let character: RunCatCharacter
+    private(set) var character: RunCatCharacter
     private var speedMultiplier: Double
     private let onFrameChange: (Int) -> Void
+    var onCharacterChange: ((RunCatCharacter) -> Void)?
 
     private var timer: Timer?
+    private var rotationTimer: Timer?
     private var currentFrame: Int = 0
     private var isActive = false
+
+    // Rotation settings
+    var rotationEnabled: Bool = false
+    var rotationIntervalMinutes: Double = 5.0
+    var rotationPool: [RunCatCharacter] = []  // empty = all characters
 
     // Base interval: seconds between frames at 1x speed, ~2 FPS idle
     private var baseInterval: TimeInterval = 0.5
@@ -122,16 +129,21 @@ final class RunCatAnimation {
     deinit {
         timer?.invalidate()
         timer = nil
+        rotationTimer?.invalidate()
+        rotationTimer = nil
     }
 
     func setActive(_ active: Bool) {
         if active && !isActive {
             isActive = true
             scheduleTimer()
+            scheduleRotationTimer()
         } else if !active && isActive {
             isActive = false
             timer?.invalidate()
             timer = nil
+            rotationTimer?.invalidate()
+            rotationTimer = nil
         }
     }
 
@@ -186,5 +198,39 @@ final class RunCatAnimation {
     private func advanceFrame() {
         currentFrame = (currentFrame + 1) % character.frameCount
         onFrameChange(currentFrame)
+    }
+
+    // MARK: - Character Rotation
+
+    private func scheduleRotationTimer() {
+        rotationTimer?.invalidate()
+        rotationTimer = nil
+        guard rotationEnabled else { return }
+        let pool = rotationPool.isEmpty ? RunCatCharacter.allCharacters : rotationPool
+        guard pool.count > 1 else { return }  // No rotation needed with only 1 character
+        let interval = max(rotationIntervalMinutes * 60, 10)  // Minimum 10 seconds
+        rotationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.rotateToNextCharacter()
+        }
+    }
+
+    func configureRotation(enabled: Bool, intervalMinutes: Double, pool: [RunCatCharacter]) {
+        rotationEnabled = enabled
+        rotationIntervalMinutes = intervalMinutes
+        rotationPool = pool
+        if isActive {
+            scheduleRotationTimer()
+        }
+    }
+
+    private func rotateToNextCharacter() {
+        let pool = rotationPool.isEmpty ? RunCatCharacter.allCharacters : rotationPool
+        guard pool.count > 1 else { return }
+        // Pick a random character different from current
+        let candidates = pool.filter { $0.id != character.id }
+        guard let next = candidates.randomElement() else { return }
+        character = next
+        currentFrame = 0
+        onCharacterChange?(next)
     }
 }
