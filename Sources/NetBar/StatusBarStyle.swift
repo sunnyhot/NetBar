@@ -513,6 +513,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var catRotationEnabled: Bool { didSet { save() } }
     @Published var catRotationIntervalMinutes: Double { didSet { save() } }
     @Published var catRotationPool: String { didSet { save() } }  // comma-separated character IDs
+    @Published var catHeadSwing: Bool { didSet { save() } }  // horizontally flip alternate frames for head-bobbing effect
 
     private let defaults: UserDefaults
 
@@ -539,6 +540,7 @@ final class StatusBarSettings: ObservableObject {
         catRotationEnabled = defaults.object(forKey: Keys.catRotationEnabled) as? Bool ?? Defaults.catRotationEnabled
         catRotationIntervalMinutes = defaults.object(forKey: Keys.catRotationIntervalMinutes) as? Double ?? Defaults.catRotationIntervalMinutes
         catRotationPool = defaults.string(forKey: Keys.catRotationPool) ?? Defaults.catRotationPool
+        catHeadSwing = defaults.object(forKey: Keys.catHeadSwing) as? Bool ?? Defaults.catHeadSwing
     }
 
     var clampedFontSize: CGFloat {
@@ -583,6 +585,7 @@ final class StatusBarSettings: ObservableObject {
         catRotationEnabled = Defaults.catRotationEnabled
         catRotationIntervalMinutes = Defaults.catRotationIntervalMinutes
         catRotationPool = Defaults.catRotationPool
+        catHeadSwing = Defaults.catHeadSwing
     }
 
     private func save() {
@@ -607,6 +610,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(catRotationEnabled, forKey: Keys.catRotationEnabled)
         defaults.set(catRotationIntervalMinutes, forKey: Keys.catRotationIntervalMinutes)
         defaults.set(catRotationPool, forKey: Keys.catRotationPool)
+        defaults.set(catHeadSwing, forKey: Keys.catHeadSwing)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -651,6 +655,7 @@ final class StatusBarSettings: ObservableObject {
         static let catRotationEnabled = false
         static let catRotationIntervalMinutes = 5.0
         static let catRotationPool = ""  // empty = all characters
+        static let catHeadSwing = false
     }
 
     private enum Keys {
@@ -675,6 +680,7 @@ final class StatusBarSettings: ObservableObject {
         static let catRotationEnabled = "statusBar.catRotationEnabled"
         static let catRotationIntervalMinutes = "statusBar.catRotationIntervalMinutes"
         static let catRotationPool = "statusBar.catRotationPool"
+        static let catHeadSwing = "statusBar.catHeadSwing"
     }
 }
 
@@ -711,6 +717,7 @@ struct StatusBarRenderSignature: Equatable {
     let catColor: PersistedColor
     let catColorMode: String
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
+    let catHeadSwing: Bool
 }
 
 @MainActor
@@ -753,7 +760,8 @@ enum StatusBarDisplayRenderer {
             catColorTimeBucket: {
                 let mode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
                 return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
-            }()
+            }(),
+            catHeadSwing: settings.catHeadSwing
         )
     }
 
@@ -858,6 +866,19 @@ enum StatusBarDisplayRenderer {
                 let drawRect = NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight)
                 let now = Date().timeIntervalSince1970
 
+                // Head swing: flip image horizontally on odd frames for a head-bobbing effect
+                let shouldFlip = settings.catHeadSwing && frameIdx % 2 == 1
+
+                if shouldFlip {
+                    // Flip the drawing context horizontally for head-swing effect
+                    if let currentContext = NSGraphicsContext.current {
+                        let transform = currentContext.cgContext
+                        transform.saveGState()
+                        transform.translateBy(x: drawRect.midX * 2, y: 0)
+                        transform.scaleBy(x: -1, y: 1)
+                    }
+                }
+
                 if character.isTemplate {
                     // Template mode: tint with color from CatColorMode
                     if colorMode == .solid {
@@ -889,6 +910,13 @@ enum StatusBarDisplayRenderer {
                     // Color mode (gaming-cat, party-parrot, etc.): draw with original colors
                     catImg.isTemplate = false
                     catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                }
+
+                if shouldFlip {
+                    // Restore the context after flip
+                    if let currentContext = NSGraphicsContext.current {
+                        currentContext.cgContext.restoreGState()
+                    }
                 }
 
                 // Draw sparkle decorations for modes that have them

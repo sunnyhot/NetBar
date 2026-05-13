@@ -370,6 +370,7 @@ private struct MenuBarPreferencesView: View {
                         // Rotation settings
                         Divider()
                         Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: $settings.catRotationEnabled)
+                        Toggle(appPreferences.text("摇头效果", "Head Swing"), isOn: $settings.catHeadSwing)
 
                         if settings.catRotationEnabled {
                             SliderPreference(
