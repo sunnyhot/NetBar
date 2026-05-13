@@ -15,7 +15,7 @@ final class StatusBarController {
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
-    private var currentCatCharacter: RunCatCharacter = .cat
+    private var currentCatCharacter: RunCatCharacter = RunCatCharacter.defaultCat
 
     init(
         monitor: NetworkMonitor,
@@ -72,7 +72,7 @@ final class StatusBarController {
     }
 
     private func setupCatAnimation() {
-        let character = RunCatCharacter(rawValue: settings.catCharacter) ?? .cat
+        let character = RunCatCharacter.byId(settings.catCharacter)
         
         if settings.showsCat {
             if catAnimation == nil {
@@ -116,7 +116,7 @@ final class StatusBarController {
         // Update cat animation speed based on network speed
         if settings.showsCat {
             catAnimation?.updateNetworkSpeed(
-                totalBytesPerSecond: monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond
+                totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
             )
             if currentCatFrameIndex == nil {
                 currentCatFrameIndex = 0

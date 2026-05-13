@@ -1,69 +1,118 @@
 import AppKit
 import Foundation
 
-// MARK: - Animation Character Definition
+// MARK: - RunCat Character Definition
 
-enum RunCatCharacter: String, CaseIterable {
-    case cat = "cat"
-    case gamingCat = "gaming-cat"
-    case partyParrot = "party-parrot"
+struct RunCatCharacter: Equatable, Identifiable {
+    let id: String           // Resource directory name
+    let nameZh: String       // Chinese name
+    let nameEn: String       // English name
+    let nameJa: String       // Japanese name (original)
+    let frameCount: Int      // Number of animation frames
+    let frameWidth: Int      // Width of each frame in pixels at 1x
+    let isTemplate: Bool     // True = monochrome (system theme aware), False = full color
+    let category: Category   // Character category
+
+    enum Category: String, CaseIterable {
+        case `default` = "默认"     // Free default runners
+        case animal = "生物"        // Animal runners
+        case inanimate = "非生物"   // Inanimate runners
+        case seasonal = "季节"      // Seasonal runners
+        case special = "特别"       // Special color runners
+    }
+
+    var resourceDir: String { id }
 
     var displayName: String {
-        switch self {
-        case .cat: return "ネコ"
-        case .gamingCat: return "ゲーミング・ネコ"
-        case .partyParrot: return "虹色のオウム"
-        }
+        // Use Chinese name by default; can be switched based on locale
+        nameZh
     }
 
-    var localizedName: String { displayName }
+    static let allCharacters: [RunCatCharacter] = [
+        // Default (free) runners
+        RunCatCharacter(id: "cat", nameZh: "猫咪 α", nameEn: "Cat α", nameJa: "ネコ α",
+                        frameCount: 5, frameWidth: 28, isTemplate: true, category: .default),
+        RunCatCharacter(id: "cat_b", nameZh: "猫咪 β", nameEn: "Cat β", nameJa: "ネコ β",
+                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .default),
+        RunCatCharacter(id: "cat_c", nameZh: "猫咪 γ", nameEn: "Cat γ", nameJa: "ネコ γ",
+                        frameCount: 4, frameWidth: 34, isTemplate: true, category: .default),
+        RunCatCharacter(id: "cat_tail", nameZh: "猫尾巴", nameEn: "Cat Tail", nameJa: "猫のしっぽ",
+                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .default),
+        RunCatCharacter(id: "mock_nyan_cat", nameZh: "彩虹猫", nameEn: "Mock Nyan Cat", nameJa: "Nyan Cat もどき",
+                        frameCount: 4, frameWidth: 30, isTemplate: false, category: .default),
 
-    /// Number of animation frames for this character
-    var frameCount: Int {
-        switch self {
-        case .cat: return 5
-        case .gamingCat: return 10
-        case .partyParrot: return 10
-        }
+        // Animal runners
+        RunCatCharacter(id: "cheetah", nameZh: "猎豹", nameEn: "Cheetah", nameJa: "チーター",
+                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .animal),
+        RunCatCharacter(id: "dog", nameZh: "小狗", nameEn: "Dog", nameJa: "イヌ",
+                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .animal),
+        RunCatCharacter(id: "puppy", nameZh: "幼犬", nameEn: "Puppy", nameJa: "子犬",
+                        frameCount: 4, frameWidth: 29, isTemplate: true, category: .animal),
+        RunCatCharacter(id: "rabbit", nameZh: "兔子", nameEn: "Rabbit", nameJa: "ウサギ",
+                        frameCount: 4, frameWidth: 17, isTemplate: true, category: .animal),
+        RunCatCharacter(id: "frog", nameZh: "青蛙", nameEn: "Frog", nameJa: "カエル",
+                        frameCount: 4, frameWidth: 14, isTemplate: true, category: .animal),
+
+        // Inanimate runners
+        RunCatCharacter(id: "cogwheel", nameZh: "齿轮", nameEn: "Cogwheel", nameJa: "歯車",
+                        frameCount: 4, frameWidth: 19, isTemplate: true, category: .inanimate),
+        RunCatCharacter(id: "bonfire", nameZh: "篝火", nameEn: "Bonfire", nameJa: "焚き火",
+                        frameCount: 4, frameWidth: 14, isTemplate: true, category: .inanimate),
+        RunCatCharacter(id: "drop", nameZh: "水滴", nameEn: "Drop", nameJa: "水滴",
+                        frameCount: 4, frameWidth: 8, isTemplate: true, category: .inanimate),
+        RunCatCharacter(id: "rocket", nameZh: "火箭", nameEn: "Rocket", nameJa: "ロケット",
+                        frameCount: 4, frameWidth: 16, isTemplate: true, category: .inanimate),
+        RunCatCharacter(id: "pendulum", nameZh: "钟摆", nameEn: "Pendulum", nameJa: "振り子",
+                        frameCount: 4, frameWidth: 12, isTemplate: true, category: .inanimate),
+
+        // Seasonal runners
+        RunCatCharacter(id: "reindeer", nameZh: "驯鹿与雪橇", nameEn: "Reindeer & Sleigh", nameJa: "トナカイとソリ",
+                        frameCount: 2, frameWidth: 30, isTemplate: false, category: .seasonal),
+        RunCatCharacter(id: "snowman", nameZh: "雪人", nameEn: "Snowman", nameJa: "雪だるま",
+                        frameCount: 2, frameWidth: 21, isTemplate: true, category: .seasonal),
+        RunCatCharacter(id: "wind_chime", nameZh: "风铃", nameEn: "Wind Chime", nameJa: "風鈴",
+                        frameCount: 4, frameWidth: 8, isTemplate: false, category: .seasonal),
+        RunCatCharacter(id: "sparkler", nameZh: "线香烟花", nameEn: "Sparkler", nameJa: "線香花火",
+                        frameCount: 2, frameWidth: 17, isTemplate: false, category: .seasonal),
+
+        // Special color runners
+        RunCatCharacter(id: "golden_cat", nameZh: "黄金猫", nameEn: "Golden Cat", nameJa: "黄金のネコ",
+                        frameCount: 4, frameWidth: 26, isTemplate: false, category: .special),
+        RunCatCharacter(id: "metal_cluster_cat", nameZh: "金属集群猫", nameEn: "Metal Cluster Cat", nameJa: "メタルクラスタ キャット",
+                        frameCount: 5, frameWidth: 26, isTemplate: false, category: .special),
+        RunCatCharacter(id: "flash_cat", nameZh: "闪光猫", nameEn: "Flash Cat", nameJa: "赤い閃光猫",
+                        frameCount: 4, frameWidth: 30, isTemplate: false, category: .special),
+        RunCatCharacter(id: "maneki_neko", nameZh: "招财猫", nameEn: "Maneki Neko", nameJa: "招き猫",
+                        frameCount: 4, frameWidth: 13, isTemplate: true, category: .special),
+        RunCatCharacter(id: "sushi", nameZh: "寿司", nameEn: "Sushi", nameJa: "お寿司",
+                        frameCount: 4, frameWidth: 30, isTemplate: false, category: .special),
+    ]
+
+    static func byId(_ id: String) -> RunCatCharacter {
+        allCharacters.first { $0.id == id } ?? allCharacters[0]
     }
 
-    /// Whether this character uses template rendering (monochrome, macOS auto-inverts)
-    var isTemplate: Bool {
-        switch self {
-        case .cat: return true
-        case .gamingCat: return false  // Has RGB colors (gaming RGB)
-        case .partyParrot: return false // Has RGB colors (rainbow parrot)
-        }
-    }
-
-    /// Resource subdirectory name in Resources/RunCat/
-    var resourceDir: String { rawValue }
+    static let defaultCat = allCharacters[0]
 }
 
-// MARK: - RunCatAnimation
+// MARK: - RunCat Animation Controller
 
-@MainActor
 final class RunCatAnimation {
+    private let character: RunCatCharacter
+    private var speedMultiplier: Double
+    private let onFrameChange: (Int) -> Void
+
     private var timer: Timer?
     private var currentFrame: Int = 0
-    private var isActive: Bool = false
-    private var frames: [NSImage] = []
-    private var character: RunCatCharacter = .cat
-    private var speedMultiplier: Double = 1.0
+    private var isActive = false
 
-    /// Current animation interval in seconds (based on network speed + multiplier)
-    private var currentInterval: TimeInterval = 0.5
+    // Base interval: seconds between frames at 1x speed, ~2 FPS idle
+    private var baseInterval: TimeInterval = 0.5
 
-    /// Callback invoked when the frame changes (passes frame index)
-    var onFrameChange: ((Int) -> Void)?
-
-    // MARK: - Initialization
-
-    init(character: RunCatCharacter = .cat, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
+    init(character: RunCatCharacter, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
         self.character = character
         self.speedMultiplier = speedMultiplier
         self.onFrameChange = onFrameChange
-        loadFrames()
     }
 
     deinit {
@@ -71,167 +120,67 @@ final class RunCatAnimation {
         timer = nil
     }
 
-    // MARK: - Frame Loading
-
-    private func loadFrames() {
-        frames.removeAll()
-        let resourcePath = "RunCat/\(character.resourceDir)"
-
-        for i in 0..<character.frameCount {
-            if let url = Bundle.main.url(forResource: "frame_\(i)", withExtension: "png", subdirectory: resourcePath) {
-                if let image = NSImage(contentsOf: url) {
-                    image.isTemplate = character.isTemplate
-                    frames.append(image)
-                }
-            }
-        }
-
-        // Fallback: if no frames loaded from bundle, try path-based loading
-        if frames.isEmpty {
-            loadFramesFromPath()
-        }
-
-        // Ensure we have at least one frame
-        if frames.isEmpty {
-            frames.append(createFallbackImage())
-        }
-    }
-
-    private func loadFramesFromPath() {
-        for i in 0..<character.frameCount {
-            let fileName = "frame_\(i).png"
-            // Try Bundle.main.resourcePath
-            if let resourcePath = Bundle.main.resourcePath {
-                let fullPath = "\(resourcePath)/RunCat/\(character.resourceDir)/\(fileName)"
-                if let image = NSImage(contentsOf: URL(fileURLWithPath: fullPath)) {
-                    image.isTemplate = character.isTemplate
-                    frames.append(image)
-                }
-            }
-        }
-    }
-
-    private func createFallbackImage() -> NSImage {
-        // Create a tiny 16x16 template image as fallback
-        let size = NSSize(width: 28, height: 18)
-        let image = NSImage(size: size)
-        image.lockFocus()
-        NSColor.black.setFill()
-        let body = NSRect(x: 4, y: 6, width: 14, height: 8)
-        body.fill()
-        let head = NSRect(x: 18, y: 8, width: 6, height: 6)
-        head.fill()
-        image.unlockFocus()
-        image.isTemplate = true
-        return image
-    }
-
-    // MARK: - Character & Speed Changes
-
-    func setCharacter(_ newCharacter: RunCatCharacter) {
-        guard newCharacter != character else { return }
-        character = newCharacter
-        currentFrame = 0
-        loadFrames()
-        if isActive {
-            restartTimer()
-        }
-        onFrameChange?(currentFrame)
-    }
-
-    func setSpeedMultiplier(_ multiplier: Double) {
-        speedMultiplier = max(0.25, min(4.0, multiplier))
-        if isActive {
-            restartTimer()
-        }
-    }
-
-    // MARK: - Network Speed
-
-    /// Update animation speed based on network throughput.
-    /// - Parameter totalBytesPerSecond: Combined upload + download speed in bytes/sec
-    func updateNetworkSpeed(totalBytesPerSecond: Double) {
-        // Logarithmic mapping:
-        // 0 B/s   → 500ms interval (slow idle animation)
-        // 1 KB/s  → 250ms
-        // 100 KB/s → 100ms
-        // 1 MB/s  → 60ms
-        // 100 MB/s+ → 40ms
-        let baseInterval: TimeInterval
-        if totalBytesPerSecond <= 0 {
-            baseInterval = 0.5
-        } else {
-            let speedMB = totalBytesPerSecond / 1_000_000
-            // Log mapping: faster speed = shorter interval
-            baseInterval = max(0.04, min(0.5, 0.5 / (1.0 + log10(max(speedMB, 0.001) + 1.0) * 3.0)))
-        }
-
-        let adjustedInterval = baseInterval / speedMultiplier
-        let newInterval = max(0.03, min(2.0, adjustedInterval))
-
-        if abs(newInterval - currentInterval) > 0.005 {
-            currentInterval = newInterval
-            if isActive {
-                restartTimer()
-            }
-        }
-    }
-
-    // MARK: - Active State
-
     func setActive(_ active: Bool) {
         if active && !isActive {
             isActive = true
-            restartTimer()
+            scheduleTimer()
         } else if !active && isActive {
             isActive = false
-            stop()
+            timer?.invalidate()
+            timer = nil
         }
     }
 
-    // MARK: - Timer
-
-    private func restartTimer() {
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: currentInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.advanceFrame()
-            }
+    func setSpeedMultiplier(_ multiplier: Double) {
+        speedMultiplier = multiplier
+        if isActive {
+            scheduleTimer()
         }
     }
 
-    private func stop() {
+    func updateNetworkSpeed(totalBytesPerSecond: UInt64) {
+        // Map network speed to animation FPS
+        // 0 B/s → ~2 FPS (idle)
+        // 1 KB/s → ~4 FPS
+        // 100 KB/s → ~8 FPS
+        // 1 MB/s → ~16 FPS
+        // 100 MB/s+ → ~24 FPS
+        let bps = Double(totalBytesPerSecond)
+        let fps: Double
+        if bps < 100 {
+            fps = 2.0
+        } else if bps < 1_000 {
+            fps = 3.0
+        } else if bps < 10_000 {
+            fps = 5.0
+        } else if bps < 100_000 {
+            fps = 8.0
+        } else if bps < 1_000_000 {
+            fps = 12.0
+        } else if bps < 10_000_000 {
+            fps = 16.0
+        } else if bps < 100_000_000 {
+            fps = 20.0
+        } else {
+            fps = 24.0
+        }
+
+        baseInterval = 1.0 / fps
+        if isActive {
+            scheduleTimer()
+        }
+    }
+
+    private func scheduleTimer() {
         timer?.invalidate()
-        timer = nil
-        isActive = false
+        let interval = max(baseInterval / speedMultiplier, 1.0 / 30.0) // Cap at 30 FPS
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            self?.advanceFrame()
+        }
     }
 
     private func advanceFrame() {
-        currentFrame = (currentFrame + 1) % max(frames.count, 1)
-        onFrameChange?(currentFrame)
-    }
-
-    // MARK: - Frame Access
-
-    var currentFrameIndex: Int { currentFrame }
-
-    /// Get the current frame as an NSImage
-    func currentImage() -> NSImage? {
-        guard !frames.isEmpty else { return nil }
-        return frames[currentFrame % frames.count]
-    }
-
-    /// Get a specific frame as an NSImage
-    func image(at index: Int) -> NSImage? {
-        guard index >= 0, index < frames.count else { return nil }
-        return frames[index]
-    }
-
-    /// The natural size of the animation frame (in points, accounting for retina)
-    var frameSize: NSSize {
-        if let first = frames.first {
-            return first.size
-        }
-        return NSSize(width: 28, height: 18)
+        currentFrame = (currentFrame + 1) % character.frameCount
+        onFrameChange(currentFrame)
     }
 }

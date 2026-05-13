@@ -8,6 +8,7 @@ struct PersistedColor: Equatable {
     var alpha: Double
 
     static let white = PersistedColor(red: 1, green: 1, blue: 1, alpha: 1)
+    static let black = PersistedColor(red: 0, green: 0, blue: 0, alpha: 1)
     static let olive = PersistedColor(red: 0.36, green: 0.35, blue: 0.12, alpha: 1)
 
     var nsColor: NSColor {
@@ -40,6 +41,114 @@ struct PersistedColor: Equatable {
 
     init(color: Color) {
         self.init(nsColor: NSColor(color))
+    }
+}
+
+// MARK: - Cat Color Mode
+
+enum CatColorMode: String, CaseIterable, Identifiable {
+    case solid           // Single solid color (uses catColor)
+    case rainbow         // Rainbow hue cycle
+    case neon            // Neon glow (cycles through bright neon colors)
+    case flame           // Fire gradient (red → orange → yellow)
+    case ocean           // Ocean gradient (dark blue → cyan → white)
+    case aurora          // Northern lights (green → cyan → purple)
+    case sakura          // Cherry blossom (pink → white → light pink)
+    case randomPop       // Random color per frame change (拼色)
+    case randomCycle     // Smooth random color cycling (随机炫彩)
+
+    var id: String { rawValue }
+
+    func displayName(zh: Bool = true) -> String {
+        switch self {
+        case .solid:       return zh ? "纯色" : "Solid"
+        case .rainbow:     return zh ? "彩虹" : "Rainbow"
+        case .neon:        return zh ? "霓虹" : "Neon"
+        case .flame:       return zh ? "火焰" : "Flame"
+        case .ocean:       return zh ? "海洋" : "Ocean"
+        case .aurora:      return zh ? "极光" : "Aurora"
+        case .sakura:      return zh ? "樱花" : "Sakura"
+        case .randomPop:   return zh ? "随机拼色" : "Random Pop"
+        case .randomCycle: return zh ? "随机炫彩" : "Random Cycle"
+        }
+    }
+
+    var isDynamic: Bool { self != .solid }
+
+    /// Compute the current color for this mode at a given time and frame.
+    /// - Parameters:
+    ///   - time: Current time (used for cycling)
+    ///   - frameIndex: Current animation frame index
+    ///   - baseColor: Base solid color (used for .solid mode)
+    /// - Returns: The NSColor to use for tinting
+    func color(at time: TimeInterval, frameIndex: Int, baseColor: PersistedColor) -> NSColor {
+        switch self {
+        case .solid:
+            return baseColor.nsColor
+
+        case .rainbow:
+            // Full hue cycle every ~3 seconds
+            let hue = CGFloat((time.truncatingRemainder(dividingBy: 3.0)) / 3.0)
+            return NSColor(calibratedHue: hue, saturation: 1.0, brightness: 1.0, alpha: 1.0)
+
+        case .neon:
+            // Cycle through bright neon: magenta → cyan → green → yellow → magenta
+            let neonHues: [CGFloat] = [0.83, 0.5, 0.33, 0.17, 0.08]
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.0)
+            let progress = cycleTime / 4.0
+            let segment = progress * CGFloat(neonHues.count - 1)
+            let idx = Int(segment)
+            let frac = segment - CGFloat(idx)
+            let fromHue = neonHues[min(idx, neonHues.count - 1)]
+            let toHue = neonHues[min(idx + 1, neonHues.count - 1)]
+            let hue = fromHue + (toHue - fromHue) * frac
+            return NSColor(calibratedHue: hue, saturation: 1.0, brightness: 1.0, alpha: 1.0)
+
+        case .flame:
+            // Red → orange → yellow cycle
+            let cycleTime = time.truncatingRemainder(dividingBy: 2.0)
+            let progress = CGFloat(cycleTime / 2.0)
+            // Hue goes from 0.0 (red) to 0.12 (orange-yellow) and back
+            let hue = 0.0 + 0.12 * (0.5 + 0.5 * sin(progress * .pi * 2))
+            return NSColor(calibratedHue: hue, saturation: 1.0, brightness: 1.0, alpha: 1.0)
+
+        case .ocean:
+            // Dark blue → cyan → white foam
+            let cycleTime = time.truncatingRemainder(dividingBy: 3.0)
+            let progress = CGFloat(cycleTime / 3.0)
+            let hue = 0.55 + 0.1 * sin(progress * .pi * 2)  // blue-cyan range
+            let brightness = 0.7 + 0.3 * sin(progress * .pi * 4)
+            return NSColor(calibratedHue: hue, saturation: 0.8, brightness: brightness, alpha: 1.0)
+
+        case .aurora:
+            // Green → cyan → purple
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.0)
+            let progress = CGFloat(cycleTime / 4.0)
+            let hue = 0.33 + 0.37 * (0.5 + 0.5 * sin(progress * .pi * 2))
+            return NSColor(calibratedHue: hue, saturation: 0.8, brightness: 0.9, alpha: 1.0)
+
+        case .sakura:
+            // Pink → white → light pink
+            let cycleTime = time.truncatingRemainder(dividingBy: 3.0)
+            let progress = CGFloat(cycleTime / 3.0)
+            let hue = 0.93 + 0.03 * sin(progress * .pi * 2)
+            let saturation = 0.3 + 0.4 * (0.5 + 0.5 * cos(progress * .pi * 2))
+            return NSColor(calibratedHue: hue, saturation: saturation, brightness: 1.0, alpha: 1.0)
+
+        case .randomPop:
+            // Change color on each frame change — use frameIndex as seed
+            // Deterministic per-frame: same frame = same color
+            let hue = CGFloat(Double(frameIndex % 12) / 12.0)
+            return NSColor(calibratedHue: hue, saturation: 0.9, brightness: 1.0, alpha: 1.0)
+
+        case .randomCycle:
+            // Smoothly cycle through random-ish colors using a combination of sin waves
+            let t = time
+            let r = 0.5 + 0.5 * sin(t * 0.7 + 0.0)
+            let g = 0.5 + 0.5 * sin(t * 0.5 + 2.1)
+            let b = 0.5 + 0.5 * sin(t * 0.3 + 4.2)
+            return NSColor(calibratedRed: CGFloat(r), green: CGFloat(g), blue: CGFloat(b), alpha: 1.0)
+        }
     }
 }
 
@@ -115,6 +224,8 @@ final class StatusBarSettings: ObservableObject {
     @Published var showsCat: Bool { didSet { save() } }
     @Published var catCharacter: String { didSet { save() } }
     @Published var catSpeedMultiplier: Double { didSet { save() } }
+    @Published var catColor: PersistedColor { didSet { save() } }
+    @Published var catColorMode: String { didSet { save() } }
 
     private let defaults: UserDefaults
 
@@ -136,6 +247,8 @@ final class StatusBarSettings: ObservableObject {
         showsCat = defaults.object(forKey: Keys.showsCat) as? Bool ?? Defaults.showsCat
         catCharacter = defaults.string(forKey: Keys.catCharacter) ?? Defaults.catCharacter
         catSpeedMultiplier = defaults.object(forKey: Keys.catSpeedMultiplier) as? Double ?? Defaults.catSpeedMultiplier
+        catColor = Self.color(prefix: Keys.catColor, defaults: defaults, fallback: Defaults.catColor)
+        catColorMode = defaults.string(forKey: Keys.catColorMode) ?? Defaults.catColorMode
     }
 
     var clampedFontSize: CGFloat {
@@ -175,6 +288,8 @@ final class StatusBarSettings: ObservableObject {
         showsCat = Defaults.showsCat
         catCharacter = Defaults.catCharacter
         catSpeedMultiplier = Defaults.catSpeedMultiplier
+        catColor = Defaults.catColor
+        catColorMode = Defaults.catColorMode
     }
 
     private func save() {
@@ -194,6 +309,8 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(showsCat, forKey: Keys.showsCat)
         defaults.set(catCharacter, forKey: Keys.catCharacter)
         defaults.set(catSpeedMultiplier, forKey: Keys.catSpeedMultiplier)
+        save(catColor, prefix: Keys.catColor)
+        defaults.set(catColorMode, forKey: Keys.catColorMode)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -233,6 +350,8 @@ final class StatusBarSettings: ObservableObject {
         static let showsCat = true
         static let catCharacter = "cat"
         static let catSpeedMultiplier = 1.0
+        static let catColor = PersistedColor.white
+        static let catColorMode = CatColorMode.solid.rawValue
     }
 
     private enum Keys {
@@ -252,6 +371,8 @@ final class StatusBarSettings: ObservableObject {
         static let showsCat = "statusBar.showsCat"
         static let catCharacter = "statusBar.catCharacter"
         static let catSpeedMultiplier = "statusBar.catSpeedMultiplier"
+        static let catColor = "statusBar.catColor"
+        static let catColorMode = "statusBar.catColorMode"
     }
 }
 
@@ -285,6 +406,9 @@ struct StatusBarRenderSignature: Equatable {
     let appearanceName: String
     let catFrameIndex: Int?
     let catCharacter: String
+    let catColor: PersistedColor
+    let catColorMode: String
+    let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
 }
 
 @MainActor
@@ -321,7 +445,13 @@ enum StatusBarDisplayRenderer {
             backgroundColor: settings.backgroundColor,
             appearanceName: appearanceName,
             catFrameIndex: catFrameIndex,
-            catCharacter: settings.catCharacter
+            catCharacter: settings.catCharacter,
+            catColor: settings.catColor,
+            catColorMode: settings.catColorMode,
+            catColorTimeBucket: {
+                let mode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
+                return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
+            }()
         )
     }
 
@@ -385,41 +515,46 @@ enum StatusBarDisplayRenderer {
         var textXOffset: CGFloat = layout.horizontalPadding
         if let catIndex = catFrameIndex, settings.showsCat {
             // Load the cat character image from the pre-cached animation frames
-            let character = RunCatCharacter(rawValue: settings.catCharacter) ?? .cat
-            let resourcePath = "RunCat/\(character.resourceDir)"
+            let character = RunCatCharacter.byId(settings.catCharacter)
+            let resourcePath = "RunCat/\(character.id)"
             let frameIdx = catIndex % character.frameCount
             let catImage: NSImage?
             if let url = Bundle.main.url(forResource: "frame_\(frameIdx)", withExtension: "png", subdirectory: resourcePath) {
                 catImage = NSImage(contentsOf: url)
             } else if let resPath = Bundle.main.resourcePath {
-                catImage = NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(character.resourceDir)/frame_\(frameIdx).png"))
+                catImage = NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(character.id)/frame_\(frameIdx).png"))
             } else {
                 catImage = nil
             }
 
             if let catImg = catImage {
-                // Scale: sprite is at 2x (e.g. 56x36 for 28x18pt). Draw at 1x logical size.
-                let spritePointsW = catImg.size.width / 2  // 28pt for cat/gaming-cat, 24pt for parrot
-                let catWidth: CGFloat = min(spritePointsW, 28)
+                // Scale: sprite is at 1x (e.g. 28x36). Draw at 1x logical size.
+                // Frame width varies by character, use character.frameWidth
+                let catWidth: CGFloat = CGFloat(character.frameWidth)
                 let catHeight: CGFloat = 18
                 let catY = (height - catHeight) / 2
                 let catPadding: CGFloat = 3
                 let drawRect = NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight)
 
                 if character.isTemplate {
-                    // Template mode: draw as-is (macOS handles inversion)
-                    catImg.isTemplate = true
-                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                    // Template mode: tint with color from CatColorMode
+                    let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
+                    let now = Date().timeIntervalSince1970
+                    let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                    if let tinted = tintImage(catImg, color: tintColor) {
+                        tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                    } else {
+                        // Fallback: draw as template
+                        catImg.isTemplate = true
+                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                    }
                 } else {
-                    // Color mode (gaming-cat, party-parrot): draw with original colors
+                    // Color mode (gaming-cat, party-parrot, etc.): draw with original colors
                     catImg.isTemplate = false
                     if useTemplate {
-                        // In template rendering mode, we need to tint the image to match text color
-                        // Draw image into a tinted version
-                        if let tinted = tintImage(catImg, color: .black) {
-                            tinted.isTemplate = true
-                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
-                        }
+                        // In template rendering mode, draw original colors
+                        // (color characters look best with their original palette)
+                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
                     } else {
                         catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
                     }
@@ -428,7 +563,7 @@ enum StatusBarDisplayRenderer {
                 textXOffset = layout.horizontalPadding + catWidth + catPadding
             } else {
                 // Fallback: no image loaded, skip cat rendering
-                let catWidth: CGFloat = 22
+                let catWidth: CGFloat = CGFloat(character.frameWidth)
                 let catPadding: CGFloat = 3
                 textXOffset = layout.horizontalPadding + catWidth + catPadding
             }
@@ -489,9 +624,8 @@ enum StatusBarDisplayRenderer {
             .max() ?? measuredWidth
 
         // Add cat width if shown
-        let catCharacter = RunCatCharacter(rawValue: settings.catCharacter) ?? .cat
-        let catSpriteW: CGFloat = catCharacter == .partyParrot ? 24 : 28  // parrot is 48px@2x=24pt, cat is 56px@2x=28pt
-        let catExtraWidth: CGFloat = (catFrameIndex != nil && settings.showsCat) ? catSpriteW + 3 : 0
+        let catChar = RunCatCharacter.byId(settings.catCharacter)
+        let catExtraWidth: CGFloat = (catFrameIndex != nil && settings.showsCat) ? CGFloat(catChar.frameWidth) + 3 : 0
 
         let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth

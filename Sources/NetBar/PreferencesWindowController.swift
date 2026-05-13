@@ -215,12 +215,120 @@ private struct MenuBarPreferencesView: View {
                     Toggle(appPreferences.text("奔跑的小猫", "Running Cat"), isOn: $settings.showsCat)
 
                     if settings.showsCat {
-                        Picker(appPreferences.text("角色", "Character"), selection: $settings.catCharacter) {
-                            ForEach(RunCatCharacter.allCases, id: \.rawValue) { character in
-                                Text(character.localizedName).tag(character.rawValue)
+                        // Character picker with categories
+                        VStack(alignment: .leading, spacing: 8) {
+                            Text(appPreferences.text("角色", "Character"))
+                                .font(.headline)
+
+                            ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
+                                VStack(alignment: .leading, spacing: 4) {
+                                    Text(category.rawValue)
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+
+                                    let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
+                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 4) {
+                                        ForEach(charsInCategory) { character in
+                                            Button(action: {
+                                                settings.catCharacter = character.id
+                                            }) {
+                                                HStack(spacing: 4) {
+                                                    Circle()
+                                                        .fill(settings.catCharacter == character.id ? Color.accentColor : Color.clear)
+                                                        .frame(width: 6, height: 6)
+                                                    Text(character.displayName)
+                                                        .font(.system(size: 12))
+                                                }
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 3)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 4)
+                                                        .fill(settings.catCharacter == character.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+
+                            // Color mode + picker for template characters
+                            let selectedChar = RunCatCharacter.byId(settings.catCharacter)
+                            if selectedChar.isTemplate {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    // Color mode picker
+                                    HStack {
+                                        Text(appPreferences.text("颜色模式", "Color Mode"))
+                                            .font(.subheadline)
+                                        Picker("", selection: $settings.catColorMode) {
+                                            ForEach(CatColorMode.allCases) { mode in
+                                                Text(mode.displayName(zh: appPreferences.resolvedLanguage == .simplifiedChinese))
+                                                    .tag(mode.rawValue)
+                                            }
+                                        }
+                                        .labelsHidden()
+                                        .frame(maxWidth: 200)
+                                    }
+
+                                    // Solid color picker (only shown in solid mode)
+                                    if settings.catColorMode == CatColorMode.solid.rawValue {
+                                        HStack {
+                                            Text(appPreferences.text("角色颜色", "Character Color"))
+                                                .font(.subheadline)
+                                            ColorPicker("", selection: Binding(
+                                                get: { settings.catColor.swiftUIColor },
+                                                set: { settings.catColor = PersistedColor(color: $0) }
+                                            ))
+                                            .labelsHidden()
+
+                                            // Preset colors (with black and white)
+                                            HStack(spacing: 4) {
+                                                ForEach([
+                                                    (Color.white, "白"),
+                                                    (Color.black, "黑"),
+                                                    (Color.red, "红"),
+                                                    (Color.orange, "橙"),
+                                                    (Color.yellow, "黄"),
+                                                    (Color.green, "绿"),
+                                                    (Color.cyan, "青"),
+                                                    (Color.blue, "蓝"),
+                                                    (Color.purple, "紫"),
+                                                ], id: \.1) { color, label in
+                                                    Button(action: {
+                                                        settings.catColor = PersistedColor(color: color)
+                                                    }) {
+                                                        Circle()
+                                                            .fill(color)
+                                                            .frame(width: 16, height: 16)
+                                                            .overlay(
+                                                                Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
+                                                            )
+                                                    }
+                                                    .buttonStyle(.plain)
+                                                }
+                                            }
+
+                                            // Reset to white
+                                            Button(appPreferences.text("重置", "Reset")) {
+                                                settings.catColor = .white
+                                            }
+                                            .font(.system(size: 10))
+                                        }
+                                    }
+
+                                    // Dynamic mode preview hint
+                                    if settings.catColorMode != CatColorMode.solid.rawValue {
+                                        Text(appPreferences.text(
+                                            "炫彩模式：颜色将自动变化 ✨",
+                                            "Dynamic mode: color will change automatically ✨"
+                                        ))
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.secondary)
+                                    }
+                                }
                             }
                         }
-                        .pickerStyle(.segmented)
+                        .padding(.leading, 16)
 
                         SliderPreference(
                             title: appPreferences.text("动画速度", "Animation Speed"),
