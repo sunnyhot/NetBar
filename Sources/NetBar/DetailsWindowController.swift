@@ -10,6 +10,11 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let defaultWindowSize = NSSize(width: 520, height: 680)
     private let minimumWindowSize = NSSize(width: 460, height: 500)
 
+    /// Auto-dismiss after this many seconds without user interaction.
+    private static let autoDismissInterval: TimeInterval = 30
+    private var autoDismissTimer: Timer?
+    private var localEventMonitor: Any?
+
     init(
         monitor: NetworkMonitor,
         appPreferences: AppPreferences,
@@ -35,6 +40,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         position(detailsWindow, near: anchor)
         NSApplication.shared.activate(ignoringOtherApps: true)
         detailsWindow.makeKeyAndOrderFront(nil)
+        resetAutoDismissTimer()
     }
 
     private func makeWindowIfNeeded() -> NSWindow {
@@ -61,9 +67,71 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         )
         detailsWindow.collectionBehavior = [.moveToActiveSpace]
 
+        // Ensure mouse-moved events are delivered so we can track hover activity
+        detailsWindow.acceptsMouseMovedEvents = true
+
         window = detailsWindow
         return detailsWindow
     }
+
+    // MARK: - Auto-Dismiss
+
+    private func resetAutoDismissTimer() {
+        autoDismissTimer?.invalidate()
+        autoDismissTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.autoDismissInterval,
+            repeats: false
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.autoDismiss()
+            }
+        }
+
+        if localEventMonitor == nil {
+            localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [
+                .mouseMoved, .leftMouseDown, .rightMouseDown,
+                .keyDown, .scrollWheel
+            ]) { [weak self] event in
+                Task { @MainActor in
+                    self?.handleUserEvent(event)
+                }
+                return event
+            }
+        }
+    }
+
+    private func handleUserEvent(_ event: NSEvent) {
+        guard let window, window.isVisible else { return }
+        // Only reset for events within our window
+        if event.window === window {
+            resetAutoDismissTimer()
+        }
+    }
+
+    private func autoDismiss() {
+        guard let window, window.isVisible else { return }
+        window.orderOut(nil)
+        invalidateAutoDismiss()
+    }
+
+    private func invalidateAutoDismiss() {
+        autoDismissTimer?.invalidate()
+        autoDismissTimer = nil
+        if let monitor = localEventMonitor {
+            NSEvent.removeMonitor(monitor)
+            localEventMonitor = nil
+        }
+    }
+
+    // MARK: - NSWindowDelegate
+
+    nonisolated func windowWillClose(_ notification: Notification) {
+        Task { @MainActor in
+            invalidateAutoDismiss()
+        }
+    }
+
+    // MARK: - Layout
 
     private func position(_ window: NSWindow, near anchor: NSStatusBarButton?) {
         let screen = anchor?.window?.screen ?? window.screen ?? NSScreen.main
