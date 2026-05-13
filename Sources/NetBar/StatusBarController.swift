@@ -13,6 +13,8 @@ final class StatusBarController {
     private let detailsWindowController: DetailsWindowController
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
+    private var catAnimation: RunCatAnimation?
+    private var currentCatFrameIndex: Int?
 
     init(
         monitor: NetworkMonitor,
@@ -59,19 +61,50 @@ final class StatusBarController {
 
         settings.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
+                self?.setupCatAnimation()
                 self?.updateStatusItem()
             }
         }
         .store(in: &cancellables)
+
+        setupCatAnimation()
+    }
+
+    private func setupCatAnimation() {
+        if settings.showsCat {
+            if catAnimation == nil {
+                catAnimation = RunCatAnimation(onFrameChange: { [weak self] frameIndex in
+                    self?.currentCatFrameIndex = frameIndex
+                    self?.updateStatusItem()
+                })
+            }
+        } else {
+            catAnimation?.setActive(false)
+            catAnimation = nil
+            currentCatFrameIndex = nil
+        }
     }
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
         let appearanceName = button.effectiveAppearance.name.rawValue
+
+        // Update cat animation speed based on network speed
+        if settings.showsCat {
+            catAnimation?.updateNetworkSpeed(
+                upload: monitor.snapshot.uploadBytesPerSecond,
+                download: monitor.snapshot.downloadBytesPerSecond
+            )
+            if currentCatFrameIndex == nil {
+                currentCatFrameIndex = 0
+            }
+        }
+
         let signature = StatusBarDisplayRenderer.signature(
             snapshot: monitor.snapshot,
             settings: settings,
-            appearanceName: appearanceName
+            appearanceName: appearanceName,
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
         )
         guard signature != lastRenderSignature else { return }
 
@@ -82,7 +115,8 @@ final class StatusBarController {
         let image = StatusBarDisplayRenderer.image(
             snapshot: monitor.snapshot,
             settings: settings,
-            scale: scale
+            scale: scale,
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
         )
         button.attributedTitle = NSAttributedString(string: "")
         button.title = ""

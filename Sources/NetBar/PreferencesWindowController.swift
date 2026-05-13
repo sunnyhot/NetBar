@@ -212,6 +212,7 @@ private struct MenuBarPreferencesView: View {
 
                     Toggle(appPreferences.text("加粗", "Bold"), isOn: $settings.isBold)
                     Toggle(appPreferences.text("显示箭头", "Show arrows"), isOn: $settings.showsArrows)
+                    Toggle(appPreferences.text("奔跑的小猫", "Running Cat"), isOn: $settings.showsCat)
                 }
 
                 PreferenceSection(title: appPreferences.text("宽度与布局", "Width and Layout")) {
@@ -422,7 +423,7 @@ private struct StatusBarPreview: View {
 
             HStack {
                 Spacer()
-                if StatusBarDisplayRenderer.presentation(snapshot: previewSnapshot, settings: settings).kind == .nativeTitle {
+                if StatusBarDisplayRenderer.presentation(snapshot: previewSnapshot, settings: settings, catFrameIndex: settings.showsCat ? 0 : nil).kind == .nativeTitle {
                     Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
                         .multilineTextAlignment(textAlignment)
                         .frame(
@@ -430,7 +431,7 @@ private struct StatusBarPreview: View {
                             height: max(NSStatusBar.system.thickness, 24)
                         )
                 } else {
-                    Image(nsImage: StatusBarDisplayRenderer.image(snapshot: previewSnapshot, settings: settings))
+                    Image(nsImage: StatusBarDisplayRenderer.image(snapshot: previewSnapshot, settings: settings, catFrameIndex: settings.showsCat ? 0 : nil))
                         .frame(
                             width: StatusBarDisplayRenderer.width(snapshot: previewSnapshot, settings: settings),
                             height: max(NSStatusBar.system.thickness, 24)

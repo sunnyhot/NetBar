@@ -112,6 +112,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var usesSystemTextColor: Bool { didSet { save() } }
     @Published var textColor: PersistedColor { didSet { save() } }
     @Published var backgroundColor: PersistedColor { didSet { save() } }
+    @Published var showsCat: Bool { didSet { save() } }
 
     private let defaults: UserDefaults
 
@@ -130,6 +131,7 @@ final class StatusBarSettings: ObservableObject {
         usesSystemTextColor = defaults.object(forKey: Keys.usesSystemTextColor) as? Bool ?? Defaults.usesSystemTextColor
         textColor = Self.color(prefix: Keys.textColor, defaults: defaults, fallback: Defaults.textColor)
         backgroundColor = Self.color(prefix: Keys.backgroundColor, defaults: defaults, fallback: Defaults.backgroundColor)
+        showsCat = defaults.object(forKey: Keys.showsCat) as? Bool ?? Defaults.showsCat
     }
 
     var clampedFontSize: CGFloat {
@@ -166,6 +168,7 @@ final class StatusBarSettings: ObservableObject {
         usesSystemTextColor = Defaults.usesSystemTextColor
         textColor = Defaults.textColor
         backgroundColor = Defaults.backgroundColor
+        showsCat = Defaults.showsCat
     }
 
     private func save() {
@@ -182,6 +185,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(usesSystemTextColor, forKey: Keys.usesSystemTextColor)
         save(textColor, prefix: Keys.textColor)
         save(backgroundColor, prefix: Keys.backgroundColor)
+        defaults.set(showsCat, forKey: Keys.showsCat)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -218,6 +222,7 @@ final class StatusBarSettings: ObservableObject {
         static let usesSystemTextColor = true
         static let textColor = PersistedColor.white
         static let backgroundColor = PersistedColor.olive
+        static let showsCat = true
     }
 
     private enum Keys {
@@ -234,6 +239,7 @@ final class StatusBarSettings: ObservableObject {
         static let usesSystemTextColor = "statusBar.usesSystemTextColor"
         static let textColor = "statusBar.textColor"
         static let backgroundColor = "statusBar.backgroundColor"
+        static let showsCat = "statusBar.showsCat"
     }
 }
 
@@ -265,12 +271,13 @@ struct StatusBarRenderSignature: Equatable {
     let textColor: PersistedColor
     let backgroundColor: PersistedColor
     let appearanceName: String
+    let catFrameIndex: Int?
 }
 
 @MainActor
 enum StatusBarDisplayRenderer {
-    static func presentation(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> StatusBarPresentation {
-        let layout = layout(snapshot: snapshot, settings: settings)
+    static func presentation(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> StatusBarPresentation {
+        let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
         return StatusBarPresentation(
             kind: .retinaImage,
             width: layout.width,
@@ -281,10 +288,11 @@ enum StatusBarDisplayRenderer {
     static func signature(
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
-        appearanceName: String
+        appearanceName: String,
+        catFrameIndex: Int? = nil
     ) -> StatusBarRenderSignature {
         StatusBarRenderSignature(
-            presentation: presentation(snapshot: snapshot, settings: settings),
+            presentation: presentation(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex),
             fontSize: settings.fontSize,
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
@@ -298,7 +306,8 @@ enum StatusBarDisplayRenderer {
             usesSystemTextColor: settings.usesSystemTextColor,
             textColor: settings.textColor,
             backgroundColor: settings.backgroundColor,
-            appearanceName: appearanceName
+            appearanceName: appearanceName,
+            catFrameIndex: catFrameIndex
         )
     }
 
@@ -311,8 +320,12 @@ enum StatusBarDisplayRenderer {
         image(snapshot: snapshot, settings: settings, scale: NSScreen.main?.backingScaleFactor ?? 2)
     }
 
-    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, scale: CGFloat) -> NSImage {
-        let layout = layout(snapshot: snapshot, settings: settings)
+    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> NSImage {
+        image(snapshot: snapshot, settings: settings, scale: NSScreen.main?.backingScaleFactor ?? 2, catFrameIndex: catFrameIndex)
+    }
+
+    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, scale: CGFloat, catFrameIndex: Int? = nil) -> NSImage {
+        let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
         let size = NSSize(width: width, height: height)
@@ -353,13 +366,35 @@ enum StatusBarDisplayRenderer {
 
         let useTemplate = settings.usesSystemTextColor && !settings.showsBackground
         let textColor = useTemplate ? NSColor.black : settings.effectiveTextColor
+
+        // Draw cat frame if enabled
+        var textXOffset: CGFloat = layout.horizontalPadding
+        if let catIndex = catFrameIndex, settings.showsCat {
+            let catWidth: CGFloat = 22
+            let catHeight: CGFloat = 18
+            let catY = (height - catHeight) / 2
+            let catPadding: CGFloat = 3
+
+            if let cgContext = NSGraphicsContext.current?.cgContext {
+                let catColor = useTemplate ? CGColor(red: 0, green: 0, blue: 0, alpha: 1) : textColor.cgColor
+                RunCatAnimation.drawCatSilhouette(
+                    catIndex,
+                    in: cgContext,
+                    rect: NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight),
+                    color: catColor
+                )
+            }
+
+            textXOffset = layout.horizontalPadding + catWidth + catPadding
+        }
+
         let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings, color: textColor)
         let textHeight = lineHeight(for: layout.font, settings: settings) * CGFloat(layout.lines.count)
         text.draw(
             with: NSRect(
-                x: layout.horizontalPadding,
+                x: textXOffset,
                 y: (height - textHeight) / 2,
-                width: width - layout.horizontalPadding * 2,
+                width: width - textXOffset - layout.horizontalPadding,
                 height: textHeight
             ),
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]
@@ -391,7 +426,7 @@ enum StatusBarDisplayRenderer {
         settings.showsArrows ? "\(prefix) \(value)" : value
     }
 
-    private static func layout(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> Layout {
+    private static func layout(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> Layout {
         let font = NSFont.monospacedDigitSystemFont(
             ofSize: settings.clampedFontSize,
             weight: settings.fontWeight
@@ -406,7 +441,11 @@ enum StatusBarDisplayRenderer {
         let stableWidth = stableWidthTemplates(settings: settings)
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
             .max() ?? measuredWidth
-        let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2)
+
+        // Add cat width if shown
+        let catExtraWidth: CGFloat = (catFrameIndex != nil && settings.showsCat) ? 22 + 3 : 0
+
+        let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth
 
         return Layout(
