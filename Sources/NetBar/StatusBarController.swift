@@ -15,6 +15,7 @@ final class StatusBarController {
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
+    private var currentCatCharacter: RunCatCharacter = .cat
 
     init(
         monitor: NetworkMonitor,
@@ -71,13 +72,36 @@ final class StatusBarController {
     }
 
     private func setupCatAnimation() {
+        let character = RunCatCharacter(rawValue: settings.catCharacter) ?? .cat
+        
         if settings.showsCat {
             if catAnimation == nil {
-                catAnimation = RunCatAnimation(onFrameChange: { [weak self] frameIndex in
-                    self?.currentCatFrameIndex = frameIndex
-                    self?.updateStatusItem()
-                })
+                catAnimation = RunCatAnimation(
+                    character: character,
+                    speedMultiplier: settings.catSpeedMultiplier,
+                    onFrameChange: { [weak self] frameIndex in
+                        self?.currentCatFrameIndex = frameIndex
+                        self?.updateStatusItem()
+                    }
+                )
+                currentCatCharacter = character
+            } else if character != currentCatCharacter {
+                // Character changed, recreate animation
+                catAnimation?.setActive(false)
+                catAnimation = RunCatAnimation(
+                    character: character,
+                    speedMultiplier: settings.catSpeedMultiplier,
+                    onFrameChange: { [weak self] frameIndex in
+                        self?.currentCatFrameIndex = frameIndex
+                        self?.updateStatusItem()
+                    }
+                )
+                currentCatCharacter = character
+            } else {
+                // Same character, just update speed
+                catAnimation?.setSpeedMultiplier(settings.catSpeedMultiplier)
             }
+            catAnimation?.setActive(true)
         } else {
             catAnimation?.setActive(false)
             catAnimation = nil
@@ -92,8 +116,7 @@ final class StatusBarController {
         // Update cat animation speed based on network speed
         if settings.showsCat {
             catAnimation?.updateNetworkSpeed(
-                upload: monitor.snapshot.uploadBytesPerSecond,
-                download: monitor.snapshot.downloadBytesPerSecond
+                totalBytesPerSecond: monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond
             )
             if currentCatFrameIndex == nil {
                 currentCatFrameIndex = 0

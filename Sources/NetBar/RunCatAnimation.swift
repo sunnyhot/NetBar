@@ -1,272 +1,237 @@
 import AppKit
+import Foundation
 
-// MARK: - RunCat Animation Controller
+// MARK: - Animation Character Definition
+
+enum RunCatCharacter: String, CaseIterable {
+    case cat = "cat"
+    case gamingCat = "gaming-cat"
+    case partyParrot = "party-parrot"
+
+    var displayName: String {
+        switch self {
+        case .cat: return "ネコ"
+        case .gamingCat: return "ゲーミング・ネコ"
+        case .partyParrot: return "虹色のオウム"
+        }
+    }
+
+    var localizedName: String { displayName }
+
+    /// Number of animation frames for this character
+    var frameCount: Int {
+        switch self {
+        case .cat: return 5
+        case .gamingCat: return 10
+        case .partyParrot: return 10
+        }
+    }
+
+    /// Whether this character uses template rendering (monochrome, macOS auto-inverts)
+    var isTemplate: Bool {
+        switch self {
+        case .cat: return true
+        case .gamingCat: return false  // Has RGB colors (gaming RGB)
+        case .partyParrot: return false // Has RGB colors (rainbow parrot)
+        }
+    }
+
+    /// Resource subdirectory name in Resources/RunCat/
+    var resourceDir: String { rawValue }
+}
+
+// MARK: - RunCatAnimation
 
 @MainActor
 final class RunCatAnimation {
-    private(set) var currentFrameIndex: Int = 0
-    let totalFrames: Int = 6
     private var timer: Timer?
-    private var currentBytesPerSecond: Double = 0
-    private var isActive: Bool = true
+    private var currentFrame: Int = 0
+    private var isActive: Bool = false
+    private var frames: [NSImage] = []
+    private var character: RunCatCharacter = .cat
+    private var speedMultiplier: Double = 1.0
 
+    /// Current animation interval in seconds (based on network speed + multiplier)
+    private var currentInterval: TimeInterval = 0.5
+
+    /// Callback invoked when the frame changes (passes frame index)
     var onFrameChange: ((Int) -> Void)?
 
-    /// Width of the cat graphic in points
-    static let catWidth: CGFloat = 22
-    /// Right padding after the cat before the speed text
-    static let catPadding: CGFloat = 3
-    /// Total width consumed by the cat in the status bar (cat + padding)
-    static let totalWidth: CGFloat = catWidth + catPadding
+    // MARK: - Initialization
 
-    init(onFrameChange: ((Int) -> Void)? = nil) {
+    init(character: RunCatCharacter = .cat, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
+        self.character = character
+        self.speedMultiplier = speedMultiplier
         self.onFrameChange = onFrameChange
-        rescheduleTimer()
+        loadFrames()
     }
 
-    func updateNetworkSpeed(upload: Double, download: Double) {
-        let total = upload + download
-        let changed = abs(total - currentBytesPerSecond) > 100
-        currentBytesPerSecond = total
-        if changed {
-            rescheduleTimer()
-        }
-    }
-
-    func setActive(_ active: Bool) {
-        isActive = active
-        if active {
-            rescheduleTimer()
-        } else {
-            timer?.invalidate()
-            timer = nil
-        }
-    }
-
-    func stop() {
+    deinit {
         timer?.invalidate()
         timer = nil
     }
 
-    private func rescheduleTimer() {
-        guard isActive else { return }
-        let fps = Self.speedToFPS(currentBytesPerSecond)
-        let interval = 1.0 / fps
+    // MARK: - Frame Loading
 
+    private func loadFrames() {
+        frames.removeAll()
+        let resourcePath = "RunCat/\(character.resourceDir)"
+
+        for i in 0..<character.frameCount {
+            if let url = Bundle.main.url(forResource: "frame_\(i)", withExtension: "png", subdirectory: resourcePath) {
+                if let image = NSImage(contentsOf: url) {
+                    image.isTemplate = character.isTemplate
+                    frames.append(image)
+                }
+            }
+        }
+
+        // Fallback: if no frames loaded from bundle, try path-based loading
+        if frames.isEmpty {
+            loadFramesFromPath()
+        }
+
+        // Ensure we have at least one frame
+        if frames.isEmpty {
+            frames.append(createFallbackImage())
+        }
+    }
+
+    private func loadFramesFromPath() {
+        for i in 0..<character.frameCount {
+            let fileName = "frame_\(i).png"
+            // Try Bundle.main.resourcePath
+            if let resourcePath = Bundle.main.resourcePath {
+                let fullPath = "\(resourcePath)/RunCat/\(character.resourceDir)/\(fileName)"
+                if let image = NSImage(contentsOf: URL(fileURLWithPath: fullPath)) {
+                    image.isTemplate = character.isTemplate
+                    frames.append(image)
+                }
+            }
+        }
+    }
+
+    private func createFallbackImage() -> NSImage {
+        // Create a tiny 16x16 template image as fallback
+        let size = NSSize(width: 28, height: 18)
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.black.setFill()
+        let body = NSRect(x: 4, y: 6, width: 14, height: 8)
+        body.fill()
+        let head = NSRect(x: 18, y: 8, width: 6, height: 6)
+        head.fill()
+        image.unlockFocus()
+        image.isTemplate = true
+        return image
+    }
+
+    // MARK: - Character & Speed Changes
+
+    func setCharacter(_ newCharacter: RunCatCharacter) {
+        guard newCharacter != character else { return }
+        character = newCharacter
+        currentFrame = 0
+        loadFrames()
+        if isActive {
+            restartTimer()
+        }
+        onFrameChange?(currentFrame)
+    }
+
+    func setSpeedMultiplier(_ multiplier: Double) {
+        speedMultiplier = max(0.25, min(4.0, multiplier))
+        if isActive {
+            restartTimer()
+        }
+    }
+
+    // MARK: - Network Speed
+
+    /// Update animation speed based on network throughput.
+    /// - Parameter totalBytesPerSecond: Combined upload + download speed in bytes/sec
+    func updateNetworkSpeed(totalBytesPerSecond: Double) {
+        // Logarithmic mapping:
+        // 0 B/s   → 500ms interval (slow idle animation)
+        // 1 KB/s  → 250ms
+        // 100 KB/s → 100ms
+        // 1 MB/s  → 60ms
+        // 100 MB/s+ → 40ms
+        let baseInterval: TimeInterval
+        if totalBytesPerSecond <= 0 {
+            baseInterval = 0.5
+        } else {
+            let speedMB = totalBytesPerSecond / 1_000_000
+            // Log mapping: faster speed = shorter interval
+            baseInterval = max(0.04, min(0.5, 0.5 / (1.0 + log10(max(speedMB, 0.001) + 1.0) * 3.0)))
+        }
+
+        let adjustedInterval = baseInterval / speedMultiplier
+        let newInterval = max(0.03, min(2.0, adjustedInterval))
+
+        if abs(newInterval - currentInterval) > 0.005 {
+            currentInterval = newInterval
+            if isActive {
+                restartTimer()
+            }
+        }
+    }
+
+    // MARK: - Active State
+
+    func setActive(_ active: Bool) {
+        if active && !isActive {
+            isActive = true
+            restartTimer()
+        } else if !active && isActive {
+            isActive = false
+            stop()
+        }
+    }
+
+    // MARK: - Timer
+
+    private func restartTimer() {
         timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        timer = Timer.scheduledTimer(withTimeInterval: currentInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.advanceFrame()
             }
         }
     }
 
+    private func stop() {
+        timer?.invalidate()
+        timer = nil
+        isActive = false
+    }
+
     private func advanceFrame() {
-        currentFrameIndex = (currentFrameIndex + 1) % totalFrames
-        onFrameChange?(currentFrameIndex)
+        currentFrame = (currentFrame + 1) % max(frames.count, 1)
+        onFrameChange?(currentFrame)
     }
 
-    /// Map network speed (bytes/s) to animation FPS.
-    /// Uses logarithmic mapping for a natural feel:
-    /// - 0 B/s     → 2 FPS  (nearly still, gentle idle)
-    /// - 1 KB/s    → ~3 FPS (slow walk)
-    /// - 100 KB/s  → ~5 FPS (walking)
-    /// - 1 MB/s    → ~9 FPS (trotting)
-    /// - 10 MB/s   → ~15 FPS (running)
-    /// - 100 MB/s+ → 24 FPS (full sprint)
-    private static func speedToFPS(_ bytesPerSecond: Double) -> Double {
-        if bytesPerSecond <= 0 { return 2 }
-        let bps = max(bytesPerSecond, 1)
-        let logSpeed = log10(bps) // 0..9 for 1 B/s..1 GB/s
-        let fps = 2 + (logSpeed / 9.0) * 22.0
-        return min(max(fps, 2), 24)
+    // MARK: - Frame Access
+
+    var currentFrameIndex: Int { currentFrame }
+
+    /// Get the current frame as an NSImage
+    func currentImage() -> NSImage? {
+        guard !frames.isEmpty else { return nil }
+        return frames[currentFrame % frames.count]
     }
 
-    // MARK: - Cat Frame Drawing (NSImage output)
-
-    /// Draw the cat for a specific animation frame and return an NSImage.
-    /// - Parameters:
-    ///   - frameIndex: Animation frame (0..<6)
-    ///   - scale: Retina scale factor (typically 2.0)
-    /// - Returns: NSImage of the cat silhouette
-    static func drawCatFrame(_ frameIndex: Int, scale: CGFloat = 2.0) -> NSImage {
-        let width: CGFloat = catWidth
-        let height: CGFloat = 18
-        let size = NSSize(width: width, height: height)
-        let safeScale = max(scale, 1)
-        let pixelsWide = max(Int(ceil(width * safeScale)), 1)
-        let pixelsHigh = max(Int(ceil(height * safeScale)), 1)
-
-        guard let representation = NSBitmapImageRep(
-            bitmapDataPlanes: nil,
-            pixelsWide: pixelsWide,
-            pixelsHigh: pixelsHigh,
-            bitsPerSample: 8,
-            samplesPerPixel: 4,
-            hasAlpha: true,
-            isPlanar: false,
-            colorSpaceName: .deviceRGB,
-            bytesPerRow: 0,
-            bitsPerPixel: 0
-        ) else {
-            return NSImage(size: size)
-        }
-
-        representation.size = size
-        NSGraphicsContext.saveGraphicsState()
-        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: representation)
-        defer {
-            NSGraphicsContext.restoreGraphicsState()
-        }
-
-        guard let context = NSGraphicsContext.current?.cgContext else {
-            return NSImage(size: size)
-        }
-
-        // Clear background
-        context.clear(CGRect(origin: .zero, size: CGSize(width: pixelsWide, height: pixelsHigh)))
-
-        // Draw cat silhouette in black (will be rendered as template image by status bar)
-        let catColor = CGColor(red: 0, green: 0, blue: 0, alpha: 1)
-        drawCatSilhouette(frameIndex, in: context, rect: CGRect(origin: .zero, size: size), color: catColor)
-
-        let image = NSImage(size: size)
-        image.addRepresentation(representation)
-        image.isTemplate = true
-        return image
+    /// Get a specific frame as an NSImage
+    func image(at index: Int) -> NSImage? {
+        guard index >= 0, index < frames.count else { return nil }
+        return frames[index]
     }
 
-    // MARK: - Cat Silhouette Drawing
-
-    static func drawCatSilhouette(_ frameIndex: Int, in context: CGContext, rect: CGRect, color: CGColor) {
-        let height = rect.height
-        // Design coordinates: 22×22 pt bounding box, origin at bottom-left
-        // Scale to fit the actual rect height while maintaining aspect ratio
-        let scale = height / 22.0
-
-        context.saveGState()
-        context.translateBy(x: rect.origin.x, y: rect.origin.y)
-        context.scaleBy(x: scale, y: scale)
-
-        context.setFillColor(color)
-
-        // Body (horizontal ellipse)
-        context.fillEllipse(in: CGRect(x: 5, y: 7, width: 10, height: 5))
-
-        // Head (circle, overlapping right side of body)
-        context.fillEllipse(in: CGRect(x: 13, y: 8, width: 6.5, height: 6.5))
-
-        // Left ear (triangle)
-        context.move(to: CGPoint(x: 14.5, y: 14.5))
-        context.addLine(to: CGPoint(x: 14.5, y: 17.5))
-        context.addLine(to: CGPoint(x: 16.5, y: 14.5))
-        context.closePath()
-        context.fillPath()
-
-        // Right ear (triangle)
-        context.move(to: CGPoint(x: 17, y: 14.5))
-        context.addLine(to: CGPoint(x: 18, y: 17.5))
-        context.addLine(to: CGPoint(x: 19.5, y: 14.5))
-        context.closePath()
-        context.fillPath()
-
-        // Eye (white dot for contrast)
-        context.setFillColor(CGColor(red: 1, green: 1, blue: 1, alpha: 1))
-        context.fillEllipse(in: CGRect(x: 17.5, y: 10.5, width: 1.2, height: 1.5))
-        context.setFillColor(color)
-
-        // Tail (thick curved stroke going up-left)
-        context.setStrokeColor(color)
-        context.setLineWidth(1.6)
-        context.setLineCap(.round)
-        context.move(to: CGPoint(x: 5, y: 10))
-        context.addCurve(
-            to: CGPoint(x: 1.5, y: 16.5),
-            control1: CGPoint(x: 4, y: 12),
-            control2: CGPoint(x: 2, y: 14.5)
-        )
-        context.strokePath()
-
-        // Legs (thick stroked lines, positions vary per frame)
-        drawLegs(frame: frameIndex, in: context, color: color)
-
-        context.restoreGState()
-    }
-
-    private static func drawLegs(frame: Int, in context: CGContext, color: CGColor) {
-        context.setStrokeColor(color)
-        context.setLineWidth(1.8)
-        context.setLineCap(.round)
-
-        switch frame {
-        case 0: // Full stride — front legs forward, back legs back
-            // Front right (reaching forward)
-            context.move(to: CGPoint(x: 14, y: 7))
-            context.addLine(to: CGPoint(x: 17, y: 2.5))
-            // Front left
-            context.move(to: CGPoint(x: 12, y: 7))
-            context.addLine(to: CGPoint(x: 14.5, y: 3))
-            // Back right (stretching back)
-            context.move(to: CGPoint(x: 7, y: 7))
-            context.addLine(to: CGPoint(x: 4, y: 2.5))
-            // Back left
-            context.move(to: CGPoint(x: 9, y: 7))
-            context.addLine(to: CGPoint(x: 6.5, y: 3))
-
-        case 1: // Gathering — legs coming under body
-            context.move(to: CGPoint(x: 13, y: 7))
-            context.addLine(to: CGPoint(x: 14, y: 3.5))
-            context.move(to: CGPoint(x: 11, y: 7))
-            context.addLine(to: CGPoint(x: 11, y: 3.5))
-            context.move(to: CGPoint(x: 8, y: 7))
-            context.addLine(to: CGPoint(x: 7, y: 3.5))
-            context.move(to: CGPoint(x: 9.5, y: 7))
-            context.addLine(to: CGPoint(x: 9.5, y: 3.5))
-
-        case 2: // Crouch — legs tucked under body
-            context.move(to: CGPoint(x: 12, y: 7))
-            context.addLine(to: CGPoint(x: 12.5, y: 5))
-            context.move(to: CGPoint(x: 10.5, y: 7))
-            context.addLine(to: CGPoint(x: 10.5, y: 5))
-            context.move(to: CGPoint(x: 8, y: 7))
-            context.addLine(to: CGPoint(x: 7.5, y: 5))
-            context.move(to: CGPoint(x: 9.5, y: 7))
-            context.addLine(to: CGPoint(x: 9.5, y: 5))
-
-        case 3: // Push off — back legs extending, front legs gathering
-            context.move(to: CGPoint(x: 13, y: 7))
-            context.addLine(to: CGPoint(x: 14, y: 3.5))
-            context.move(to: CGPoint(x: 11, y: 7))
-            context.addLine(to: CGPoint(x: 12, y: 3.5))
-            context.move(to: CGPoint(x: 7, y: 7))
-            context.addLine(to: CGPoint(x: 3.5, y: 2))
-            context.move(to: CGPoint(x: 9, y: 7))
-            context.addLine(to: CGPoint(x: 5.5, y: 2))
-
-        case 4: // Airborne — all legs slightly tucked
-            context.move(to: CGPoint(x: 13, y: 7))
-            context.addLine(to: CGPoint(x: 14, y: 4.5))
-            context.move(to: CGPoint(x: 11, y: 7))
-            context.addLine(to: CGPoint(x: 11.5, y: 4.5))
-            context.move(to: CGPoint(x: 8, y: 7))
-            context.addLine(to: CGPoint(x: 7, y: 4.5))
-            context.move(to: CGPoint(x: 9.5, y: 7))
-            context.addLine(to: CGPoint(x: 9, y: 4.5))
-
-        case 5: // Landing — front legs reaching forward, back legs under
-            context.move(to: CGPoint(x: 14.5, y: 7))
-            context.addLine(to: CGPoint(x: 17.5, y: 2.5))
-            context.move(to: CGPoint(x: 12.5, y: 7))
-            context.addLine(to: CGPoint(x: 15, y: 3))
-            context.move(to: CGPoint(x: 7, y: 7))
-            context.addLine(to: CGPoint(x: 6.5, y: 3.5))
-            context.move(to: CGPoint(x: 9, y: 7))
-            context.addLine(to: CGPoint(x: 8.5, y: 3.5))
-
-        default:
-            break
+    /// The natural size of the animation frame (in points, accounting for retina)
+    var frameSize: NSSize {
+        if let first = frames.first {
+            return first.size
         }
-
-        context.strokePath()
+        return NSSize(width: 28, height: 18)
     }
 }

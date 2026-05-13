@@ -24,6 +24,11 @@ cp ".build/$CONFIGURATION/$APP_NAME" "$MACOS_DIR/$APP_NAME"
 cp "Resources/Info.plist" "$CONTENTS_DIR/Info.plist"
 cp "Resources/AppIcon.icns" "$RESOURCES_DIR/AppIcon.icns"
 
+# Copy RunCat animation resources
+if [ -d "Resources/RunCat" ]; then
+    cp -R "Resources/RunCat" "$RESOURCES_DIR/RunCat"
+fi
+
 chmod +x "$MACOS_DIR/$APP_NAME"
 
 if command -v codesign >/dev/null 2>&1; then

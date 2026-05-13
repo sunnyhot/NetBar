@@ -113,6 +113,8 @@ final class StatusBarSettings: ObservableObject {
     @Published var textColor: PersistedColor { didSet { save() } }
     @Published var backgroundColor: PersistedColor { didSet { save() } }
     @Published var showsCat: Bool { didSet { save() } }
+    @Published var catCharacter: String { didSet { save() } }
+    @Published var catSpeedMultiplier: Double { didSet { save() } }
 
     private let defaults: UserDefaults
 
@@ -132,6 +134,8 @@ final class StatusBarSettings: ObservableObject {
         textColor = Self.color(prefix: Keys.textColor, defaults: defaults, fallback: Defaults.textColor)
         backgroundColor = Self.color(prefix: Keys.backgroundColor, defaults: defaults, fallback: Defaults.backgroundColor)
         showsCat = defaults.object(forKey: Keys.showsCat) as? Bool ?? Defaults.showsCat
+        catCharacter = defaults.string(forKey: Keys.catCharacter) ?? Defaults.catCharacter
+        catSpeedMultiplier = defaults.object(forKey: Keys.catSpeedMultiplier) as? Double ?? Defaults.catSpeedMultiplier
     }
 
     var clampedFontSize: CGFloat {
@@ -169,6 +173,8 @@ final class StatusBarSettings: ObservableObject {
         textColor = Defaults.textColor
         backgroundColor = Defaults.backgroundColor
         showsCat = Defaults.showsCat
+        catCharacter = Defaults.catCharacter
+        catSpeedMultiplier = Defaults.catSpeedMultiplier
     }
 
     private func save() {
@@ -186,6 +192,8 @@ final class StatusBarSettings: ObservableObject {
         save(textColor, prefix: Keys.textColor)
         save(backgroundColor, prefix: Keys.backgroundColor)
         defaults.set(showsCat, forKey: Keys.showsCat)
+        defaults.set(catCharacter, forKey: Keys.catCharacter)
+        defaults.set(catSpeedMultiplier, forKey: Keys.catSpeedMultiplier)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -223,6 +231,8 @@ final class StatusBarSettings: ObservableObject {
         static let textColor = PersistedColor.white
         static let backgroundColor = PersistedColor.olive
         static let showsCat = true
+        static let catCharacter = "cat"
+        static let catSpeedMultiplier = 1.0
     }
 
     private enum Keys {
@@ -240,6 +250,8 @@ final class StatusBarSettings: ObservableObject {
         static let textColor = "statusBar.textColor"
         static let backgroundColor = "statusBar.backgroundColor"
         static let showsCat = "statusBar.showsCat"
+        static let catCharacter = "statusBar.catCharacter"
+        static let catSpeedMultiplier = "statusBar.catSpeedMultiplier"
     }
 }
 
@@ -272,6 +284,7 @@ struct StatusBarRenderSignature: Equatable {
     let backgroundColor: PersistedColor
     let appearanceName: String
     let catFrameIndex: Int?
+    let catCharacter: String
 }
 
 @MainActor
@@ -307,7 +320,8 @@ enum StatusBarDisplayRenderer {
             textColor: settings.textColor,
             backgroundColor: settings.backgroundColor,
             appearanceName: appearanceName,
-            catFrameIndex: catFrameIndex
+            catFrameIndex: catFrameIndex,
+            catCharacter: settings.catCharacter
         )
     }
 
@@ -370,22 +384,54 @@ enum StatusBarDisplayRenderer {
         // Draw cat frame if enabled
         var textXOffset: CGFloat = layout.horizontalPadding
         if let catIndex = catFrameIndex, settings.showsCat {
-            let catWidth: CGFloat = 22
-            let catHeight: CGFloat = 18
-            let catY = (height - catHeight) / 2
-            let catPadding: CGFloat = 3
-
-            if let cgContext = NSGraphicsContext.current?.cgContext {
-                let catColor = useTemplate ? CGColor(red: 0, green: 0, blue: 0, alpha: 1) : textColor.cgColor
-                RunCatAnimation.drawCatSilhouette(
-                    catIndex,
-                    in: cgContext,
-                    rect: NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight),
-                    color: catColor
-                )
+            // Load the cat character image from the pre-cached animation frames
+            let character = RunCatCharacter(rawValue: settings.catCharacter) ?? .cat
+            let resourcePath = "RunCat/\(character.resourceDir)"
+            let frameIdx = catIndex % character.frameCount
+            let catImage: NSImage?
+            if let url = Bundle.main.url(forResource: "frame_\(frameIdx)", withExtension: "png", subdirectory: resourcePath) {
+                catImage = NSImage(contentsOf: url)
+            } else if let resPath = Bundle.main.resourcePath {
+                catImage = NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(character.resourceDir)/frame_\(frameIdx).png"))
+            } else {
+                catImage = nil
             }
 
-            textXOffset = layout.horizontalPadding + catWidth + catPadding
+            if let catImg = catImage {
+                // Scale: sprite is at 2x (e.g. 56x36 for 28x18pt). Draw at 1x logical size.
+                let spritePointsW = catImg.size.width / 2  // 28pt for cat/gaming-cat, 24pt for parrot
+                let catWidth: CGFloat = min(spritePointsW, 28)
+                let catHeight: CGFloat = 18
+                let catY = (height - catHeight) / 2
+                let catPadding: CGFloat = 3
+                let drawRect = NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight)
+
+                if character.isTemplate {
+                    // Template mode: draw as-is (macOS handles inversion)
+                    catImg.isTemplate = true
+                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                } else {
+                    // Color mode (gaming-cat, party-parrot): draw with original colors
+                    catImg.isTemplate = false
+                    if useTemplate {
+                        // In template rendering mode, we need to tint the image to match text color
+                        // Draw image into a tinted version
+                        if let tinted = tintImage(catImg, color: .black) {
+                            tinted.isTemplate = true
+                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                        }
+                    } else {
+                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                    }
+                }
+
+                textXOffset = layout.horizontalPadding + catWidth + catPadding
+            } else {
+                // Fallback: no image loaded, skip cat rendering
+                let catWidth: CGFloat = 22
+                let catPadding: CGFloat = 3
+                textXOffset = layout.horizontalPadding + catWidth + catPadding
+            }
         }
 
         let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings, color: textColor)
@@ -443,7 +489,9 @@ enum StatusBarDisplayRenderer {
             .max() ?? measuredWidth
 
         // Add cat width if shown
-        let catExtraWidth: CGFloat = (catFrameIndex != nil && settings.showsCat) ? 22 + 3 : 0
+        let catCharacter = RunCatCharacter(rawValue: settings.catCharacter) ?? .cat
+        let catSpriteW: CGFloat = catCharacter == .partyParrot ? 24 : 28  // parrot is 48px@2x=24pt, cat is 56px@2x=28pt
+        let catExtraWidth: CGFloat = (catFrameIndex != nil && settings.showsCat) ? catSpriteW + 3 : 0
 
         let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth
@@ -505,6 +553,36 @@ enum StatusBarDisplayRenderer {
     private static func lineHeight(for font: NSFont, settings: StatusBarSettings) -> CGFloat {
         let naturalLineHeight = font.ascender - font.descender
         return max(naturalLineHeight + settings.clampedLineSpacing, 8)
+    }
+
+    private static func tintImage(_ image: NSImage, color: NSColor) -> NSImage? {
+        let size = image.size
+        guard let bitmapRep = NSBitmapImageRep(
+            bitmapDataPlanes: nil,
+            pixelsWide: Int(size.width * 2),
+            pixelsHigh: Int(size.height * 2),
+            bitsPerSample: 8,
+            samplesPerPixel: 4,
+            hasAlpha: true,
+            isPlanar: false,
+            colorSpaceName: .deviceRGB,
+            bytesPerRow: 0,
+            bitsPerPixel: 0
+        ) else { return nil }
+
+        bitmapRep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
+
+        color.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        image.draw(in: NSRect(origin: .zero, size: size), from: NSRect(origin: .zero, size: image.size), operation: .destinationIn, fraction: 1.0)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let tinted = NSImage(size: size)
+        tinted.addRepresentation(bitmapRep)
+        return tinted
     }
 }
 

@@ -213,6 +213,30 @@ private struct MenuBarPreferencesView: View {
                     Toggle(appPreferences.text("加粗", "Bold"), isOn: $settings.isBold)
                     Toggle(appPreferences.text("显示箭头", "Show arrows"), isOn: $settings.showsArrows)
                     Toggle(appPreferences.text("奔跑的小猫", "Running Cat"), isOn: $settings.showsCat)
+
+                    if settings.showsCat {
+                        Picker(appPreferences.text("角色", "Character"), selection: $settings.catCharacter) {
+                            ForEach(RunCatCharacter.allCases, id: \.rawValue) { character in
+                                Text(character.localizedName).tag(character.rawValue)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        SliderPreference(
+                            title: appPreferences.text("动画速度", "Animation Speed"),
+                            value: $settings.catSpeedMultiplier,
+                            range: 0.25...4.0,
+                            displayValue: String(format: "%.1fx", settings.catSpeedMultiplier)
+                        )
+
+                        Text(appPreferences.text(
+                            "速度倍率影响动画快慢：1.0x 为默认，2.0x 为两倍速，0.5x 为半速。",
+                            "Speed multiplier affects animation rate: 1.0x is default, 2.0x is double speed, 0.5x is half speed."
+                        ))
+                            .font(.system(size: 11))
+                            .foregroundStyle(.tertiary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
                 }
 
                 PreferenceSection(title: appPreferences.text("宽度与布局", "Width and Layout")) {
