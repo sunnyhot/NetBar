@@ -11,6 +11,8 @@ final class StatusBarController {
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
     private let detailsWindowController: DetailsWindowController
+    private let popover: NSPopover
+    private var popoverEventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
@@ -34,6 +36,23 @@ final class StatusBarController {
             monitor: monitor,
             appPreferences: appPreferences,
             openPreferences: openPreferences
+        )
+
+        let popover = NSPopover()
+        popover.behavior = .transient
+        popover.contentSize = NSSize(width: 260, height: 120)
+        self.popover = popover
+
+        // Set content after self is fully initialized so the closure can capture self
+        popover.contentViewController = NSHostingController(
+            rootView: StatusBarPopoverContentView(
+                monitor: monitor,
+                appPreferences: appPreferences,
+                openMainWindow: { [weak self] in
+                    self?.openMainWindowFromPopover()
+                },
+                openPreferences: openPreferences
+            )
         )
 
         configureStatusItem()
@@ -171,7 +190,36 @@ final class StatusBarController {
             showStatusMenu()
             return
         }
-        detailsWindowController.toggle(anchor: statusItem.button)
+        togglePopover()
+    }
+
+    private func togglePopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        } else {
+            guard let button = statusItem.button else { return }
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            // Dismiss popover when clicking outside
+            if popoverEventMonitor == nil {
+                popoverEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
+                    guard let self else { return }
+                    if let monitor = self.popoverEventMonitor {
+                        NSEvent.removeMonitor(monitor)
+                        self.popoverEventMonitor = nil
+                    }
+                    if self.popover.isShown {
+                        self.popover.performClose(nil)
+                    }
+                }
+            }
+        }
+    }
+
+    private func openMainWindowFromPopover() {
+        if popover.isShown {
+            popover.performClose(nil)
+        }
+        detailsWindowController.show(anchor: statusItem.button)
     }
 
     private func showStatusMenu() {
