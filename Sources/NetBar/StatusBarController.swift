@@ -16,6 +16,7 @@ final class StatusBarController {
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
     private var currentCatCharacter: RunCatCharacter = RunCatCharacter.defaultCat
+    private var mouseTrackingMonitor: Any? = nil
 
     init(
         monitor: NetworkMonitor,
@@ -114,10 +115,14 @@ final class StatusBarController {
             let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
             catAnimation?.configureRotation(enabled: settings.catRotationEnabled, intervalMinutes: settings.catRotationIntervalMinutes, pool: pool)
             catAnimation?.setActive(true)
+
+            // Setup mouse tracking for googly_cat
+            setupMouseTracking(for: character)
         } else {
             catAnimation?.setActive(false)
             catAnimation = nil
             currentCatFrameIndex = nil
+            stopMouseTracking()
         }
     }
 
@@ -223,5 +228,32 @@ final class StatusBarController {
 
     private func text(_ simplifiedChinese: String, _ english: String) -> String {
         appPreferences.text(simplifiedChinese, english)
+    }
+
+    // MARK: - Mouse Tracking for Googly Eyes
+
+    private func setupMouseTracking(for character: RunCatCharacter) {
+        // Only enable mouse tracking for googly_cat
+        if character.id == "googly_cat" {
+            if mouseTrackingMonitor == nil {
+                mouseTrackingMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                    self?.handleMouseMove(event)
+                }
+            }
+        } else {
+            stopMouseTracking()
+        }
+    }
+
+    private func stopMouseTracking() {
+        if let monitor = mouseTrackingMonitor {
+            NSEvent.removeMonitor(monitor)
+            mouseTrackingMonitor = nil
+        }
+    }
+
+    private func handleMouseMove(_ event: NSEvent) {
+        // Trigger update when mouse moves (only significant updates will render due to signature caching)
+        updateStatusItem()
     }
 }

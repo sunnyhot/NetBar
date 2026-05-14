@@ -32,6 +32,8 @@ struct RunCatCharacter: Equatable, Identifiable {
         // Default (free) runners
         RunCatCharacter(id: "cat", nameZh: "猫咪 α", nameEn: "Cat α", nameJa: "ネコ α",
                         frameCount: 5, frameWidth: 28, isTemplate: true, category: .default),
+        RunCatCharacter(id: "googly_cat", nameZh: "咕咕眼猫", nameEn: "Googly Eyes Cat", nameJa: "ぐるぐるキャット",
+                        frameCount: 5, frameWidth: 28, isTemplate: true, category: .default),
         RunCatCharacter(id: "cat_b", nameZh: "猫咪 β", nameEn: "Cat β", nameJa: "ネコ β",
                         frameCount: 4, frameWidth: 30, isTemplate: true, category: .default),
         RunCatCharacter(id: "cat_c", nameZh: "猫咪 γ", nameEn: "Cat γ", nameJa: "ネコ γ",
