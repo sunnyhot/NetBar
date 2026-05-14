@@ -836,13 +836,13 @@ enum StatusBarDisplayRenderer {
 
         // Determine if cat has custom coloring (non-default-white solid or fancy mode)
         let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
+        let isGooglyCat = settings.showsCat && settings.catCharacter == "googly_cat"
         let catHasCustomColor: Bool
         if settings.showsCat, catFrameIndex != nil {
             let character = RunCatCharacter.byId(settings.catCharacter)
             if character.isTemplate {
                 // Template character with non-solid mode, or solid mode with non-white color
-                // googly_cat always needs explicit rendering (drawGooglyEyes uses white/black)
-                catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white || character.id == "googly_cat"
+                catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white
             } else {
                 // Color characters (gaming-cat, party-parrot, etc.) always have custom colors
                 catHasCustomColor = true
@@ -854,7 +854,11 @@ enum StatusBarDisplayRenderer {
         // When cat has custom colors, we cannot use template image mode
         // because macOS would re-tint the entire image, inverting custom colors.
         // Instead, render with explicit colors for both cat and text.
-        let useTemplate = settings.usesSystemTextColor && !settings.showsBackground && !catHasCustomColor
+        // googly_cat also needs non-template mode to preserve eye colors (white/black),
+        // but we still render cat+text with system text color like template mode.
+        let useTemplate = settings.usesSystemTextColor && !settings.showsBackground && !catHasCustomColor && !isGooglyCat
+        // Template mode: draw in black; macOS auto-tints via alpha channel.
+        // Non-template mode (custom color or googly_cat): use explicit system label color.
         let textColor = useTemplate ? NSColor.black : settings.effectiveTextColor
 
         // Draw cat frame if enabled
@@ -898,9 +902,18 @@ enum StatusBarDisplayRenderer {
 
                 if character.isTemplate {
                     // Template mode: tint with color from CatColorMode
-                    if colorMode == .solid {
+                    // googly_cat uses effectiveTextColor (system label color) so the cat body
+                    // blends with the status bar like template mode, while eyes keep their colors.
+                    let tintColor: NSColor
+                    if isGooglyCat {
+                        tintColor = settings.effectiveTextColor
+                    } else if colorMode == .solid {
+                        tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                    } else {
+                        tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                    }
+                    if colorMode == .solid || isGooglyCat {
                         // Solid color: use single-color tint
-                        let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                         if let tinted = tintImage(catImg, color: tintColor) {
                             tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
                         } else {
@@ -914,7 +927,6 @@ enum StatusBarDisplayRenderer {
                             tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
                         } else {
                             // Fallback to single-color tint
-                            let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                             if let tinted = tintImage(catImg, color: tintColor) {
                                 tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
                             } else {
