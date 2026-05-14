@@ -1263,10 +1263,10 @@ enum StatusBarDisplayRenderer {
         // Reset shadow for iris
         ctx.setShadow(offset: .zero, blur: 0, color: nil)
 
-        // Draw blue iris (colored middle part)
+        // Draw white iris (subtle shading instead of blue)
         let irisGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
-                                    colors: [NSColor.blue.withAlphaComponent(0.8).cgColor,
-                                           NSColor.blue.withAlphaComponent(0.6).cgColor] as CFArray,
+                                    colors: [NSColor.white.withAlphaComponent(0.9).cgColor,
+                                           NSColor.white.withAlphaComponent(0.7).cgColor] as CFArray,
                                     locations: [0.0, 1.0])!
         ctx.drawRadialGradient(irisGradient,
                              startCenter: CGPoint(x: drawPupilX, y: pupilY),
