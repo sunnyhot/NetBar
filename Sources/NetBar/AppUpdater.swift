@@ -303,8 +303,38 @@ final class AppUpdater: ObservableObject {
         request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
         request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
 
+        // ETag caching: if we have a cached ETag, send If-None-Match to avoid
+        // consuming the GitHub API rate limit (60 req/hr for anonymous).
+        if let cachedETag = defaults.string(forKey: Keys.cachedETag) {
+            request.setValue(cachedETag, forHTTPHeaderField: "If-None-Match")
+        }
+
         let (data, response) = try await URLSession.shared.data(for: request)
+
+        // 304 Not Modified → return cached release
+        if let http = response as? HTTPURLResponse, http.statusCode == 304 {
+            if let cachedData = defaults.data(forKey: Keys.cachedReleaseData),
+               let cached = try? JSONDecoder().decode(GitHubRelease.self, from: cachedData) {
+                return cached
+            }
+            // No cached data but got 304; fall through to re-fetch without ETag
+            var retryRequest = URLRequest(url: url)
+            retryRequest.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+            retryRequest.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+            let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
+            try validateHTTPResponse(retryResponse)
+            return try JSONDecoder().decode(GitHubRelease.self, from: retryData)
+        }
+
         try validateHTTPResponse(response)
+
+        // Cache the ETag and response data for future 304 responses
+        if let http = response as? HTTPURLResponse,
+           let etag = http.value(forHTTPHeaderField: "ETag") {
+            defaults.set(etag, forKey: Keys.cachedETag)
+            defaults.set(data, forKey: Keys.cachedReleaseData)
+        }
+
         return try JSONDecoder().decode(GitHubRelease.self, from: data)
     }
 
@@ -487,6 +517,8 @@ final class AppUpdater: ObservableObject {
 
     private enum Keys {
         static let automaticallyChecksForUpdates = "updates.automaticallyChecksForUpdates"
+        static let cachedETag = "updates.cachedETag"
+        static let cachedReleaseData = "updates.cachedReleaseData"
     }
 }
 
@@ -555,7 +587,13 @@ enum UpdateError: LocalizedError {
         case .invalidUpdateURL:
             return "更新地址无效"
         case .httpStatus(let status):
-            return "GitHub 返回 HTTP \(status)"
+            if status == 403 {
+                return "GitHub API 请求受限（HTTP 403），匿名请求每小时仅 60 次，稍后会自动重试"
+            } else if status == 404 {
+                return "GitHub 上未找到 Release（HTTP 404）"
+            } else {
+                return "GitHub 返回 HTTP \(status)"
+            }
         case .unzipFailed:
             return "解压安装包失败"
         case .appMissingFromArchive:
