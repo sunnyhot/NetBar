@@ -57,7 +57,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let anchorFrame = NSRect(x: 470, y: 540, width: 20, height: 20)
 
         let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: 520, height: 700),
+            forWindowSize: NSSize(width: 440, height: 700),
             visibleFrame: visibleFrame,
             anchorFrame: anchorFrame,
             padding: 10
@@ -65,6 +65,36 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         XCTAssertGreaterThanOrEqual(frame.minY, visibleFrame.minY + 10)
         XCTAssertLessThanOrEqual(frame.maxY, visibleFrame.maxY - 10)
+    }
+
+    func testDetailsWindowLayoutTouchesStatusItemAnchorWhenSpaceAllows() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1200, height: 900)
+        let anchorFrame = NSRect(x: 590, y: 880, width: 20, height: 20)
+
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(width: 440, height: 720),
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: 10
+        )
+
+        XCTAssertEqual(frame.width, 440)
+        XCTAssertEqual(frame.maxY, anchorFrame.minY, accuracy: 0.5)
+    }
+
+    func testDetailsWindowLayoutTouchesVisibleFrameTopWhenAnchoredAtMenuBarEdge() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1200, height: 878)
+        let anchorFrame = NSRect(x: 590, y: 878, width: 20, height: 20)
+
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(width: 440, height: 720),
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: 10
+        )
+
+        XCTAssertEqual(frame.width, 440)
+        XCTAssertEqual(frame.maxY, visibleFrame.maxY, accuracy: 0.5)
     }
 
     func testAppearanceModeDefaultsToSystemAndPersistsSelection() {
@@ -88,6 +118,54 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertNil(AppAppearanceMode.system.nsAppearanceName)
         XCTAssertEqual(AppAppearanceMode.light.nsAppearanceName, .aqua)
         XCTAssertEqual(AppAppearanceMode.dark.nsAppearanceName, .darkAqua)
+    }
+
+    func testInterfaceIconNamesMatchInterfaceFamilies() {
+        XCTAssertEqual(InterfacePresentation.iconName(for: "en0"), "wifi")
+        XCTAssertEqual(InterfacePresentation.iconName(for: "bridge100"), "network.badge.shieldbell.fill")
+        XCTAssertEqual(InterfacePresentation.iconName(for: "lo0"), "arrow.triangle.2.circlepath")
+        XCTAssertEqual(InterfacePresentation.iconName(for: "utun4"), "antenna.radiowaves.left.and.right")
+        XCTAssertEqual(InterfacePresentation.iconName(for: "awdl0"), "antenna.radiowaves.left.and.right")
+        XCTAssertEqual(InterfacePresentation.iconName(for: "ipsec0"), "network")
+    }
+
+    func testNetworkTotalsExcludeVirtualProxyInterfaces() {
+        var sampleDate = Date(timeIntervalSince1970: 1_000)
+        let reader = SequenceNetworkStatsReader(samples: [
+            [
+                interface("en0", received: 1_000, sent: 1_000, isPrimary: true),
+                interface("utun4", received: 10_000, sent: 20_000),
+                interface("bridge100", received: 50_000, sent: 60_000),
+                interface("awdl0", received: 7_000, sent: 8_000)
+            ],
+            [
+                interface("en0", received: 2_200, sent: 1_700, isPrimary: true),
+                interface("utun4", received: 15_000, sent: 24_000),
+                interface("bridge100", received: 53_000, sent: 63_000),
+                interface("awdl0", received: 7_900, sent: 8_900)
+            ]
+        ])
+        let monitor = NetworkMonitor(
+            reader: reader,
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            now: { sampleDate }
+        )
+
+        monitor.refresh()
+        sampleDate = sampleDate.addingTimeInterval(1)
+        monitor.refresh()
+
+        XCTAssertEqual(monitor.snapshot.downloadBytesPerSecond, 1_200)
+        XCTAssertEqual(monitor.snapshot.uploadBytesPerSecond, 700)
+        XCTAssertEqual(monitor.snapshot.totalReceivedBytes, 2_200)
+        XCTAssertEqual(monitor.snapshot.totalSentBytes, 1_700)
+    }
+
+    func testApplicationTrafficReaderUsesExternalInterfaceScope() {
+        XCTAssertEqual(
+            NettopApplicationTrafficReader.arguments,
+            ["-P", "-L", "1", "-x", "-t", "external", "-J", "bytes_in,bytes_out"]
+        )
     }
 
     func testApplicationListSearchSortAndHideSystemProcesses() {
@@ -153,6 +231,22 @@ final class PreferencesAndPresentationTests: XCTestCase {
             totalReceivedBytes: UInt64(download),
             totalSentBytes: UInt64(upload),
             sampleCount: 2
+        )
+    }
+
+    private func interface(
+        _ name: String,
+        received: UInt64,
+        sent: UInt64,
+        isPrimary: Bool = false
+    ) -> InterfaceStats {
+        InterfaceStats(
+            name: name,
+            receivedBytes: received,
+            sentBytes: sent,
+            receivedPackets: received / 100,
+            sentPackets: sent / 100,
+            isPrimary: isPrimary
         )
     }
 
@@ -234,6 +328,27 @@ private final class FakeLoginItemManager: LoginItemManaging {
             throw nextError
         }
         self.isEnabled = isEnabled
+    }
+}
+
+private final class SequenceNetworkStatsReader: NetworkStatsReading {
+    private var samples: [[InterfaceStats]]
+    private var index = 0
+
+    init(samples: [[InterfaceStats]]) {
+        self.samples = samples
+    }
+
+    func readInterfaces() -> [InterfaceStats] {
+        let sample = samples[min(index, samples.count - 1)]
+        index += 1
+        return sample
+    }
+}
+
+private struct EmptyApplicationTrafficReader: ApplicationTrafficReading {
+    func readApplications() -> ApplicationTrafficReadResult {
+        ApplicationTrafficReadResult(stats: [], errorMessage: nil)
     }
 }
 

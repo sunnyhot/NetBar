@@ -7,8 +7,8 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let appPreferences: AppPreferences
     private let openPreferences: () -> Void
     private var panel: NSPanel?
-    private let defaultWindowSize = NSSize(width: 520, height: 680)
-    private let minimumWindowSize = NSSize(width: 460, height: 500)
+    private let defaultWindowSize = NSSize(width: 440, height: 720)
+    private let minimumWindowSize = NSSize(width: 440, height: 500)
 
     /// Auto-dismiss after this many seconds without focus.
     private static let autoDismissInterval: TimeInterval = 10
@@ -60,9 +60,10 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         floatingPanel.isFloatingPanel = true
         floatingPanel.level = .floating
         floatingPanel.hasShadow = true
-        floatingPanel.isMovableByWindowBackground = true
+        floatingPanel.isMovableByWindowBackground = false
         floatingPanel.isReleasedWhenClosed = false
         floatingPanel.minSize = minimumWindowSize
+        floatingPanel.maxSize = defaultWindowSize
         floatingPanel.delegate = self
         floatingPanel.hidesOnDeactivate = false
         floatingPanel.collectionBehavior = [.moveToActiveSpace]
@@ -83,7 +84,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
 
         // Rounded corners on the hosting view
         hostingController.view.wantsLayer = true
-        hostingController.view.layer?.cornerRadius = 12
+        hostingController.view.layer?.cornerRadius = 16
         hostingController.view.layer?.masksToBounds = true
 
         // Auto-dismiss when the panel loses focus
@@ -173,13 +174,22 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             visibleFrame: visibleFrame,
             padding: padding
         )
+        let maximumSize = DetailsWindowLayout.maximumSize(
+            fixedWidth: defaultWindowSize.width,
+            minimumSize: minimumSize,
+            visibleFrame: visibleFrame,
+            padding: padding
+        )
         window.minSize = minimumSize
+        window.maxSize = maximumSize
+        let targetHeight = min(max(window.frame.height, minimumSize.height), maximumSize.height)
+        let targetSize = NSSize(width: maximumSize.width, height: targetHeight)
 
         let anchorFrame = anchor.flatMap { anchor in
             anchor.window?.convertToScreen(anchor.frame)
         }
         let frame = DetailsWindowLayout.frame(
-            forWindowSize: window.frame.size,
+            forWindowSize: targetSize,
             minimumSize: minimumSize,
             visibleFrame: visibleFrame,
             anchorFrame: anchorFrame,
@@ -205,12 +215,28 @@ enum DetailsWindowLayout {
         )
     }
 
+    static func maximumSize(
+        fixedWidth: CGFloat,
+        minimumSize: NSSize,
+        visibleFrame: NSRect,
+        padding: CGFloat
+    ) -> NSSize {
+        let availableWidth = max(visibleFrame.width - padding * 2, 1)
+        let availableHeight = max(visibleFrame.height - padding, minimumSize.height)
+
+        return NSSize(
+            width: min(fixedWidth, availableWidth),
+            height: max(minimumSize.height, availableHeight)
+        )
+    }
+
     static func frame(
         forWindowSize windowSize: NSSize,
         minimumSize: NSSize = .zero,
         visibleFrame: NSRect,
         anchorFrame: NSRect?,
-        padding: CGFloat
+        padding: CGFloat,
+        anchorGap: CGFloat = 0
     ) -> NSRect {
         let availableWidth = max(visibleFrame.width - padding * 2, 1)
         let availableHeight = max(visibleFrame.height - padding * 2, 1)
@@ -222,15 +248,16 @@ enum DetailsWindowLayout {
         let y: CGFloat
 
         if let anchorFrame {
+            let topEdge = min(anchorFrame.minY - anchorGap, visibleFrame.maxY)
             x = clamp(
                 anchorFrame.midX - fittedSize.width / 2,
                 min: visibleFrame.minX + padding,
                 max: visibleFrame.maxX - fittedSize.width - padding
             )
             y = clamp(
-                anchorFrame.minY - fittedSize.height - padding,
+                topEdge - fittedSize.height,
                 min: visibleFrame.minY + padding,
-                max: visibleFrame.maxY - fittedSize.height - padding
+                max: topEdge - fittedSize.height
             )
         } else {
             x = clamp(

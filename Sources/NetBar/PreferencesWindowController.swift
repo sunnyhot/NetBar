@@ -28,13 +28,13 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         }
 
         let preferencesWindow = NSWindow(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 560),
+            contentRect: NSRect(x: 0, y: 0, width: 720, height: 640),
             styleMask: [.titled, .closable, .miniaturizable, .resizable],
             backing: .buffered,
             defer: false
         )
         preferencesWindow.title = appPreferences.text("NetBar 偏好设置", "NetBar Preferences")
-        preferencesWindow.minSize = NSSize(width: 560, height: 480)
+        preferencesWindow.minSize = NSSize(width: 620, height: 520)
         preferencesWindow.isReleasedWhenClosed = false
         preferencesWindow.delegate = self
         preferencesWindow.contentViewController = NSHostingController(
@@ -53,29 +53,62 @@ private struct PreferencesView: View {
     @ObservedObject var updater: AppUpdater
 
     var body: some View {
-        TabView {
-            GeneralPreferencesView(appPreferences: appPreferences)
-                .tabItem {
-                    Label(appPreferences.text("通用", "General"), systemImage: "gearshape")
-                }
+        VStack(spacing: 16) {
+            PreferencesHeroHeader(appPreferences: appPreferences, updater: updater)
 
-            MenuBarPreferencesView(settings: settings, appPreferences: appPreferences)
-                .tabItem {
-                    Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
-                }
+            TabView {
+                GeneralPreferencesView(appPreferences: appPreferences)
+                    .tabItem {
+                        Label(appPreferences.text("通用", "General"), systemImage: "gearshape")
+                    }
 
-            ApplicationPreferencesView(appPreferences: appPreferences)
-                .tabItem {
-                    Label(appPreferences.text("应用", "Apps"), systemImage: "app.connected.to.app.below.fill")
-                }
+                MenuBarPreferencesView(settings: settings, appPreferences: appPreferences)
+                    .tabItem {
+                        Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
+                    }
 
-            UpdatePreferencesView(appPreferences: appPreferences, updater: updater)
-                .tabItem {
-                    Label(appPreferences.text("更新", "Updates"), systemImage: "arrow.triangle.2.circlepath")
-                }
+                ApplicationPreferencesView(appPreferences: appPreferences)
+                    .tabItem {
+                        Label(appPreferences.text("应用", "Apps"), systemImage: "app.connected.to.app.below.fill")
+                    }
+
+                UpdatePreferencesView(appPreferences: appPreferences, updater: updater)
+                    .tabItem {
+                        Label(appPreferences.text("更新", "Updates"), systemImage: "arrow.triangle.2.circlepath")
+                    }
+            }
         }
         .padding(20)
-        .frame(minWidth: 560, minHeight: 480)
+        .frame(minWidth: 620, minHeight: 520)
+        .netBarPanelBackground()
+    }
+}
+
+private struct PreferencesHeroHeader: View {
+    @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var updater: AppUpdater
+
+    var body: some View {
+        HStack(spacing: 12) {
+            NetBarIconTile(systemName: "waveform.path.ecg.rectangle", tone: .download, size: 38)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(appPreferences.text("NetBar 设置工作台", "NetBar Control Center"))
+                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                Text(appPreferences.text(
+                    "调整菜单栏指标、悬浮面板、应用流量和更新策略。",
+                    "Tune menu bar metrics, floating panels, app traffic, and update behavior."
+                ))
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(2)
+            }
+
+            Spacer()
+
+            NetBarBadge(text: updater.currentVersionText, tone: .neutral)
+        }
+        .netBarCard(cornerRadius: 14, padding: 14, isProminent: true)
     }
 }
 
@@ -711,22 +744,13 @@ private struct PreferenceSection<Content: View>: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text(title)
-                .font(.system(size: 12, weight: .bold))
+            NetBarSectionHeader(title: title)
 
             VStack(alignment: .leading, spacing: 10) {
                 content
             }
-            .padding(12)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color(nsColor: .controlBackgroundColor))
-            )
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(Color.primary.opacity(0.04), lineWidth: 0.5)
-            )
+            .netBarCard(cornerRadius: 12, padding: 12)
         }
     }
 }

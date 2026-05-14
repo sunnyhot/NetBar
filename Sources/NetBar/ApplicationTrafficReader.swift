@@ -11,6 +11,14 @@ protocol ApplicationTrafficReading: Sendable {
 }
 
 final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecked Sendable {
+    static let arguments = [
+        "-P",
+        "-L", "1",
+        "-x",
+        "-t", "external",
+        "-J", "bytes_in,bytes_out"
+    ]
+
     private let executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
 
     func readApplications() -> ApplicationTrafficReadResult {
@@ -19,12 +27,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         let errorPipe = Pipe()
 
         process.executableURL = executableURL
-        process.arguments = [
-            "-P",
-            "-L", "1",
-            "-x",
-            "-J", "bytes_in,bytes_out"
-        ]
+        process.arguments = Self.arguments
         process.standardOutput = outputPipe
         process.standardError = errorPipe
 

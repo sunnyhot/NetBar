@@ -11,7 +11,7 @@ struct StatusBarPopoverContentView: View {
             // Total speed header
             totalSpeedSection
 
-            Divider()
+            Divider().opacity(0.55)
 
             // Per-interface speed list
             if !monitor.snapshot.interfaces.isEmpty {
@@ -22,58 +22,50 @@ struct StatusBarPopoverContentView: View {
             // Action buttons
             actionBar
         }
-        .frame(width: 280)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .padding(10)
+        .frame(width: 312)
+        .netBarPanelBackground()
     }
 
     // MARK: - Total Speed
 
     private var totalSpeedSection: some View {
-        HStack(spacing: 0) {
+        HStack(spacing: 8) {
             // Download
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.blue)
+            HStack(spacing: 9) {
+                NetBarIconTile(systemName: "arrow.down", tone: .download, size: 28)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(appPreferences.text("下载", "Down"))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
                     Text(ByteFormat.speed(monitor.snapshot.downloadBytesPerSecond))
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Separator
-            Rectangle()
-                .fill(Color(nsColor: .separatorColor))
-                .frame(width: 1, height: 36)
-                .padding(.horizontal, 4)
+            .netBarCard(cornerRadius: 11, padding: 9, isProminent: true)
 
             // Upload
-            HStack(spacing: 8) {
-                Image(systemName: "arrow.up.circle.fill")
-                    .font(.system(size: 16))
-                    .foregroundStyle(.orange)
+            HStack(spacing: 9) {
+                NetBarIconTile(systemName: "arrow.up", tone: .upload, size: 28)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(appPreferences.text("上传", "Up"))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
                     Text(ByteFormat.speed(monitor.snapshot.uploadBytesPerSecond))
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(size: 15, weight: .bold, design: .rounded))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
+            .netBarCard(cornerRadius: 11, padding: 9, isProminent: true)
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Interface List
@@ -81,12 +73,12 @@ struct StatusBarPopoverContentView: View {
     private var interfaceListSection: some View {
         VStack(alignment: .leading, spacing: 0) {
             // Section header
-            Text(appPreferences.text("接口明细", "Interfaces"))
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-                .padding(.horizontal, 14)
-                .padding(.top, 8)
-                .padding(.bottom, 6)
+            NetBarSectionHeader(
+                title: appPreferences.text("接口明细", "Interfaces"),
+                subtitle: appPreferences.text("点击打开主面板查看完整趋势", "Open main panel for full trends")
+            )
+            .padding(.top, 8)
+            .padding(.bottom, 6)
 
             // Interface rows
             ForEach(monitor.snapshot.interfaces) { interface in
@@ -115,11 +107,10 @@ struct StatusBarPopoverContentView: View {
                 Image(systemName: "gearshape")
                     .font(.system(size: 12))
             }
-            .buttonStyle(.borderless)
+            .buttonStyle(NetBarIconButtonStyle())
             .help(appPreferences.text("偏好设置", "Preferences"))
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.top, 9)
     }
 }
 
@@ -132,7 +123,7 @@ private struct InterfaceSpeedRow: View {
     var body: some View {
         HStack(spacing: 8) {
             // Interface icon
-            Image(systemName: interfaceIcon)
+            Image(systemName: InterfacePresentation.iconName(for: interface.name))
                 .font(.system(size: 12, weight: .medium))
                 .foregroundStyle(interface.isPrimary ? .blue : .secondary)
                 .frame(width: 20)
@@ -169,23 +160,8 @@ private struct InterfaceSpeedRow: View {
                 SpeedPill(symbol: "arrow.up", value: ByteFormat.speed(interface.uploadBytesPerSecond), tint: .orange)
             }
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 6)
-    }
-
-    private var interfaceIcon: String {
-        let name = interface.name.lowercased()
-        if name.hasPrefix("en") && !name.contains("bridge") {
-            return "wifi"
-        } else if name.hasPrefix("bridge") {
-            return "network.badge.shieldbell.fill"
-        } else if name.hasPrefix("lo") {
-            return "arrow.triangle.2.circlepath"
-        } else if name.hasPrefix("utun") || name.hasPrefix("awdl") {
-            return "antenna.radiowaves.left.and.right"
-        } else {
-            return "network"
-        }
+        .netBarCard(cornerRadius: 10, padding: 8)
+        .padding(.vertical, 3)
     }
 }
 
