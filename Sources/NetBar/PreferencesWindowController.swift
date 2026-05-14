@@ -147,6 +147,23 @@ private struct GeneralPreferencesView: View {
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
+                PreferenceSection(title: appPreferences.text("悬浮框", "Popover")) {
+                    Picker(appPreferences.text("弹出位置", "Popover position"), selection: $appPreferences.popoverPosition) {
+                        ForEach(PopoverPosition.allCases) { position in
+                            Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+
+                    Text(appPreferences.text(
+                        "选择悬浮框相对于菜单栏图标的弹出方向。左侧会从图标左边弹出，右侧会从图标右边弹出。",
+                        "Choose the popover direction relative to the menu bar icon. Left pops out from the left side, Right from the right side."
+                    ))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 HStack {
                     Spacer()
                     Button(appPreferences.text("恢复通用默认值", "Restore General Defaults")) {

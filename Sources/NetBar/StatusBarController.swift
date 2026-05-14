@@ -198,7 +198,8 @@ final class StatusBarController {
             popover.performClose(nil)
         } else {
             guard let button = statusItem.button else { return }
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: .minY)
+            let edge: NSRectEdge = appPreferences.popoverPosition == .left ? .maxX : .minX
+            popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
             // Dismiss popover when clicking outside
             if popoverEventMonitor == nil {
                 popoverEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
