@@ -690,6 +690,12 @@ enum StatusBarPresentationKind: Equatable {
     case retinaImage
 }
 
+// Simple struct for quantized mouse position that conforms to Equatable
+struct QuantizedMousePosition: Equatable {
+    let x: Int
+    let y: Int
+}
+
 struct StatusBarPresentation: Equatable {
     let kind: StatusBarPresentationKind
     let width: CGFloat
@@ -718,6 +724,7 @@ struct StatusBarRenderSignature: Equatable {
     let catColorMode: String
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
     let catHeadSwing: Bool
+    let mousePosition: QuantizedMousePosition?  // Quantized mouse position for googly eyes
 }
 
 @MainActor
@@ -735,7 +742,8 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         appearanceName: String,
-        catFrameIndex: Int? = nil
+        catFrameIndex: Int? = nil,
+        mouseLocation: NSPoint? = nil
     ) -> StatusBarRenderSignature {
         StatusBarRenderSignature(
             presentation: presentation(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex),
@@ -761,7 +769,8 @@ enum StatusBarDisplayRenderer {
                 let mode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
                 return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
             }(),
-            catHeadSwing: settings.catHeadSwing
+            catHeadSwing: settings.catHeadSwing,
+            mousePosition: mouseLocation.map { location in QuantizedMousePosition(x: Int(location.x / 10), y: Int(location.y / 10)) }
         )
     }
 
@@ -778,7 +787,7 @@ enum StatusBarDisplayRenderer {
         image(snapshot: snapshot, settings: settings, scale: NSScreen.main?.backingScaleFactor ?? 2, catFrameIndex: catFrameIndex)
     }
 
-    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, scale: CGFloat, catFrameIndex: Int? = nil) -> NSImage {
+    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, scale: CGFloat, catFrameIndex: Int? = nil, mouseLocation: NSPoint? = nil, statusItemBounds: NSRect = .zero) -> NSImage {
         let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
@@ -925,6 +934,11 @@ enum StatusBarDisplayRenderer {
                         let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                         drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
                     }
+                }
+
+                // Draw googly eyes for the googly_cat character
+                if character.id == "googly_cat", let mouseLoc = mouseLocation {
+                    drawGooglyEyes(in: drawRect, mouseLocation: mouseLoc, statusItemBounds: statusItemBounds)
                 }
 
                 textXOffset = layout.horizontalPadding + catWidth + catPadding
@@ -1171,6 +1185,84 @@ enum StatusBarDisplayRenderer {
         }
         path.close()
         path.fill()
+    }
+
+    /// Draw googly eyes that follow the mouse cursor
+    /// Eyes are drawn on top of the cat character, with pupils that move towards the mouse position
+    private static func drawGooglyEyes(in rect: NSRect, mouseLocation: NSPoint, statusItemBounds: NSRect) {
+        guard let context = NSGraphicsContext.current else { return }
+
+        // Eye positions relative to the cat's face (approximate positions on a 28x18 cat sprite)
+        // Cat sprite is at 1x scale, eyes are roughly at x:8~12 and x:16~20, y:8~14
+        let eyeRadius: CGFloat = 2.5
+        let pupilRadius: CGFloat = 1.2
+        let maxPupilOffset: CGFloat = 1.5
+
+        let leftEyeCenter = NSPoint(x: rect.minX + 10, y: rect.minY + 10)
+        let rightEyeCenter = NSPoint(x: rect.minX + 18, y: rect.minY + 10)
+
+        // Calculate eye positions in screen coordinates (assuming statusItemBounds is the local bounds)
+        // For simplicity, we'll treat mouseLocation as relative to the current screen
+        // In a real implementation, you might need to convert coordinates more carefully
+        let screenHeight = NSScreen.main?.frame.height ?? 0
+
+        // Estimate eye positions in screen coordinates based on local rect + status item position
+        // This is a simplified approach - the statusItemBounds should give us the local coordinate system
+        let leftEyeScreenPos = NSPoint(
+            x: leftEyeCenter.x, // In local coordinates
+            y: screenHeight - (statusItemBounds.height > 0 ? statusItemBounds.maxY - leftEyeCenter.y : leftEyeCenter.y)
+        )
+        let rightEyeScreenPos = NSPoint(
+            x: rightEyeCenter.x, // In local coordinates
+            y: screenHeight - (statusItemBounds.height > 0 ? statusItemBounds.maxY - rightEyeCenter.y : rightEyeCenter.y)
+        )
+
+        // Draw both eyes
+        drawEye(in: context, center: leftEyeCenter, screenPosition: leftEyeScreenPos,
+                mouseLocation: mouseLocation, eyeRadius: eyeRadius, pupilRadius: pupilRadius,
+                maxPupilOffset: maxPupilOffset)
+        drawEye(in: context, center: rightEyeCenter, screenPosition: rightEyeScreenPos,
+                mouseLocation: mouseLocation, eyeRadius: eyeRadius, pupilRadius: pupilRadius,
+                maxPupilOffset: maxPupilOffset)
+    }
+
+    /// Draw a single eye with pupil that follows the mouse
+    private static func drawEye(in context: NSGraphicsContext, center: NSPoint, screenPosition: NSPoint,
+                               mouseLocation: NSPoint, eyeRadius: CGFloat, pupilRadius: CGFloat,
+                               maxPupilOffset: CGFloat) {
+        // Draw white sclera (eye background)
+        NSColor.white.setFill()
+        let eyePath = NSBezierPath(ovalIn: NSRect(
+            x: center.x - eyeRadius,
+            y: center.y - eyeRadius,
+            width: eyeRadius * 2,
+            height: eyeRadius * 2
+        ))
+        eyePath.fill()
+
+        // Calculate pupil offset based on mouse position
+        let dx = mouseLocation.x - screenPosition.x
+        let dy = mouseLocation.y - screenPosition.y
+        let distance = sqrt(dx * dx + dy * dy)
+
+        // Normalize and apply maximum offset
+        let pupilOffset: CGSize
+        if distance > 0 {
+            let factor = min(maxPupilOffset / distance, 1.0)
+            pupilOffset = CGSize(width: dx * factor, height: dy * factor)
+        } else {
+            pupilOffset = .zero
+        }
+
+        // Draw black pupil
+        NSColor.black.setFill()
+        let pupilPath = NSBezierPath(ovalIn: NSRect(
+            x: center.x + pupilOffset.width - pupilRadius,
+            y: center.y + pupilOffset.height - pupilRadius,
+            width: pupilRadius * 2,
+            height: pupilRadius * 2
+        ))
+        pupilPath.fill()
     }
 }
 

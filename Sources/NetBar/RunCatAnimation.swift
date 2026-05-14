@@ -44,6 +44,8 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 10, frameWidth: 34, isTemplate: false, category: .default),
         RunCatCharacter(id: "party-parrot", nameZh: "派对鹦鹉", nameEn: "Party Parrot", nameJa: "パーティーオウム",
                         frameCount: 10, frameWidth: 28, isTemplate: false, category: .default),
+        RunCatCharacter(id: "googly_cat", nameZh: "咕咕眼猫", nameEn: "Googly Eyes Cat", nameJa: "グーグリーキャット",
+                        frameCount: 5, frameWidth: 28, isTemplate: true, category: .default),
 
         // Animal runners
         RunCatCharacter(id: "cheetah", nameZh: "猎豹", nameEn: "Cheetah", nameJa: "チーター",

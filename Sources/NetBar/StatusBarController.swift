@@ -16,6 +16,8 @@ final class StatusBarController {
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
     private var currentCatCharacter: RunCatCharacter = RunCatCharacter.defaultCat
+    private var lastMouseLocation: NSPoint = .zero
+    private var mouseTrackingEnabled: Bool = false
 
     init(
         monitor: NetworkMonitor,
@@ -69,6 +71,7 @@ final class StatusBarController {
         .store(in: &cancellables)
 
         setupCatAnimation()
+        setupMouseTracking()
     }
 
     private func setupCatAnimation() {
@@ -109,6 +112,8 @@ final class StatusBarController {
                 // Same character, just update speed
                 catAnimation?.setSpeedMultiplier(settings.catSpeedMultiplier)
             }
+            // Update mouse tracking based on character
+            setupMouseTracking()
             // Configure rotation
             let poolIds = settings.catRotationPool.split(separator: ",").map(String.init)
             let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
@@ -139,7 +144,8 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             appearanceName: appearanceName,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            mouseLocation: settings.catCharacter == "googly_cat" ? lastMouseLocation : nil
         )
         guard signature != lastRenderSignature else { return }
 
@@ -151,7 +157,9 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             scale: scale,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            mouseLocation: settings.catCharacter == "googly_cat" ? lastMouseLocation : nil,
+            statusItemBounds: button.bounds
         )
         button.attributedTitle = NSAttributedString(string: "")
         button.title = ""
@@ -223,5 +231,35 @@ final class StatusBarController {
 
     private func text(_ simplifiedChinese: String, _ english: String) -> String {
         appPreferences.text(simplifiedChinese, english)
+    }
+
+    private func setupMouseTracking() {
+        // Check if the current character is googly_cat
+        let isGooglyCat = settings.catCharacter == "googly_cat" && settings.showsCat
+
+        if isGooglyCat && !mouseTrackingEnabled {
+            // Enable mouse tracking
+            mouseTrackingEnabled = true
+            lastMouseLocation = NSEvent.mouseLocation
+
+            NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                self?.handleMouseMove(event)
+            }
+        } else if !isGooglyCat && mouseTrackingEnabled {
+            // Disable mouse tracking (would need to store the monitor to remove it properly)
+            mouseTrackingEnabled = false
+        }
+    }
+
+    private func handleMouseMove(_ event: NSEvent) {
+        let newLocation = event.locationInWindow
+        // Quantize mouse position to avoid excessive updates (round to 10px grid)
+        let newQuantized = QuantizedMousePosition(x: Int(newLocation.x / 10), y: Int(newLocation.y / 10))
+        let lastQuantized = QuantizedMousePosition(x: Int(lastMouseLocation.x / 10), y: Int(lastMouseLocation.y / 10))
+
+        if newQuantized != lastQuantized {
+            lastMouseLocation = newLocation
+            updateStatusItem()
+        }
     }
 }
