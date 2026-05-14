@@ -718,6 +718,21 @@ struct StatusBarRenderSignature: Equatable {
     let catColorMode: String
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
     let catHeadSwing: Bool
+    let quantizedMousePosition: QuantizedMousePosition  // For googly_cat eyes tracking
+}
+
+// Quantized mouse position to reduce redraw frequency
+struct QuantizedMousePosition: Equatable {
+    let x: Int  // Quantized to 10px grid
+    let y: Int  // Quantized to 10px grid
+
+    init(_ point: NSPoint) {
+        // Quantize to 10px grid to reduce redraw frequency
+        x = Int(point.x / 10.0)
+        y = Int(point.y / 10.0)
+    }
+
+    static let zero = QuantizedMousePosition(NSPoint.zero)
 }
 
 @MainActor
@@ -761,7 +776,8 @@ enum StatusBarDisplayRenderer {
                 let mode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
                 return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
             }(),
-            catHeadSwing: settings.catHeadSwing
+            catHeadSwing: settings.catHeadSwing,
+            quantizedMousePosition: settings.catCharacter == "googly_cat" ? QuantizedMousePosition(NSEvent.mouseLocation) : .zero
         )
     }
 
@@ -924,6 +940,13 @@ enum StatusBarDisplayRenderer {
                     if let currentContext = NSGraphicsContext.current {
                         let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                         drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
+                    }
+                }
+
+                // Draw Googly Eyes for googly_cat character
+                if character.id == "googly_cat" {
+                    if let currentContext = NSGraphicsContext.current {
+                        drawGooglyEyes(in: currentContext, catRect: drawRect, frameIdx: frameIdx, shouldFlip: shouldFlip)
                     }
                 }
 
@@ -1171,6 +1194,107 @@ enum StatusBarDisplayRenderer {
         }
         path.close()
         path.fill()
+    }
+
+    /// Draw googly eyes that follow the mouse cursor
+    private static func drawGooglyEyes(in context: NSGraphicsContext, catRect: NSRect, frameIdx: Int, shouldFlip: Bool) {
+        // Eye positions for cat character (28x18 base size)
+        let eyeLeft = NSPoint(x: catRect.minX + 10, y: catRect.minY + 10)
+        let eyeRight = NSPoint(x: catRect.minX + 18, y: catRect.minY + 10)
+
+        // Get current mouse position
+        let mouseLocation = NSEvent.mouseLocation
+
+        // Calculate eye direction for each eye
+        drawEye(in: context, center: eyeLeft, mousePos: mouseLocation, shouldFlip: shouldFlip)
+        drawEye(in: context, center: eyeRight, mousePos: mouseLocation, shouldFlip: shouldFlip)
+    }
+
+    /// Draw a single googly eye
+    private static func drawEye(in context: NSGraphicsContext, center: NSPoint, mousePos: NSPoint, shouldFlip: Bool) {
+        // Eye parameters
+        let scleraRadius: CGFloat = 2.5  // White outer part
+        let irisRadius: CGFloat = 1.8    // Colored middle part
+        let pupilRadius: CGFloat = 1.2   // Black center
+        let maxOffset: CGFloat = 1.5     // Maximum pupil movement
+
+        // Calculate direction from eye to mouse
+        let dx = mousePos.x - center.x
+        let dy = mousePos.y - center.y
+        let distance = sqrt(dx * dx + dy * dy)
+
+        // Normalize and scale to max offset
+        let pupilOffset: CGFloat
+        if distance > 0 {
+            let scale = min(maxOffset / distance, 1.0)
+            pupilOffset = scale * maxOffset
+        } else {
+            pupilOffset = 0
+        }
+
+        // Calculate pupil position
+        var pupilX = center.x
+        var pupilY = center.y
+        if distance > 0 {
+            pupilX += (dx / distance) * pupilOffset
+            pupilY += (dy / distance) * pupilOffset
+        }
+
+        // Apply flip transformation if needed
+        var drawCenter = center
+        var drawPupilX = pupilX
+        if shouldFlip {
+            // Mirror horizontally around the center of the cat
+            let catMidX = center.x + 4  // Approximate center of cat character
+            drawCenter.x = catMidX - (center.x - catMidX)
+            drawPupilX = catMidX - (pupilX - catMidX)
+        }
+
+        let ctx = context.cgContext
+
+        // Draw shadow for depth
+        ctx.setShadow(offset: CGSize(width: 0.3, height: -0.3), blur: 0.5, color: NSColor.black.withAlphaComponent(0.3).cgColor)
+
+        // Draw white sclera (outer part of eye)
+        ctx.setFillColor(NSColor.white.cgColor)
+        ctx.fillEllipse(in: CGRect(x: drawCenter.x - scleraRadius, y: drawCenter.y - scleraRadius,
+                                  width: scleraRadius * 2, height: scleraRadius * 2))
+
+        // Reset shadow for iris
+        ctx.setShadow(offset: .zero, blur: 0, color: nil)
+
+        // Draw blue iris (colored middle part)
+        let irisGradient = CGGradient(colorsSpace: CGColorSpaceCreateDeviceRGB(),
+                                    colors: [NSColor.blue.withAlphaComponent(0.8).cgColor,
+                                           NSColor.blue.withAlphaComponent(0.6).cgColor] as CFArray,
+                                    locations: [0.0, 1.0])!
+        ctx.drawRadialGradient(irisGradient,
+                             startCenter: CGPoint(x: drawPupilX, y: pupilY),
+                             startRadius: 0,
+                             endCenter: CGPoint(x: drawPupilX, y: pupilY),
+                             endRadius: irisRadius,
+                             options: [.drawsAfterEndLocation])
+
+        // Draw black pupil (center)
+        ctx.setFillColor(NSColor.black.cgColor)
+        ctx.fillEllipse(in: CGRect(x: drawPupilX - pupilRadius, y: pupilY - pupilRadius,
+                                  width: pupilRadius * 2, height: pupilRadius * 2))
+
+        // Draw primary reflection (top right)
+        let reflectionRadius: CGFloat = 0.4
+        let reflectionOffset: CGFloat = 0.6
+        ctx.setFillColor(NSColor.white.withAlphaComponent(0.9).cgColor)
+        ctx.fillEllipse(in: CGRect(x: drawPupilX + reflectionOffset - reflectionRadius,
+                                  y: pupilY - reflectionOffset - reflectionRadius,
+                                  width: reflectionRadius * 2, height: reflectionRadius * 2))
+
+        // Draw secondary reflection (bottom left, smaller)
+        let secondaryReflectionRadius: CGFloat = 0.25
+        let secondaryReflectionOffset: CGFloat = 0.4
+        ctx.setFillColor(NSColor.white.withAlphaComponent(0.6).cgColor)
+        ctx.fillEllipse(in: CGRect(x: drawPupilX - secondaryReflectionOffset - secondaryReflectionRadius,
+                                  y: pupilY + secondaryReflectionOffset - secondaryReflectionRadius,
+                                  width: secondaryReflectionRadius * 2, height: secondaryReflectionRadius * 2))
     }
 }
 
