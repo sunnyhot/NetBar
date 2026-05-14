@@ -39,7 +39,8 @@ final class StatusBarController {
 
         let popover = NSPopover()
         popover.behavior = .transient
-        popover.contentSize = NSSize(width: 260, height: 120)
+        // Content size is dynamic based on interface count; set a reasonable default
+        popover.contentSize = NSSize(width: 280, height: 300)
         self.popover = popover
 
         // Set content after self is fully initialized so the closure can capture self
