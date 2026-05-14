@@ -67,6 +67,26 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     }
 }
 
+enum PopoverPosition: String, CaseIterable, Identifiable {
+    case left
+    case right
+
+    var id: String { rawValue }
+
+    var title: String {
+        title(language: .simplifiedChinese)
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .left:
+            return language.text("左侧", "Left")
+        case .right:
+            return language.text("右侧", "Right")
+        }
+    }
+}
+
 enum AppAppearanceMode: String, CaseIterable, Identifiable {
     case system
     case light
@@ -131,6 +151,7 @@ final class AppPreferences: ObservableObject {
     @Published var applicationSort: ApplicationSortMode { didSet { save() } }
     @Published var language: AppLanguage { didSet { save() } }
     @Published var appearanceMode: AppAppearanceMode { didSet { save() } }
+    @Published var popoverPosition: PopoverPosition { didSet { save() } }
     @Published private(set) var hasCompletedOnboarding: Bool { didSet { save() } }
     @Published private(set) var launchesAtLogin: Bool
     @Published private(set) var loginItemErrorMessage: String?
@@ -149,6 +170,7 @@ final class AppPreferences: ObservableObject {
         applicationSort = ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? Defaults.language
         appearanceMode = AppAppearanceMode(rawValue: defaults.string(forKey: Keys.appearanceMode) ?? "") ?? Defaults.appearanceMode
+        popoverPosition = PopoverPosition(rawValue: defaults.string(forKey: Keys.popoverPosition) ?? "") ?? Defaults.popoverPosition
         hasCompletedOnboarding = defaults.object(forKey: Keys.hasCompletedOnboarding) as? Bool ?? Defaults.hasCompletedOnboarding
         launchesAtLogin = loginItemManager.refreshStatus()
     }
@@ -186,6 +208,7 @@ final class AppPreferences: ObservableObject {
         applicationSort = Defaults.applicationSort
         language = Defaults.language
         appearanceMode = Defaults.appearanceMode
+        popoverPosition = Defaults.popoverPosition
     }
 
     private func save() {
@@ -194,6 +217,7 @@ final class AppPreferences: ObservableObject {
         defaults.set(applicationSort.rawValue, forKey: Keys.applicationSort)
         defaults.set(language.rawValue, forKey: Keys.language)
         defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
+        defaults.set(popoverPosition.rawValue, forKey: Keys.popoverPosition)
         defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding)
     }
 
@@ -203,6 +227,7 @@ final class AppPreferences: ObservableObject {
         static let applicationSort = ApplicationSortMode.activity
         static let language = AppLanguage.system
         static let appearanceMode = AppAppearanceMode.system
+        static let popoverPosition = PopoverPosition.right
         static let hasCompletedOnboarding = false
     }
 
@@ -212,6 +237,7 @@ final class AppPreferences: ObservableObject {
         static let applicationSort = "app.applicationSort"
         static let language = "app.language"
         static let appearanceMode = "app.appearanceMode"
+        static let popoverPosition = "app.popoverPosition"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
     }
 }
