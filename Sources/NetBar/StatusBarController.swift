@@ -11,7 +11,6 @@ final class StatusBarController {
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
     private let detailsWindowController: DetailsWindowController
-    private let popover: NSPopover
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
@@ -35,24 +34,6 @@ final class StatusBarController {
             monitor: monitor,
             appPreferences: appPreferences,
             openPreferences: openPreferences
-        )
-
-        let popover = NSPopover()
-        popover.behavior = .transient
-        // Content size is dynamic based on interface count; set a reasonable default
-        popover.contentSize = NSSize(width: 280, height: 300)
-        self.popover = popover
-
-        // Set content after self is fully initialized so the closure can capture self
-        popover.contentViewController = NSHostingController(
-            rootView: StatusBarPopoverContentView(
-                monitor: monitor,
-                appPreferences: appPreferences,
-                openMainWindow: { [weak self] in
-                    self?.openMainWindowFromPopover()
-                },
-                openPreferences: openPreferences
-            )
         )
 
         configureStatusItem()
@@ -190,24 +171,7 @@ final class StatusBarController {
             showStatusMenu()
             return
         }
-        togglePopover()
-    }
-
-    private func togglePopover() {
-        if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            guard let button = statusItem.button else { return }
-            let edge: NSRectEdge = appPreferences.popoverPosition == .left ? .maxX : .minX
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
-        }
-    }
-
-    private func openMainWindowFromPopover() {
-        if popover.isShown {
-            popover.performClose(nil)
-        }
-        detailsWindowController.show(anchor: statusItem.button)
+        detailsWindowController.toggle(anchor: statusItem.button)
     }
 
     private func showStatusMenu() {

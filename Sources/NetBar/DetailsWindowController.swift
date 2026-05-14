@@ -6,14 +6,16 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let monitor: NetworkMonitor
     private let appPreferences: AppPreferences
     private let openPreferences: () -> Void
-    private var window: NSWindow?
+    private var panel: NSPanel?
     private let defaultWindowSize = NSSize(width: 520, height: 680)
     private let minimumWindowSize = NSSize(width: 460, height: 500)
 
-    /// Auto-dismiss after this many seconds without user interaction.
-    private static let autoDismissInterval: TimeInterval = 30
+    /// Auto-dismiss after this many seconds without focus.
+    private static let autoDismissInterval: TimeInterval = 10
     private var autoDismissTimer: Timer?
-    private var localEventMonitor: Any?
+    private var resignKeyObserver: Any?
+    private var becomeKeyObserver: Any?
+    private var escapeMonitor: Any?
 
     init(
         monitor: NetworkMonitor,
@@ -26,8 +28,8 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     }
 
     func toggle(anchor: NSStatusBarButton?) {
-        if let window, window.isVisible {
-            window.orderOut(nil)
+        if let panel, panel.isVisible {
+            panel.orderOut(nil)
             return
         }
         show(anchor: anchor)
@@ -36,98 +38,122 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     func show(anchor: NSStatusBarButton? = nil) {
         monitor.refresh()
 
-        let detailsWindow = makeWindowIfNeeded()
-        position(detailsWindow, near: anchor)
+        let floatingPanel = makePanelIfNeeded()
+        position(floatingPanel, near: anchor)
         NSApplication.shared.activate(ignoringOtherApps: true)
-        detailsWindow.makeKeyAndOrderFront(nil)
-        resetAutoDismissTimer()
+        floatingPanel.makeKeyAndOrderFront(nil)
+        cancelAutoDismissTimer()
     }
 
-    private func makeWindowIfNeeded() -> NSWindow {
-        if let window {
-            return window
+    private func makePanelIfNeeded() -> NSPanel {
+        if let panel {
+            return panel
         }
 
-        let detailsWindow = NSWindow(
+        let floatingPanel = NSPanel(
             contentRect: NSRect(origin: .zero, size: defaultWindowSize),
-            styleMask: [.titled, .closable, .miniaturizable, .resizable],
+            styleMask: [.borderless, .resizable],
             backing: .buffered,
             defer: false
         )
-        detailsWindow.title = "NetBar 网络流量"
-        detailsWindow.isReleasedWhenClosed = false
-        detailsWindow.minSize = minimumWindowSize
-        detailsWindow.delegate = self
-        detailsWindow.contentViewController = NSHostingController(
+        floatingPanel.title = "NetBar"
+        floatingPanel.isFloatingPanel = true
+        floatingPanel.level = .floating
+        floatingPanel.hasShadow = true
+        floatingPanel.isMovableByWindowBackground = true
+        floatingPanel.isReleasedWhenClosed = false
+        floatingPanel.minSize = minimumWindowSize
+        floatingPanel.delegate = self
+        floatingPanel.hidesOnDeactivate = false
+        floatingPanel.collectionBehavior = [.moveToActiveSpace]
+        floatingPanel.acceptsMouseMovedEvents = true
+
+        // Transparent window background so rounded corners render correctly
+        floatingPanel.backgroundColor = .clear
+        floatingPanel.isOpaque = false
+
+        let hostingController = NSHostingController(
             rootView: NetworkPopoverView(
                 monitor: monitor,
                 appPreferences: appPreferences,
                 openPreferences: openPreferences
             )
         )
-        detailsWindow.collectionBehavior = [.moveToActiveSpace]
+        floatingPanel.contentViewController = hostingController
 
-        // Ensure mouse-moved events are delivered so we can track hover activity
-        detailsWindow.acceptsMouseMovedEvents = true
+        // Rounded corners on the hosting view
+        hostingController.view.wantsLayer = true
+        hostingController.view.layer?.cornerRadius = 12
+        hostingController.view.layer?.masksToBounds = true
 
-        window = detailsWindow
-        return detailsWindow
+        // Auto-dismiss when the panel loses focus
+        let center = NotificationCenter.default
+        resignKeyObserver = center.addObserver(
+            forName: NSWindow.didResignKeyNotification,
+            object: floatingPanel,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleAutoDismiss()
+            }
+        }
+        becomeKeyObserver = center.addObserver(
+            forName: NSWindow.didBecomeKeyNotification,
+            object: floatingPanel,
+            queue: .main
+        ) { [weak self] _ in
+            Task { @MainActor in
+                self?.cancelAutoDismissTimer()
+            }
+        }
+
+        // Escape key closes the panel
+        escapeMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
+            guard event.keyCode == 53 else { return event }
+            Task { @MainActor in
+                self?.handleEscapeKey()
+            }
+            return event
+        }
+
+        panel = floatingPanel
+        return floatingPanel
     }
 
-    // MARK: - Auto-Dismiss
+    // MARK: - Auto-Dismiss on Focus Loss
 
-    private func resetAutoDismissTimer() {
+    private func scheduleAutoDismiss() {
         autoDismissTimer?.invalidate()
         autoDismissTimer = Timer.scheduledTimer(
             withTimeInterval: Self.autoDismissInterval,
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.autoDismiss()
-            }
-        }
-
-        if localEventMonitor == nil {
-            localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [
-                .mouseMoved, .leftMouseDown, .rightMouseDown,
-                .keyDown, .scrollWheel
-            ]) { [weak self] event in
-                Task { @MainActor in
-                    self?.handleUserEvent(event)
-                }
-                return event
+                self?.closePanel()
             }
         }
     }
 
-    private func handleUserEvent(_ event: NSEvent) {
-        guard let window, window.isVisible else { return }
-        // Only reset for events within our window
-        if event.window === window {
-            resetAutoDismissTimer()
-        }
-    }
-
-    private func autoDismiss() {
-        guard let window, window.isVisible else { return }
-        window.orderOut(nil)
-        invalidateAutoDismiss()
-    }
-
-    private func invalidateAutoDismiss() {
+    private func cancelAutoDismissTimer() {
         autoDismissTimer?.invalidate()
         autoDismissTimer = nil
-        if let monitor = localEventMonitor {
-            NSEvent.removeMonitor(monitor)
-            localEventMonitor = nil
-        }
+    }
+
+    private func closePanel() {
+        guard let panel, panel.isVisible else { return }
+        panel.orderOut(nil)
+    }
+
+    private func handleEscapeKey() {
+        guard let panel, panel.isVisible, panel.isKeyWindow else { return }
+        closePanel()
     }
 
     // MARK: - NSWindowDelegate
 
     nonisolated func windowWillClose(_ notification: Notification) {
         Task { @MainActor in
-            invalidateAutoDismiss()
+            cancelAutoDismissTimer()
         }
     }
 
