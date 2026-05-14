@@ -236,18 +236,20 @@ final class AppUpdater: ObservableObject {
                 infoText += releaseNotes
             }
         }
+        if autoDownload {
+            infoText += "\n\n更新将自动下载，下载完成后会提示安装。"
+        }
         alert.informativeText = infoText
 
         if autoDownload {
-            alert.addButton(withTitle: "立即下载")
-            alert.addButton(withTitle: "稍后提醒")
+            alert.addButton(withTitle: "知道了")
         } else {
             alert.addButton(withTitle: "下载并安装")
             alert.addButton(withTitle: "查看 Release 页面")
             alert.addButton(withTitle: "稍后提醒")
         }
 
-        // Add a "查看完整更新日志" accessory if there are long release notes
+        // Add a scrollable text view for long release notes
         if releaseNotes.count > 200 {
             let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 200))
             let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 420, height: 200))
@@ -270,9 +272,7 @@ final class AppUpdater: ObservableObject {
         NSApplication.shared.activate(ignoringOtherApps: true)
         let response = alert.runModal()
 
-        if autoDownload {
-            // Already downloading in background, dialog is informational only
-        } else {
+        if !autoDownload {
             if response == .alertFirstButtonReturn {
                 // Download and install
                 Task { @MainActor in
