@@ -97,6 +97,65 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(frame.maxY, visibleFrame.maxY, accuracy: 0.5)
     }
 
+    func testDetailsWindowDismissesForOutsideClickButKeepsInsideClick() {
+        let panelFrame = NSRect(x: 100, y: 100, width: 240, height: 320)
+        var globalClick: ((CGPoint) -> Void)?
+        var localClick: ((CGPoint) -> Void)?
+        let monitor = DetailsWindowOutsideClickMonitor(
+            panelFrameProvider: { panelFrame },
+            addGlobalMonitor: { handler in
+                globalClick = handler
+                return MonitorToken(name: "global-details")
+            },
+            addLocalMonitor: { handler in
+                localClick = handler
+                return MonitorToken(name: "local-details")
+            },
+            removeMonitor: { _ in }
+        )
+
+        var dismissCount = 0
+        monitor.setActive(true) {
+            dismissCount += 1
+        }
+
+        globalClick?(CGPoint(x: 120, y: 120))
+        localClick?(CGPoint(x: 500, y: 500))
+
+        XCTAssertEqual(dismissCount, 1)
+    }
+
+    func testDetailsWindowOutsideClickMonitorDoesNotDuplicateAndRemovesMonitors() {
+        var installCount = 0
+        var removedTokens: [String] = []
+        let monitor = DetailsWindowOutsideClickMonitor(
+            panelFrameProvider: { NSRect(x: 0, y: 0, width: 100, height: 100) },
+            addGlobalMonitor: { _ in
+                installCount += 1
+                return MonitorToken(name: "global-details")
+            },
+            addLocalMonitor: { _ in
+                installCount += 1
+                return MonitorToken(name: "local-details")
+            },
+            removeMonitor: { token in
+                removedTokens.append((token as? MonitorToken)?.name ?? "unknown")
+            }
+        )
+
+        monitor.setActive(true) {}
+        monitor.setActive(true) {}
+        monitor.setActive(false)
+        monitor.setActive(false)
+
+        XCTAssertEqual(installCount, 2)
+        XCTAssertEqual(removedTokens.sorted(), ["global-details", "local-details"])
+    }
+
+    func testDetailsWindowAutoDismissIntervalMatchesTransientPopoverBehavior() {
+        XCTAssertEqual(DetailsWindowDismissalPolicy.autoDismissInterval, 10)
+    }
+
     func testAppearanceModeDefaultsToSystemAndPersistsSelection() {
         let defaults = isolatedDefaults()
         var preferences = AppPreferences(
@@ -127,6 +186,208 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(InterfacePresentation.iconName(for: "utun4"), "antenna.radiowaves.left.and.right")
         XCTAssertEqual(InterfacePresentation.iconName(for: "awdl0"), "antenna.radiowaves.left.and.right")
         XCTAssertEqual(InterfacePresentation.iconName(for: "ipsec0"), "network")
+    }
+
+    func testGooglyEyesCharacterIsAvailableAsSpecialMenuBarCharacter() {
+        let character = RunCatCharacter.byId("googly_eyes")
+
+        XCTAssertEqual(character.id, "googly_eyes")
+        XCTAssertEqual(character.category, .special)
+        XCTAssertTrue(character.isGooglyEyes)
+        XCTAssertTrue(character.supportsColorControls)
+        XCTAssertEqual(character.frameWidth, 36)
+    }
+
+    func testGooglyEyesCharacterUsesSelectedSolidColor() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "googly_eyes"
+        settings.catColorMode = CatColorMode.solid.rawValue
+        settings.catColor = PersistedColor(red: 1, green: 0.05, blue: 0.02, alpha: 1)
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.backgroundColor = .olive
+        settings.usesSystemTextColor = false
+        settings.textColor = .black
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0
+        )
+
+        XCTAssertGreaterThan(
+            redPixelCount(in: image, horizontalRegion: 0.0..<1.0),
+            10,
+            dominantColorSummary(in: image)
+        )
+    }
+
+    func testGooglyEyesPupilOffsetTracksMouseAndStaysInsideEye() {
+        let offset = GooglyEyesTracker.pupilOffset(
+            from: CGPoint(x: 10, y: 10),
+            toward: CGPoint(x: 100, y: 70),
+            maximumDistance: 4
+        )
+
+        XCTAssertGreaterThan(offset.width, 0)
+        XCTAssertGreaterThan(offset.height, 0)
+        XCTAssertLessThanOrEqual(hypot(offset.width, offset.height), 4.0001)
+    }
+
+    func testGooglyEyesPupilOffsetIsZeroWhenMouseIsAtEyeCenter() {
+        let offset = GooglyEyesTracker.pupilOffset(
+            from: CGPoint(x: 42, y: 24),
+            toward: CGPoint(x: 42, y: 24),
+            maximumDistance: 4
+        )
+
+        XCTAssertEqual(offset, .zero)
+    }
+
+    func testGooglyEyesScreenCenterSupportsSecondaryDisplayCoordinates() {
+        let center = GooglyEyesTracker.screenCenter(
+            forLocalCenter: CGPoint(x: 12, y: 9),
+            statusItemFrame: CGRect(x: -1440, y: 900, width: 80, height: 24)
+        )
+
+        XCTAssertEqual(center, CGPoint(x: -1428, y: 909))
+
+        let offset = GooglyEyesTracker.pupilOffset(
+            from: center,
+            toward: CGPoint(x: 1800, y: 909),
+            maximumDistance: 4
+        )
+        XCTAssertGreaterThan(offset.width, 0)
+        XCTAssertEqual(offset.height, 0, accuracy: 0.0001)
+        XCTAssertLessThanOrEqual(hypot(offset.width, offset.height), 4.0001)
+    }
+
+    func testGooglyEyesClickMonitorTriggersBlinkFromGlobalAndLocalClicks() {
+        var globalClick: (() -> Void)?
+        var localClick: (() -> Void)?
+        let monitor = GooglyEyesClickMonitor(
+            addGlobalMonitor: { handler in
+                globalClick = handler
+                return MonitorToken(name: "global")
+            },
+            addLocalMonitor: { handler in
+                localClick = handler
+                return MonitorToken(name: "local")
+            },
+            removeMonitor: { _ in }
+        )
+
+        var blinkCount = 0
+        monitor.setActive(true) {
+            blinkCount += 1
+        }
+
+        globalClick?()
+        localClick?()
+
+        XCTAssertEqual(blinkCount, 2)
+    }
+
+    func testGooglyEyesClickMonitorDoesNotDuplicateMonitorsAndRemovesThemWhenInactive() {
+        var installCount = 0
+        var removedTokens: [String] = []
+        let monitor = GooglyEyesClickMonitor(
+            addGlobalMonitor: { _ in
+                installCount += 1
+                return MonitorToken(name: "global")
+            },
+            addLocalMonitor: { _ in
+                installCount += 1
+                return MonitorToken(name: "local")
+            },
+            removeMonitor: { token in
+                removedTokens.append((token as? MonitorToken)?.name ?? "unknown")
+            }
+        )
+
+        monitor.setActive(true) {}
+        monitor.setActive(true) {}
+        monitor.setActive(false) {}
+        monitor.setActive(false) {}
+
+        XCTAssertEqual(installCount, 2)
+        XCTAssertEqual(removedTokens.sorted(), ["global", "local"])
+    }
+
+    func testCharacterSizeAndPositionDefaultPersistAndClamp() {
+        let defaults = isolatedDefaults()
+        var settings = StatusBarSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.catScale, 1.0)
+        XCTAssertEqual(settings.catPosition, .left)
+
+        settings.catScale = 1.2
+        settings.catPosition = .right
+        settings = StatusBarSettings(defaults: defaults)
+
+        XCTAssertEqual(settings.catScale, 1.2)
+        XCTAssertEqual(settings.catPosition, .right)
+
+        settings.catScale = 3
+        XCTAssertEqual(settings.clampedCatScale, 1.3)
+        settings.catScale = 0.1
+        XCTAssertEqual(settings.clampedCatScale, 0.7)
+    }
+
+    func testCharacterScaleContributesToAutomaticWidth() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "googly_eyes"
+        settings.catScale = 1.0
+
+        let defaultWidth = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            catFrameIndex: 0
+        ).width
+
+        settings.catScale = 1.3
+        let enlargedWidth = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            catFrameIndex: 0
+        ).width
+
+        XCTAssertGreaterThan(enlargedWidth - defaultWidth, 10)
+    }
+
+    func testGooglyEyesCharacterCanRenderOnEitherSideOfText() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "googly_eyes"
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.backgroundColor = .olive
+        settings.usesSystemTextColor = false
+        settings.textColor = .black
+
+        settings.catPosition = .left
+        let leftImage = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0
+        )
+
+        settings.catPosition = .right
+        let rightImage = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0
+        )
+
+        XCTAssertGreaterThan(whitePixelCount(in: leftImage, horizontalRegion: 0.0..<0.34), 10)
+        XCTAssertLessThan(whitePixelCount(in: leftImage, horizontalRegion: 0.66..<1.0), 5)
+        XCTAssertGreaterThan(whitePixelCount(in: rightImage, horizontalRegion: 0.66..<1.0), 10)
+        XCTAssertLessThan(whitePixelCount(in: rightImage, horizontalRegion: 0.0..<0.34), 5)
     }
 
     func testNetworkTotalsExcludeVirtualProxyInterfaces() {
@@ -195,6 +456,42 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testAutomaticUpdatePromptUsesActionableButtonsInsteadOfAcknowledgementOnly() {
+        let update = AvailableUpdate(
+            release: release(
+                tagName: "v0.22.0",
+                name: "NetBar 0.22.0",
+                body: "- 新增自动检测更新\n- 优化菜单栏交互"
+            ),
+            asset: GitHubReleaseAsset(
+                name: "NetBar.app.zip",
+                size: 2_400_000,
+                browserDownloadURL: URL(string: "https://github.com/sunnyhot/NetBar/releases/download/v0.22.0/NetBar.app.zip")!
+            )
+        )
+
+        let prompt = UpdatePromptContent.make(
+            for: update,
+            currentVersion: "0.21.0",
+            automaticCheck: true
+        )
+
+        XCTAssertEqual(prompt.messageText, "发现新版本 0.22.0")
+        XCTAssertTrue(prompt.informativeText.contains("当前版本：0.21.0"))
+        XCTAssertTrue(prompt.informativeText.contains("最新版本：0.22.0"))
+        XCTAssertTrue(prompt.informativeText.contains("NetBar 0.22.0"))
+        XCTAssertEqual(prompt.buttonTitles, ["下载并安装", "查看 Release 页面", "稍后提醒"])
+        XCTAssertFalse(prompt.buttonTitles.contains("知道了"))
+        XCTAssertEqual(prompt.releaseNotesText, "- 新增自动检测更新\n- 优化菜单栏交互")
+    }
+
+    func testUpdatePromptMapsAlertResponsesToActions() {
+        XCTAssertEqual(UpdatePromptAction.response(forButtonIndex: 0), .downloadAndInstall)
+        XCTAssertEqual(UpdatePromptAction.response(forButtonIndex: 1), .openReleasePage)
+        XCTAssertEqual(UpdatePromptAction.response(forButtonIndex: 2), .remindLater)
+        XCTAssertNil(UpdatePromptAction.response(forButtonIndex: 3))
+    }
+
     func testApplicationListSearchSortAndHideSystemProcesses() {
         let preferences = AppPreferences(
             defaults: isolatedDefaults(),
@@ -258,6 +555,16 @@ final class PreferencesAndPresentationTests: XCTestCase {
             totalReceivedBytes: UInt64(download),
             totalSentBytes: UInt64(upload),
             sampleCount: 2
+        )
+    }
+
+    private func release(tagName: String, name: String?, body: String?) -> GitHubRelease {
+        GitHubRelease(
+            tagName: tagName,
+            name: name,
+            body: body,
+            htmlURL: URL(string: "https://github.com/sunnyhot/NetBar/releases/tag/\(tagName)")!,
+            assets: []
         )
     }
 
@@ -339,6 +646,78 @@ final class PreferencesAndPresentationTests: XCTestCase {
             bottomMargin: minY
         )
     }
+
+    private func whitePixelCount(in image: NSImage, horizontalRegion: Range<Double>) -> Int {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        let minX = max(Int(Double(bitmap.pixelsWide) * horizontalRegion.lowerBound), 0)
+        let maxX = min(Int(Double(bitmap.pixelsWide) * horizontalRegion.upperBound), bitmap.pixelsWide)
+        var count = 0
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in minX..<maxX {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5,
+                    color.redComponent > 0.78,
+                    color.greenComponent > 0.78,
+                    color.blueComponent > 0.78
+                else { continue }
+                count += 1
+            }
+        }
+
+        return count
+    }
+
+    private func redPixelCount(in image: NSImage, horizontalRegion: Range<Double>) -> Int {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        let minX = max(Int(Double(bitmap.pixelsWide) * horizontalRegion.lowerBound), 0)
+        let maxX = min(Int(Double(bitmap.pixelsWide) * horizontalRegion.upperBound), bitmap.pixelsWide)
+        var count = 0
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in minX..<maxX {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5,
+                    color.redComponent > 0.72,
+                    color.redComponent > color.greenComponent + 0.45,
+                    color.redComponent > color.blueComponent + 0.45
+                else { continue }
+                count += 1
+            }
+        }
+
+        return count
+    }
+
+    private func dominantColorSummary(in image: NSImage) -> String {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            return "missing bitmap"
+        }
+
+        var best = (red: CGFloat.zero, green: CGFloat.zero, blue: CGFloat.zero, alpha: CGFloat.zero)
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                let score = color.redComponent - max(color.greenComponent, color.blueComponent)
+                let bestScore = best.red - max(best.green, best.blue)
+                if color.alphaComponent > 0.5, score > bestScore {
+                    best = (color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent)
+                }
+            }
+        }
+
+        return String(format: "best red-ish rgba %.3f %.3f %.3f %.3f", best.red, best.green, best.blue, best.alpha)
+    }
 }
 
 private final class FakeLoginItemManager: LoginItemManaging {
@@ -377,6 +756,10 @@ private struct EmptyApplicationTrafficReader: ApplicationTrafficReading {
     func readApplications() -> ApplicationTrafficReadResult {
         ApplicationTrafficReadResult(stats: [], errorMessage: nil)
     }
+}
+
+private struct MonitorToken {
+    let name: String
 }
 
 private struct FakeLoginItemError: LocalizedError {

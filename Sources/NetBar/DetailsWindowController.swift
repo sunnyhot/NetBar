@@ -1,6 +1,97 @@
 import AppKit
 import SwiftUI
 
+enum DetailsWindowDismissalPolicy {
+    static let autoDismissInterval: TimeInterval = 10
+
+    static func shouldDismissClick(panelFrame: NSRect?, clickLocation: CGPoint) -> Bool {
+        guard let panelFrame else { return false }
+        return !panelFrame.contains(clickLocation)
+    }
+}
+
+@MainActor
+final class DetailsWindowOutsideClickMonitor {
+    typealias ClickHandler = (CGPoint) -> Void
+    typealias MonitorInstaller = (@escaping ClickHandler) -> Any?
+
+    private static let mouseClickEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+
+    private let panelFrameProvider: () -> NSRect?
+    private let addGlobalMonitor: MonitorInstaller
+    private let addLocalMonitor: MonitorInstaller
+    private let removeMonitor: (Any) -> Void
+    private var monitorTokens: [Any] = []
+    private var onOutsideClick: (() -> Void)?
+    private var isActive = false
+
+    init(
+        panelFrameProvider: @escaping () -> NSRect?,
+        addGlobalMonitor: MonitorInstaller? = nil,
+        addLocalMonitor: MonitorInstaller? = nil,
+        removeMonitor: @escaping (Any) -> Void = { NSEvent.removeMonitor($0) }
+    ) {
+        self.panelFrameProvider = panelFrameProvider
+        self.addGlobalMonitor = addGlobalMonitor ?? { handler in
+            NSEvent.addGlobalMonitorForEvents(matching: Self.mouseClickEvents) { _ in
+                Task { @MainActor in
+                    handler(NSEvent.mouseLocation)
+                }
+            }
+        }
+        self.addLocalMonitor = addLocalMonitor ?? { handler in
+            NSEvent.addLocalMonitorForEvents(matching: Self.mouseClickEvents) { event in
+                Task { @MainActor in
+                    handler(NSEvent.mouseLocation)
+                }
+                return event
+            }
+        }
+        self.removeMonitor = removeMonitor
+    }
+
+    func setActive(_ active: Bool, onOutsideClick: @escaping () -> Void = {}) {
+        if active {
+            self.onOutsideClick = onOutsideClick
+            guard !isActive else { return }
+            isActive = true
+            installMonitors()
+        } else {
+            guard isActive else { return }
+            isActive = false
+            self.onOutsideClick = nil
+            removeMonitors()
+        }
+    }
+
+    private func installMonitors() {
+        if let globalMonitor = addGlobalMonitor({ [weak self] location in
+            self?.handleClick(at: location)
+        }) {
+            monitorTokens.append(globalMonitor)
+        }
+        if let localMonitor = addLocalMonitor({ [weak self] location in
+            self?.handleClick(at: location)
+        }) {
+            monitorTokens.append(localMonitor)
+        }
+    }
+
+    private func removeMonitors() {
+        monitorTokens.forEach(removeMonitor)
+        monitorTokens.removeAll()
+    }
+
+    private func handleClick(at location: CGPoint) {
+        guard DetailsWindowDismissalPolicy.shouldDismissClick(
+            panelFrame: panelFrameProvider(),
+            clickLocation: location
+        ) else { return }
+
+        onOutsideClick?()
+    }
+}
+
 @MainActor
 final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let monitor: NetworkMonitor
@@ -10,12 +101,13 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let defaultWindowSize = NSSize(width: 440, height: 720)
     private let minimumWindowSize = NSSize(width: 440, height: 500)
 
-    /// Auto-dismiss after this many seconds without focus.
-    private static let autoDismissInterval: TimeInterval = 10
     private var autoDismissTimer: Timer?
     private var resignKeyObserver: Any?
     private var becomeKeyObserver: Any?
     private var escapeMonitor: Any?
+    private lazy var outsideClickMonitor = DetailsWindowOutsideClickMonitor { [weak self] in
+        self?.panel?.frame
+    }
 
     init(
         monitor: NetworkMonitor,
@@ -29,7 +121,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
 
     func toggle(anchor: NSStatusBarButton?) {
         if let panel, panel.isVisible {
-            panel.orderOut(nil)
+            closePanel()
             return
         }
         show(anchor: anchor)
@@ -42,7 +134,10 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         position(floatingPanel, near: anchor)
         NSApplication.shared.activate(ignoringOtherApps: true)
         floatingPanel.makeKeyAndOrderFront(nil)
-        cancelAutoDismissTimer()
+        outsideClickMonitor.setActive(true) { [weak self] in
+            self?.closePanel()
+        }
+        scheduleAutoDismiss()
     }
 
     private func makePanelIfNeeded() -> NSPanel {
@@ -104,7 +199,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.cancelAutoDismissTimer()
+                self?.scheduleAutoDismiss()
             }
         }
 
@@ -126,7 +221,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private func scheduleAutoDismiss() {
         autoDismissTimer?.invalidate()
         autoDismissTimer = Timer.scheduledTimer(
-            withTimeInterval: Self.autoDismissInterval,
+            withTimeInterval: DetailsWindowDismissalPolicy.autoDismissInterval,
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor in
@@ -142,6 +237,8 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
 
     private func closePanel() {
         guard let panel, panel.isVisible else { return }
+        cancelAutoDismissTimer()
+        outsideClickMonitor.setActive(false)
         panel.orderOut(nil)
     }
 

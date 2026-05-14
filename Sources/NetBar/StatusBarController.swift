@@ -3,6 +3,79 @@ import Combine
 import SwiftUI
 
 @MainActor
+final class GooglyEyesClickMonitor {
+    typealias MonitorInstaller = (@escaping () -> Void) -> Any?
+
+    private static let mouseClickEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+
+    private let addGlobalMonitor: MonitorInstaller
+    private let addLocalMonitor: MonitorInstaller
+    private let removeMonitor: (Any) -> Void
+    private var monitorTokens: [Any] = []
+    private var onClick: (() -> Void)?
+    private var isActive = false
+
+    init(
+        addGlobalMonitor: MonitorInstaller? = nil,
+        addLocalMonitor: MonitorInstaller? = nil,
+        removeMonitor: @escaping (Any) -> Void = { NSEvent.removeMonitor($0) }
+    ) {
+        self.addGlobalMonitor = addGlobalMonitor ?? { handler in
+            NSEvent.addGlobalMonitorForEvents(matching: Self.mouseClickEvents) { _ in
+                Task { @MainActor in
+                    handler()
+                }
+            }
+        }
+        self.addLocalMonitor = addLocalMonitor ?? { handler in
+            NSEvent.addLocalMonitorForEvents(matching: Self.mouseClickEvents) { event in
+                Task { @MainActor in
+                    handler()
+                }
+                return event
+            }
+        }
+        self.removeMonitor = removeMonitor
+    }
+
+    deinit {
+        monitorTokens.forEach(removeMonitor)
+    }
+
+    func setActive(_ active: Bool, onClick: @escaping () -> Void = {}) {
+        if active {
+            self.onClick = onClick
+            guard !isActive else { return }
+            isActive = true
+            installMonitors()
+        } else {
+            guard isActive else { return }
+            isActive = false
+            self.onClick = nil
+            removeMonitors()
+        }
+    }
+
+    private func installMonitors() {
+        if let globalMonitor = addGlobalMonitor({ [weak self] in self?.handleClick() }) {
+            monitorTokens.append(globalMonitor)
+        }
+        if let localMonitor = addLocalMonitor({ [weak self] in self?.handleClick() }) {
+            monitorTokens.append(localMonitor)
+        }
+    }
+
+    private func removeMonitors() {
+        monitorTokens.forEach(removeMonitor)
+        monitorTokens.removeAll()
+    }
+
+    private func handleClick() {
+        onClick?()
+    }
+}
+
+@MainActor
 final class StatusBarController {
     private let monitor: NetworkMonitor
     private let settings: StatusBarSettings
@@ -16,7 +89,10 @@ final class StatusBarController {
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
     private var currentCatCharacter: RunCatCharacter = RunCatCharacter.defaultCat
-    private var mouseTrackingMonitor: Any? = nil
+    private var googlyEyesTimer: Timer?
+    private var googlyEyesState: GooglyEyesRenderState?
+    private var blinkResetTask: Task<Void, Never>?
+    private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
 
     init(
         monitor: NetworkMonitor,
@@ -41,6 +117,11 @@ final class StatusBarController {
         configureObservers()
         monitor.start()
         updateStatusItem()
+    }
+
+    deinit {
+        googlyEyesTimer?.invalidate()
+        blinkResetTask?.cancel()
     }
 
     private func configureStatusItem() {
@@ -115,20 +196,19 @@ final class StatusBarController {
             let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
             catAnimation?.configureRotation(enabled: settings.catRotationEnabled, intervalMinutes: settings.catRotationIntervalMinutes, pool: pool)
             catAnimation?.setActive(true)
-
-            // Setup mouse tracking for googly_cat
-            setupMouseTracking(for: character)
+            configureGooglyEyesTracking()
         } else {
             catAnimation?.setActive(false)
             catAnimation = nil
             currentCatFrameIndex = nil
-            stopMouseTracking()
+            configureGooglyEyesTracking()
         }
     }
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
         let appearanceName = button.effectiveAppearance.name.rawValue
+        let activeGooglyEyesState = activeGooglyEyesRenderState()
 
         // Update cat animation speed based on network speed
         if settings.showsCat {
@@ -144,7 +224,8 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             appearanceName: appearanceName,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            googlyEyesState: activeGooglyEyesState
         )
         guard signature != lastRenderSignature else { return }
 
@@ -156,7 +237,8 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             scale: scale,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            googlyEyesState: activeGooglyEyesState
         )
         button.attributedTitle = NSAttributedString(string: "")
         button.title = ""
@@ -172,6 +254,7 @@ final class StatusBarController {
     }
 
     @objc private func toggleDetailsWindow(_ sender: AnyObject?) {
+        triggerGooglyEyesBlink()
         if NSApplication.shared.currentEvent?.type == .rightMouseUp {
             showStatusMenu()
             return
@@ -230,30 +313,78 @@ final class StatusBarController {
         appPreferences.text(simplifiedChinese, english)
     }
 
-    // MARK: - Mouse Tracking for Googly Eyes
+    private var isGooglyEyesActive: Bool {
+        settings.showsCat && RunCatCharacter.byId(settings.catCharacter).isGooglyEyes
+    }
 
-    private func setupMouseTracking(for character: RunCatCharacter) {
-        // Only enable mouse tracking for googly_cat
-        if character.id == "googly_cat" {
-            if mouseTrackingMonitor == nil {
-                mouseTrackingMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-                    self?.handleMouseMove(event)
-                }
+    private func configureGooglyEyesTracking() {
+        guard isGooglyEyesActive else {
+            googlyEyesTimer?.invalidate()
+            googlyEyesTimer = nil
+            googlyEyesState = nil
+            blinkResetTask?.cancel()
+            blinkResetTask = nil
+            googlyEyesClickMonitor.setActive(false)
+            return
+        }
+
+        refreshGooglyEyesState()
+        googlyEyesClickMonitor.setActive(true) { [weak self] in
+            self?.triggerGooglyEyesBlink()
+        }
+        guard googlyEyesTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshGooglyEyesState()
             }
-        } else {
-            stopMouseTracking()
         }
+        RunLoop.main.add(timer, forMode: .common)
+        googlyEyesTimer = timer
     }
 
-    private func stopMouseTracking() {
-        if let monitor = mouseTrackingMonitor {
-            NSEvent.removeMonitor(monitor)
-            mouseTrackingMonitor = nil
-        }
-    }
-
-    private func handleMouseMove(_ event: NSEvent) {
-        // Trigger update when mouse moves (only significant updates will render due to signature caching)
+    private func refreshGooglyEyesState() {
+        guard isGooglyEyesActive else { return }
+        let isBlinking = googlyEyesState?.isBlinking == true
+        guard let nextState = makeGooglyEyesState(isBlinking: isBlinking) else { return }
+        guard nextState != googlyEyesState else { return }
+        googlyEyesState = nextState
         updateStatusItem()
+    }
+
+    private func activeGooglyEyesRenderState() -> GooglyEyesRenderState? {
+        guard isGooglyEyesActive else { return nil }
+        if googlyEyesState == nil {
+            googlyEyesState = makeGooglyEyesState(isBlinking: false)
+        }
+        return googlyEyesState
+    }
+
+    private func makeGooglyEyesState(isBlinking: Bool) -> GooglyEyesRenderState? {
+        guard
+            let button = statusItem.button,
+            let statusItemFrame = button.window?.convertToScreen(button.frame)
+        else {
+            return nil
+        }
+
+        return GooglyEyesRenderState(
+            mouseLocation: NSEvent.mouseLocation,
+            statusItemFrame: statusItemFrame,
+            isBlinking: isBlinking
+        )
+    }
+
+    private func triggerGooglyEyesBlink() {
+        guard isGooglyEyesActive else { return }
+        blinkResetTask?.cancel()
+        googlyEyesState = makeGooglyEyesState(isBlinking: true)
+        updateStatusItem()
+
+        blinkResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(160))
+            guard let self, self.isGooglyEyesActive else { return }
+            self.googlyEyesState = self.makeGooglyEyesState(isBlinking: false)
+            self.updateStatusItem()
+        }
     }
 }

@@ -22,6 +22,8 @@ struct RunCatCharacter: Equatable, Identifiable {
     }
 
     var resourceDir: String { id }
+    var isGooglyEyes: Bool { id == Self.googlyEyesID }
+    var supportsColorControls: Bool { isTemplate || isGooglyEyes }
 
     var displayName: String {
         // Use Chinese name by default; can be switched based on locale
@@ -82,6 +84,8 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 2, frameWidth: 17, isTemplate: false, category: .seasonal),
 
         // Special color runners
+        RunCatCharacter(id: googlyEyesID, nameZh: "追踪眼睛", nameEn: "Googly Eyes", nameJa: "Googly Eyes",
+                        frameCount: 2, frameWidth: 36, isTemplate: false, category: .special),
         RunCatCharacter(id: "golden_cat", nameZh: "黄金猫", nameEn: "Golden Cat", nameJa: "黄金のネコ",
                         frameCount: 4, frameWidth: 26, isTemplate: false, category: .special),
         RunCatCharacter(id: "metal_cluster_cat", nameZh: "金属集群猫", nameEn: "Metal Cluster Cat", nameJa: "メタルクラスタ キャット",
@@ -98,7 +102,31 @@ struct RunCatCharacter: Equatable, Identifiable {
         allCharacters.first { $0.id == id } ?? allCharacters[0]
     }
 
+    private static let googlyEyesID = "googly_eyes"
     static let defaultCat = allCharacters[0]
+}
+
+enum GooglyEyesTracker {
+    static func screenCenter(forLocalCenter localCenter: CGPoint, statusItemFrame: CGRect) -> CGPoint {
+        CGPoint(
+            x: statusItemFrame.minX + localCenter.x,
+            y: statusItemFrame.minY + localCenter.y
+        )
+    }
+
+    static func pupilOffset(
+        from eyeCenter: CGPoint,
+        toward mouseLocation: CGPoint,
+        maximumDistance: CGFloat
+    ) -> CGSize {
+        let deltaX = mouseLocation.x - eyeCenter.x
+        let deltaY = mouseLocation.y - eyeCenter.y
+        let distance = hypot(deltaX, deltaY)
+        guard distance > 0, maximumDistance > 0 else { return .zero }
+
+        let scale = min(distance, maximumDistance) / distance
+        return CGSize(width: deltaX * scale, height: deltaY * scale)
+    }
 }
 
 // MARK: - RunCat Animation Controller

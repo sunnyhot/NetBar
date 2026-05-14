@@ -310,9 +310,9 @@ private struct MenuBarPreferencesView: View {
                                 }
                             }
 
-                            // Color mode + picker for template characters
+                            // Color mode + picker for tintable characters
                             let selectedChar = RunCatCharacter.byId(settings.catCharacter)
-                            if selectedChar.isTemplate {
+                            if selectedChar.supportsColorControls {
                                 VStack(alignment: .leading, spacing: 8) {
                                     // Color mode picker
                                     HStack {
@@ -401,6 +401,20 @@ private struct MenuBarPreferencesView: View {
                             }
                         }
                         .padding(.leading, 16)
+
+                        Picker(appPreferences.text("角色位置", "Character Position"), selection: $settings.catPosition) {
+                            ForEach(StatusBarCharacterPosition.allCases) { position in
+                                Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
+                        SliderPreference(
+                            title: appPreferences.text("角色大小", "Character Size"),
+                            value: $settings.catScale,
+                            range: 0.7...1.3,
+                            displayValue: "\(Int((settings.catScale * 100).rounded()))%"
+                        )
 
                         SliderPreference(
                             title: appPreferences.text("动画速度", "Animation Speed"),
@@ -587,7 +601,7 @@ private struct UpdatePreferencesView: View {
                         .foregroundStyle(.secondary)
                 }
 
-                Toggle(appPreferences.text("自动检测并下载更新", "Automatically check and download updates"), isOn: $updater.automaticallyChecksForUpdates)
+                Toggle(appPreferences.text("自动检测更新", "Automatically check for updates"), isOn: $updater.automaticallyChecksForUpdates)
 
                 if updater.isDownloading {
                     VStack(alignment: .leading, spacing: 4) {

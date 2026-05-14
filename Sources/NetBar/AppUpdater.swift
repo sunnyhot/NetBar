@@ -38,6 +38,78 @@ struct AvailableUpdate: Equatable {
     }
 }
 
+enum UpdatePromptAction: Equatable {
+    case downloadAndInstall
+    case openReleasePage
+    case remindLater
+
+    static func response(forButtonIndex index: Int) -> UpdatePromptAction? {
+        switch index {
+        case 0:
+            return .downloadAndInstall
+        case 1:
+            return .openReleasePage
+        case 2:
+            return .remindLater
+        default:
+            return nil
+        }
+    }
+
+    static func response(forModalResponse response: NSApplication.ModalResponse) -> UpdatePromptAction? {
+        switch response {
+        case .alertFirstButtonReturn:
+            return .downloadAndInstall
+        case .alertSecondButtonReturn:
+            return .openReleasePage
+        case .alertThirdButtonReturn:
+            return .remindLater
+        default:
+            return nil
+        }
+    }
+}
+
+struct UpdatePromptContent: Equatable {
+    let messageText: String
+    let informativeText: String
+    let buttonTitles: [String]
+    let releaseNotesText: String?
+
+    static func make(
+        for update: AvailableUpdate,
+        currentVersion: String,
+        automaticCheck: Bool
+    ) -> UpdatePromptContent {
+        let version = update.versionText
+        let releaseName = update.release.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let releaseNotes = update.release.body?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let assetLine = update.asset.size > 0
+            ? "安装包：\(update.asset.name)（\(ByteFormat.bytes(UInt64(update.asset.size)))）"
+            : "安装包：\(update.asset.name)"
+
+        var lines = [
+            automaticCheck ? "NetBar 自动检测到可用更新。" : "NetBar 检测到可用更新。",
+            "当前版本：\(currentVersion)",
+            "最新版本：\(version)",
+            assetLine
+        ]
+
+        if let releaseName, !releaseName.isEmpty, releaseName != version {
+            lines.append("版本名称：\(releaseName)")
+        }
+
+        lines.append("你可以立即下载并安装，也可以先打开 Release 页面查看详情。")
+
+        return UpdatePromptContent(
+            messageText: "发现新版本 \(version)",
+            informativeText: lines.joined(separator: "\n"),
+            buttonTitles: ["下载并安装", "查看 Release 页面", "稍后提醒"],
+            releaseNotesText: releaseNotes?.isEmpty == false ? releaseNotes : nil
+        )
+    }
+}
+
 enum GitHubLatestReleaseLookup {
     static func request(repository: String, currentVersion: String) throws -> URLRequest {
         guard let url = URL(string: "https://github.com/\(repository)/releases/latest") else {
@@ -170,12 +242,7 @@ final class AppUpdater: ObservableObject {
             statusMessage = "发现新版本 \(release.tagName)"
             isChecking = false
 
-            let shouldAutoDownload = automaticallyChecksForUpdates
-            showUpdateInfoDialog(autoDownload: shouldAutoDownload)
-
-            if shouldAutoDownload {
-                await autoDownloadAndPrepare()
-            }
+            showUpdateInfoDialog(automaticCheck: !isManual)
         } catch {
             isChecking = false
             if isManual {
@@ -264,45 +331,23 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    private func showUpdateInfoDialog(autoDownload: Bool) {
+    private func showUpdateInfoDialog(automaticCheck: Bool) {
         guard let update = availableUpdate else { return }
-        let version = update.versionText
-        let releaseName = update.release.name ?? version
-        let releaseNotes = update.release.body ?? ""
+        let prompt = UpdatePromptContent.make(
+            for: update,
+            currentVersion: currentVersion,
+            automaticCheck: automaticCheck
+        )
 
         let alert = NSAlert()
-        alert.messageText = "发现新版本 \(version)"
+        alert.messageText = prompt.messageText
+        alert.informativeText = prompt.informativeText
         alert.alertStyle = .informational
+        prompt.buttonTitles.forEach { alert.addButton(withTitle: $0) }
 
-        // Build informative text with version name and release notes
-        var infoText = "「\(releaseName)」\n"
-        if !releaseNotes.isEmpty {
-            // Truncate very long release notes for the alert
-            let maxLen = 800
-            if releaseNotes.count > maxLen {
-                let idx = releaseNotes.index(releaseNotes.startIndex, offsetBy: maxLen)
-                infoText += String(releaseNotes[..<idx]) + "…"
-            } else {
-                infoText += releaseNotes
-            }
-        }
-        if autoDownload {
-            infoText += "\n\n更新将自动下载，下载完成后会提示安装。"
-        }
-        alert.informativeText = infoText
-
-        if autoDownload {
-            alert.addButton(withTitle: "知道了")
-        } else {
-            alert.addButton(withTitle: "下载并安装")
-            alert.addButton(withTitle: "查看 Release 页面")
-            alert.addButton(withTitle: "稍后提醒")
-        }
-
-        // Add a scrollable text view for long release notes
-        if releaseNotes.count > 200 {
-            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 200))
-            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 420, height: 200))
+        if let releaseNotes = prompt.releaseNotesText {
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 460, height: 220))
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 220))
             textView.string = releaseNotes
             textView.isEditable = false
             textView.isSelectable = true
@@ -322,18 +367,15 @@ final class AppUpdater: ObservableObject {
         NSApplication.shared.activate(ignoringOtherApps: true)
         let response = alert.runModal()
 
-        if !autoDownload {
-            if response == .alertFirstButtonReturn {
-                // Download and install
-                Task { @MainActor in
-                    await downloadAndInstall()
-                }
-            } else if response == .alertSecondButtonReturn && alert.buttons.count == 3 {
-                // View Release page
-                if let url = URL(string: "https://github.com/\(repository)/releases/tag/\(update.release.tagName)") {
-                    NSWorkspace.shared.open(url)
-                }
+        switch UpdatePromptAction.response(forModalResponse: response) {
+        case .downloadAndInstall:
+            Task { @MainActor in
+                await downloadAndInstall()
             }
+        case .openReleasePage:
+            NSWorkspace.shared.open(update.release.htmlURL)
+        case .remindLater, nil:
+            break
         }
     }
 
