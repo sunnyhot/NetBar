@@ -605,6 +605,23 @@ private struct UpdatePreferencesView: View {
                 }
             }
 
+            PreferenceSection(title: appPreferences.text("关于项目", "About Project")) {
+                HStack {
+                    Text(appPreferences.text("GitHub 仓库", "GitHub Repository"))
+                        .font(.system(size: 12, weight: .medium))
+                    Spacer()
+                    Link(destination: URL(string: "https://github.com/sunnyhot/NetBar")!) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "link")
+                                .font(.system(size: 10))
+                            Text("sunnyhot/NetBar")
+                                .font(.system(size: 12, design: .monospaced))
+                        }
+                    }
+                    .help(appPreferences.text("在浏览器中打开 GitHub 仓库", "Open GitHub repository in browser"))
+                }
+            }
+
             Spacer()
         }
     }

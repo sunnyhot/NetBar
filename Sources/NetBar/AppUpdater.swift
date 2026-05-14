@@ -120,7 +120,10 @@ final class AppUpdater: ObservableObject {
             statusMessage = "发现新版本 \(release.tagName)"
             isChecking = false
 
-            if automaticallyChecksForUpdates {
+            let shouldAutoDownload = automaticallyChecksForUpdates
+            showUpdateInfoDialog(autoDownload: shouldAutoDownload)
+
+            if shouldAutoDownload {
                 await autoDownloadAndPrepare()
             }
         } catch {
@@ -208,6 +211,79 @@ final class AppUpdater: ObservableObject {
 
         if response == .alertFirstButtonReturn {
             try? installPreparedUpdate()
+        }
+    }
+
+    private func showUpdateInfoDialog(autoDownload: Bool) {
+        guard let update = availableUpdate else { return }
+        let version = update.versionText
+        let releaseName = update.release.name ?? version
+        let releaseNotes = update.release.body ?? ""
+
+        let alert = NSAlert()
+        alert.messageText = "发现新版本 \(version)"
+        alert.alertStyle = .informational
+
+        // Build informative text with version name and release notes
+        var infoText = "「\(releaseName)」\n"
+        if !releaseNotes.isEmpty {
+            // Truncate very long release notes for the alert
+            let maxLen = 800
+            if releaseNotes.count > maxLen {
+                let idx = releaseNotes.index(releaseNotes.startIndex, offsetBy: maxLen)
+                infoText += String(releaseNotes[..<idx]) + "…"
+            } else {
+                infoText += releaseNotes
+            }
+        }
+        alert.informativeText = infoText
+
+        if autoDownload {
+            alert.addButton(withTitle: "立即下载")
+            alert.addButton(withTitle: "稍后提醒")
+        } else {
+            alert.addButton(withTitle: "下载并安装")
+            alert.addButton(withTitle: "查看 Release 页面")
+            alert.addButton(withTitle: "稍后提醒")
+        }
+
+        // Add a "查看完整更新日志" accessory if there are long release notes
+        if releaseNotes.count > 200 {
+            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 420, height: 200))
+            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 420, height: 200))
+            textView.string = releaseNotes
+            textView.isEditable = false
+            textView.isSelectable = true
+            textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+            textView.backgroundColor = .textBackgroundColor
+            textView.textColor = .textColor
+            textView.isAutomaticQuoteSubstitutionEnabled = false
+            textView.isAutomaticDashSubstitutionEnabled = false
+            textView.isAutomaticTextReplacementEnabled = false
+            scrollView.documentView = textView
+            scrollView.hasVerticalScroller = true
+            scrollView.hasHorizontalScroller = false
+            scrollView.autohidesScrollers = true
+            alert.accessoryView = scrollView
+        }
+
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        let response = alert.runModal()
+
+        if autoDownload {
+            // Already downloading in background, dialog is informational only
+        } else {
+            if response == .alertFirstButtonReturn {
+                // Download and install
+                Task { @MainActor in
+                    await downloadAndInstall()
+                }
+            } else if response == .alertSecondButtonReturn && alert.buttons.count == 3 {
+                // View Release page
+                if let url = URL(string: "https://github.com/\(repository)/releases/tag/\(update.release.tagName)") {
+                    NSWorkspace.shared.open(url)
+                }
+            }
         }
     }
 
