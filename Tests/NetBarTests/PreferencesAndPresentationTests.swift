@@ -171,7 +171,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     func testUpdateLookupUsesGitHubReleaseRedirectInsteadOfRateLimitedAPI() throws {
         let request = try GitHubLatestReleaseLookup.request(
             repository: "sunnyhot/NetBar",
-            currentVersion: "0.20.0"
+            currentVersion: "0.27.0"
         )
 
         XCTAssertEqual(request.url?.absoluteString, "https://github.com/sunnyhot/NetBar/releases/latest")
