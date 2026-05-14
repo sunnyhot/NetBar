@@ -12,7 +12,6 @@ final class StatusBarController {
     private let statusItem: NSStatusItem
     private let detailsWindowController: DetailsWindowController
     private let popover: NSPopover
-    private var popoverEventMonitor: Any?
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
@@ -200,19 +199,6 @@ final class StatusBarController {
             guard let button = statusItem.button else { return }
             let edge: NSRectEdge = appPreferences.popoverPosition == .left ? .maxX : .minX
             popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
-            // Dismiss popover when clicking outside
-            if popoverEventMonitor == nil {
-                popoverEventMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] event in
-                    guard let self else { return }
-                    if let monitor = self.popoverEventMonitor {
-                        NSEvent.removeMonitor(monitor)
-                        self.popoverEventMonitor = nil
-                    }
-                    if self.popover.isShown {
-                        self.popover.performClose(nil)
-                    }
-                }
-            }
         }
     }
 
