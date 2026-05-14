@@ -38,6 +38,56 @@ struct AvailableUpdate: Equatable {
     }
 }
 
+enum GitHubLatestReleaseLookup {
+    static func request(repository: String, currentVersion: String) throws -> URLRequest {
+        guard let url = URL(string: "https://github.com/\(repository)/releases/latest") else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    static func release(from responseURL: URL?, repository: String, assetName: String) throws -> GitHubRelease {
+        guard
+            let tagName = tagName(from: responseURL),
+            let htmlURL = URL(string: "https://github.com/\(repository)/releases/tag/\(tagName)"),
+            let assetURL = URL(string: "https://github.com/\(repository)/releases/download/\(tagName)/\(assetName)")
+        else {
+            throw UpdateError.latestReleaseRedirectMissing
+        }
+
+        return GitHubRelease(
+            tagName: tagName,
+            name: nil,
+            body: nil,
+            htmlURL: htmlURL,
+            assets: [
+                GitHubReleaseAsset(
+                    name: assetName,
+                    size: 0,
+                    browserDownloadURL: assetURL
+                )
+            ]
+        )
+    }
+
+    private static func tagName(from responseURL: URL?) -> String? {
+        guard let responseURL else { return nil }
+        let pathComponents = responseURL.pathComponents
+        guard
+            let tagIndex = pathComponents.firstIndex(of: "tag"),
+            pathComponents.indices.contains(pathComponents.index(after: tagIndex))
+        else {
+            return nil
+        }
+        return pathComponents[pathComponents.index(after: tagIndex)]
+    }
+}
+
 @MainActor
 final class AppUpdater: ObservableObject {
     @Published var automaticallyChecksForUpdates: Bool { didSet { saveSettings() } }
@@ -295,47 +345,17 @@ final class AppUpdater: ObservableObject {
     // MARK: - Network
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
-        guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
-            throw UpdateError.invalidUpdateURL
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-
-        // ETag caching: if we have a cached ETag, send If-None-Match to avoid
-        // consuming the GitHub API rate limit (60 req/hr for anonymous).
-        if let cachedETag = defaults.string(forKey: Keys.cachedETag) {
-            request.setValue(cachedETag, forHTTPHeaderField: "If-None-Match")
-        }
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-
-        // 304 Not Modified → return cached release
-        if let http = response as? HTTPURLResponse, http.statusCode == 304 {
-            if let cachedData = defaults.data(forKey: Keys.cachedReleaseData),
-               let cached = try? JSONDecoder().decode(GitHubRelease.self, from: cachedData) {
-                return cached
-            }
-            // No cached data but got 304; fall through to re-fetch without ETag
-            var retryRequest = URLRequest(url: url)
-            retryRequest.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-            retryRequest.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-            let (retryData, retryResponse) = try await URLSession.shared.data(for: request)
-            try validateHTTPResponse(retryResponse)
-            return try JSONDecoder().decode(GitHubRelease.self, from: retryData)
-        }
-
+        let request = try GitHubLatestReleaseLookup.request(
+            repository: repository,
+            currentVersion: currentVersion
+        )
+        let (_, response) = try await URLSession.shared.data(for: request)
         try validateHTTPResponse(response)
-
-        // Cache the ETag and response data for future 304 responses
-        if let http = response as? HTTPURLResponse,
-           let etag = http.value(forHTTPHeaderField: "ETag") {
-            defaults.set(etag, forKey: Keys.cachedETag)
-            defaults.set(data, forKey: Keys.cachedReleaseData)
-        }
-
-        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+        return try GitHubLatestReleaseLookup.release(
+            from: response.url,
+            repository: repository,
+            assetName: assetName
+        )
     }
 
     private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
@@ -517,8 +537,6 @@ final class AppUpdater: ObservableObject {
 
     private enum Keys {
         static let automaticallyChecksForUpdates = "updates.automaticallyChecksForUpdates"
-        static let cachedETag = "updates.cachedETag"
-        static let cachedReleaseData = "updates.cachedReleaseData"
     }
 }
 
@@ -574,6 +592,7 @@ private final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate
 
 enum UpdateError: LocalizedError {
     case invalidUpdateURL
+    case latestReleaseRedirectMissing
     case httpStatus(Int)
     case unzipFailed
     case appMissingFromArchive
@@ -586,9 +605,11 @@ enum UpdateError: LocalizedError {
         switch self {
         case .invalidUpdateURL:
             return "更新地址无效"
+        case .latestReleaseRedirectMissing:
+            return "无法解析 GitHub 最新版本地址"
         case .httpStatus(let status):
             if status == 403 {
-                return "GitHub API 请求受限（HTTP 403），匿名请求每小时仅 60 次，稍后会自动重试"
+                return "GitHub 请求受限（HTTP 403），稍后会自动重试"
             } else if status == 404 {
                 return "GitHub 上未找到 Release（HTTP 404）"
             } else {

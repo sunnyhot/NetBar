@@ -168,6 +168,33 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testUpdateLookupUsesGitHubReleaseRedirectInsteadOfRateLimitedAPI() throws {
+        let request = try GitHubLatestReleaseLookup.request(
+            repository: "sunnyhot/NetBar",
+            currentVersion: "0.20.0"
+        )
+
+        XCTAssertEqual(request.url?.absoluteString, "https://github.com/sunnyhot/NetBar/releases/latest")
+        XCTAssertEqual(request.httpMethod, "HEAD")
+        XCTAssertNotEqual(request.url?.host, "api.github.com")
+    }
+
+    func testUpdateLookupBuildsReleaseFromLatestRedirectURL() throws {
+        let release = try GitHubLatestReleaseLookup.release(
+            from: URL(string: "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0")!,
+            repository: "sunnyhot/NetBar",
+            assetName: "NetBar.app.zip"
+        )
+
+        XCTAssertEqual(release.tagName, "v0.21.0")
+        XCTAssertEqual(release.htmlURL.absoluteString, "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0")
+        XCTAssertEqual(release.assets.first?.name, "NetBar.app.zip")
+        XCTAssertEqual(
+            release.assets.first?.browserDownloadURL.absoluteString,
+            "https://github.com/sunnyhot/NetBar/releases/download/v0.21.0/NetBar.app.zip"
+        )
+    }
+
     func testApplicationListSearchSortAndHideSystemProcesses() {
         let preferences = AppPreferences(
             defaults: isolatedDefaults(),
