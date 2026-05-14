@@ -841,7 +841,8 @@ enum StatusBarDisplayRenderer {
             let character = RunCatCharacter.byId(settings.catCharacter)
             if character.isTemplate {
                 // Template character with non-solid mode, or solid mode with non-white color
-                catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white
+                // googly_cat always needs explicit rendering (drawGooglyEyes uses white/black)
+                catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white || character.id == "googly_cat"
             } else {
                 // Color characters (gaming-cat, party-parrot, etc.) always have custom colors
                 catHasCustomColor = true
