@@ -315,7 +315,7 @@ private struct ApplicationTrafficList: View {
                         message: emptyMessage
                     )
                 } else {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(application: application)
                         }
@@ -395,47 +395,41 @@ private struct ApplicationTrafficRow: View {
     @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            AppBadge(title: application.displayName)
+        HStack(spacing: 8) {
+            AppBadge(title: application.displayName, pids: application.pids)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: 1) {
                 Text(application.displayName)
-                    .font(.system(size: 12, weight: .bold))
+                    .font(.system(size: 11, weight: .bold))
                     .lineLimit(1)
                     .truncationMode(.tail)
 
                 Text(detailSubtitle)
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
                     .truncationMode(.tail)
             }
-            .frame(width: ApplicationTrafficLayout.detailColumnWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer(minLength: 10)
-
-            VStack(alignment: .trailing, spacing: 4) {
-                MetricPill(
+            HStack(spacing: 8) {
+                CompactMetric(
                     symbol: "arrow.down",
                     value: ByteFormat.speed(application.downloadBytesPerSecond),
-                    tint: .blue,
-                    fixedWidth: ApplicationTrafficLayout.metricColumnWidth
+                    tint: .blue
                 )
-                MetricPill(
+                CompactMetric(
                     symbol: "arrow.up",
                     value: ByteFormat.speed(application.uploadBytesPerSecond),
-                    tint: .orange,
-                    fixedWidth: ApplicationTrafficLayout.metricColumnWidth
+                    tint: .orange
                 )
             }
-            .frame(width: ApplicationTrafficLayout.metricColumnWidth, alignment: .trailing)
         }
-        .netBarCard(cornerRadius: 12, padding: 10)
+        .netBarCard(cornerRadius: 10, padding: 6)
         .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(isHovering ? 0.12 : 0.0), lineWidth: 0.7)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(isHovering ? 0.12 : 0.0), lineWidth: 0.5)
         )
-        .scaleEffect(isHovering ? 1.006 : 1)
         .animation(NetBarMotion.quick, value: isHovering)
         .onHover { isHovering = $0 }
     }
@@ -452,27 +446,56 @@ private struct ApplicationTrafficRow: View {
     }
 }
 
-private enum ApplicationTrafficLayout {
-    static let detailColumnWidth: CGFloat = 124
-    static let metricColumnWidth: CGFloat = 156
+private struct CompactMetric: View {
+    let symbol: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        Label(value, systemImage: symbol)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
+    }
 }
 
 private struct AppBadge: View {
     let title: String
+    let pids: [Int32]
+
+    private var appIcon: NSImage? {
+        for pid in pids {
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                return app.icon
+            }
+        }
+        return nil
+    }
 
     var body: some View {
-        Text(initial)
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
-            .frame(width: 28, height: 28)
-            .background(
-                LinearGradient(
-                    colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 7)
-            )
+        Group {
+            if let icon = appIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Text(initial)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private var initial: String {
