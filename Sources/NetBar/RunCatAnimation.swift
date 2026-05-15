@@ -132,7 +132,22 @@ enum GooglyEyesTracker {
 // MARK: - RunCat Animation Controller
 
 final class RunCatAnimation {
-    private(set) var character: RunCatCharacter
+    struct AnimatedCharacter: Equatable {
+        let id: String
+        let frameCount: Int
+
+        init(asset: CharacterAsset) {
+            id = asset.id
+            frameCount = asset.frameCount
+        }
+
+        init(character: RunCatCharacter) {
+            id = character.id
+            frameCount = character.frameCount
+        }
+    }
+
+    private(set) var character: AnimatedCharacter
     private var speedMultiplier: Double
     private let onFrameChange: (Int) -> Void
     var onCharacterChange: ((RunCatCharacter) -> Void)?
@@ -150,8 +165,8 @@ final class RunCatAnimation {
     // Base interval: seconds between frames at 1x speed, ~2 FPS idle
     private var baseInterval: TimeInterval = 0.5
 
-    init(character: RunCatCharacter, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
-        self.character = character
+    init(character: CharacterAsset, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
+        self.character = AnimatedCharacter(asset: character)
         self.speedMultiplier = speedMultiplier
         self.onFrameChange = onFrameChange
     }
@@ -226,8 +241,12 @@ final class RunCatAnimation {
     }
 
     private func advanceFrame() {
-        currentFrame = (currentFrame + 1) % character.frameCount
+        currentFrame = (currentFrame + 1) % max(character.frameCount, 1)
         onFrameChange(currentFrame)
+    }
+
+    func advanceFrameForTesting() {
+        advanceFrame()
     }
 
     // MARK: - Character Rotation
@@ -259,7 +278,7 @@ final class RunCatAnimation {
         // Pick a random character different from current
         let candidates = pool.filter { $0.id != character.id }
         guard let next = candidates.randomElement() else { return }
-        character = next
+        character = AnimatedCharacter(character: next)
         currentFrame = 0
         onCharacterChange?(next)
     }

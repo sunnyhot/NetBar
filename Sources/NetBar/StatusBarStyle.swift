@@ -838,6 +838,7 @@ struct StatusBarRenderSignature: Equatable {
     let catColorMode: String
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
     let catHeadSwing: Bool
+    let customCharacterRevision: Int
     let googlyEyesState: GooglyEyesRenderState?
 }
 
@@ -849,8 +850,18 @@ struct GooglyEyesRenderState: Equatable {
 
 @MainActor
 enum StatusBarDisplayRenderer {
-    static func presentation(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> StatusBarPresentation {
-        let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
+    static func presentation(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore? = nil,
+        catFrameIndex: Int? = nil
+    ) -> StatusBarPresentation {
+        let layout = layout(
+            snapshot: snapshot,
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex
+        )
         return StatusBarPresentation(
             kind: .retinaImage,
             width: layout.width,
@@ -862,11 +873,17 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         appearanceName: String,
+        customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil
     ) -> StatusBarRenderSignature {
         StatusBarRenderSignature(
-            presentation: presentation(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex),
+            presentation: presentation(
+                snapshot: snapshot,
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex
+            ),
             fontSize: settings.fontSize,
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
@@ -893,12 +910,13 @@ enum StatusBarDisplayRenderer {
                 return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
             }(),
             catHeadSwing: settings.catHeadSwing,
+            customCharacterRevision: customCharacterStore?.revision ?? 0,
             googlyEyesState: googlyEyesState
         )
     }
 
     static func attributedTitle(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSAttributedString {
-        let layout = layout(snapshot: snapshot, settings: settings)
+        let layout = layout(snapshot: snapshot, settings: settings, customCharacterStore: nil)
         return attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings)
     }
 
@@ -909,6 +927,7 @@ enum StatusBarDisplayRenderer {
     static func image(
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil
     ) -> NSImage {
@@ -916,6 +935,7 @@ enum StatusBarDisplayRenderer {
             snapshot: snapshot,
             settings: settings,
             scale: NSScreen.main?.backingScaleFactor ?? 2,
+            customCharacterStore: customCharacterStore,
             catFrameIndex: catFrameIndex,
             googlyEyesState: googlyEyesState
         )
@@ -925,10 +945,16 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         scale: CGFloat,
+        customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil
     ) -> NSImage {
-        let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
+        let layout = layout(
+            snapshot: snapshot,
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex
+        )
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
         let size = NSSize(width: width, height: height)
@@ -971,8 +997,10 @@ enum StatusBarDisplayRenderer {
         let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
         let catHasCustomColor: Bool
         if settings.showsCat, catFrameIndex != nil {
-            let character = RunCatCharacter.byId(settings.catCharacter)
-            if character.isGooglyEyes {
+            let character = characterAsset(settings: settings, customCharacterStore: customCharacterStore)
+            if character.isCustom {
+                catHasCustomColor = true
+            } else if character.isGooglyEyes {
                 catHasCustomColor = true
             } else if character.isTemplate {
                 // Template character with non-solid mode, or solid mode with non-white color
@@ -999,7 +1027,7 @@ enum StatusBarDisplayRenderer {
         )
         if let catIndex = catFrameIndex, settings.showsCat {
             // Load the cat character image from the pre-cached animation frames
-            let character = RunCatCharacter.byId(settings.catCharacter)
+            let character = characterAsset(settings: settings, customCharacterStore: customCharacterStore)
             let frameIdx = catIndex % character.frameCount
 
             // Scale: sprite is at 1x (e.g. 28x36). Draw at 1x logical size.
@@ -1029,15 +1057,11 @@ enum StatusBarDisplayRenderer {
                     facing: settings.catFacing
                 )
             } else {
-                let resourcePath = "RunCat/\(character.id)"
-                let catImage: NSImage?
-                if let url = Bundle.main.url(forResource: "frame_\(frameIdx)", withExtension: "png", subdirectory: resourcePath) {
-                    catImage = NSImage(contentsOf: url)
-                } else if let resPath = Bundle.main.resourcePath {
-                    catImage = NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(character.id)/frame_\(frameIdx).png"))
-                } else {
-                    catImage = nil
-                }
+                let catImage = characterImage(
+                    for: character,
+                    frameIndex: frameIdx,
+                    customCharacterStore: customCharacterStore
+                )
 
                 if let catImg = catImage {
                     let now = Date().timeIntervalSince1970
@@ -1094,7 +1118,7 @@ enum StatusBarDisplayRenderer {
                     }
 
                     // Draw sparkle decorations for modes that have them
-                    if colorMode.hasSparkles {
+                    if !character.isCustom && colorMode.hasSparkles {
                         if let currentContext = NSGraphicsContext.current {
                             let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                             drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
@@ -1266,17 +1290,59 @@ enum StatusBarDisplayRenderer {
         return colorMode.color(at: Date().timeIntervalSince1970, frameIndex: frameIndex, baseColor: settings.catColor)
     }
 
-    private static func characterExtraWidth(settings: StatusBarSettings, catFrameIndex: Int?) -> CGFloat {
+    private static func characterAsset(
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore?
+    ) -> CharacterAsset {
+        CharacterAsset.resolve(
+            id: settings.catCharacter,
+            customCharacters: customCharacterStore?.characters ?? []
+        )
+    }
+
+    private static func characterImage(
+        for character: CharacterAsset,
+        frameIndex: Int,
+        customCharacterStore: CustomCharacterStore?
+    ) -> NSImage? {
+        switch character.source {
+        case .builtIn(let runCatCharacter):
+            let resourcePath = "RunCat/\(runCatCharacter.id)"
+            if let url = Bundle.main.url(forResource: "frame_\(frameIndex)", withExtension: "png", subdirectory: resourcePath) {
+                return NSImage(contentsOf: url)
+            }
+            if let resPath = Bundle.main.resourcePath {
+                return NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(runCatCharacter.id)/frame_\(frameIndex).png"))
+            }
+            return nil
+        case .custom(let customCharacter):
+            guard let customCharacterStore else { return nil }
+            let url = customCharacterStore.frameURL(for: customCharacter, frameIndex: frameIndex)
+            if let image = NSImage(contentsOf: url) {
+                return image
+            }
+            let fallbackURL = customCharacterStore.frameURL(for: customCharacter, frameIndex: 0)
+            return NSImage(contentsOf: fallbackURL)
+        }
+    }
+
+    private static func characterExtraWidth(
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore?,
+        catFrameIndex: Int?
+    ) -> CGFloat {
         guard catFrameIndex != nil, settings.showsCat else { return 0 }
-        let character = RunCatCharacter.byId(settings.catCharacter)
+        let character = characterAsset(settings: settings, customCharacterStore: customCharacterStore)
         return characterSize(for: character, settings: settings).width + characterSpacing(settings: settings)
     }
 
-    private static func characterSize(for character: RunCatCharacter, settings: StatusBarSettings) -> CGSize {
-        CGSize(
-            width: CGFloat(character.frameWidth) * settings.clampedCatScale,
-            height: 18 * settings.clampedCatScale
-        )
+    private static func characterSize(for character: CharacterAsset, settings: StatusBarSettings) -> CGSize {
+        let scale = settings.clampedCatScale
+        let width = CGFloat(character.frameWidth) * scale
+        let height = character.isCustom
+            ? min(CGFloat(character.frameHeight) * scale, 18 * scale)
+            : 18 * scale
+        return CGSize(width: width, height: max(height, 1))
     }
 
     private static func characterSpacing(settings: StatusBarSettings) -> CGFloat {
@@ -1289,8 +1355,12 @@ enum StatusBarDisplayRenderer {
         return baseMirror != swingMirror
     }
 
-    static func width(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> CGFloat {
-        layout(snapshot: snapshot, settings: settings).width
+    static func width(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore? = nil
+    ) -> CGFloat {
+        layout(snapshot: snapshot, settings: settings, customCharacterStore: customCharacterStore).width
     }
 
     static func stableMinimumWidth(settings: StatusBarSettings) -> CGFloat {
@@ -1309,7 +1379,12 @@ enum StatusBarDisplayRenderer {
         settings.showsArrows ? "\(prefix) \(value)" : value
     }
 
-    private static func layout(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> Layout {
+    private static func layout(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore?,
+        catFrameIndex: Int? = nil
+    ) -> Layout {
         let font = NSFont.monospacedDigitSystemFont(
             ofSize: settings.clampedFontSize,
             weight: settings.fontWeight
@@ -1325,7 +1400,11 @@ enum StatusBarDisplayRenderer {
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
             .max() ?? measuredWidth
 
-        let catExtraWidth = characterExtraWidth(settings: settings, catFrameIndex: catFrameIndex)
+        let catExtraWidth = characterExtraWidth(
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex
+        )
         let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth
 

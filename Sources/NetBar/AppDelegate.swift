@@ -6,10 +6,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBarController: StatusBarController?
     private let settings = StatusBarSettings()
     private let appPreferences = AppPreferences()
+    private let customCharacterStore = CustomCharacterStore()
     private let updater = AppUpdater()
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         appPreferences: appPreferences,
+        customCharacterStore: customCharacterStore,
         updater: updater
     )
     private var cancellables: Set<AnyCancellable> = []
@@ -23,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             monitor: NetworkMonitor(),
             settings: settings,
             appPreferences: appPreferences,
+            customCharacterStore: customCharacterStore,
             openPreferences: { [weak self] in
                 self?.showPreferences(nil)
             },
@@ -50,7 +53,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout(_ sender: Any?) {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .applicationName: "NetBar",
-            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.28.4",
+            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.28.5",
             .credits: NSAttributedString(
                 string: "A local menu bar network monitor for macOS.",
                 attributes: [.font: NSFont.systemFont(ofSize: 12)]

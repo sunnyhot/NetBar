@@ -510,6 +510,247 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(StatusBarDisplayRenderer.shouldMirrorCharacter(settings: settings, frameIndex: 1))
     }
 
+    func testCustomCharacterPixelationScaleClampsToSupportedValues() {
+        XCTAssertEqual(CustomCharacterPixelationScale.clamped(0), .off)
+        XCTAssertEqual(CustomCharacterPixelationScale.clamped(4), .four)
+        XCTAssertEqual(CustomCharacterPixelationScale.clamped(99), .eight)
+    }
+
+    func testCustomCharacterMotionStyleDisplayNamesAreLocalized() {
+        XCTAssertEqual(CustomCharacterMotionStyle.bounceBreathe.title(language: .simplifiedChinese), "呼吸/弹跳")
+        XCTAssertEqual(CustomCharacterMotionStyle.swayRun.title(language: .english), "Sway/Run")
+        XCTAssertEqual(CustomCharacterMotionStyle.pixelJitterFlicker.title(language: .simplifiedChinese), "像素抖动/闪烁")
+    }
+
+    func testCharacterAssetFallsBackToBuiltInCatForMissingCustomCharacter() {
+        let asset = CharacterAsset.resolve(id: "custom.missing", customCharacters: [])
+
+        XCTAssertEqual(asset.id, RunCatCharacter.defaultCat.id)
+        XCTAssertFalse(asset.isCustom)
+        XCTAssertEqual(asset.frameCount, RunCatCharacter.defaultCat.frameCount)
+    }
+
+    func testStaticImageProcessorCreatesSixFramesForEachMotionStyle() throws {
+        let image = makeTestImage(size: NSSize(width: 18, height: 18), color: .systemRed)
+
+        for style in CustomCharacterMotionStyle.allCases {
+            let frames = try CustomCharacterImageProcessor.processedStaticFrames(
+                from: image,
+                motionStyle: style,
+                pixelation: .off
+            )
+
+            XCTAssertEqual(frames.count, 6, "Expected \(style) to generate a small looping frame set")
+            XCTAssertTrue(frames.allSatisfy { $0.size.width > 0 && $0.size.height > 0 })
+        }
+    }
+
+    func testPixelationProcessorReducesInteriorColorVariation() throws {
+        let image = makeCheckerboardImage(size: NSSize(width: 16, height: 16))
+        let originalVariation = sampledColorVariation(in: image)
+
+        let pixelated = try CustomCharacterImageProcessor.pixelated(image, scale: .four)
+        let pixelatedVariation = sampledColorVariation(in: pixelated)
+
+        XCTAssertLessThan(pixelatedVariation, originalVariation)
+    }
+
+    func testFrameSequenceImportSortsByLocalizedFilename() throws {
+        let directory = try temporaryDirectory()
+        let frame10 = directory.appendingPathComponent("frame_10.png")
+        let frame2 = directory.appendingPathComponent("frame_2.png")
+        let frame1 = directory.appendingPathComponent("frame_1.png")
+        try writeTestImage(color: .systemRed, to: frame10)
+        try writeTestImage(color: .systemGreen, to: frame2)
+        try writeTestImage(color: .systemBlue, to: frame1)
+
+        let sorted = CustomCharacterImageProcessor.sortedFrameURLs([frame10, frame2, frame1])
+
+        XCTAssertEqual(sorted.map(\.lastPathComponent), ["frame_1.png", "frame_2.png", "frame_10.png"])
+    }
+
+    func testCustomCharacterStorePersistsReloadsRenamesAndDeletesCharacter() throws {
+        let root = try temporaryDirectory()
+        let source = root.appendingPathComponent("source.png")
+        try writeTestImage(color: .systemRed, to: source)
+        let store = CustomCharacterStore(rootDirectory: root)
+
+        let imported = try store.importStaticImage(
+            from: source,
+            displayName: "Blob",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+
+        XCTAssertEqual(store.characters.map(\.displayName), ["Blob"])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: store.frameURL(for: imported, frameIndex: 0).path))
+
+        let reloaded = CustomCharacterStore(rootDirectory: root)
+        XCTAssertEqual(reloaded.characters.map(\.id), [imported.id])
+
+        try reloaded.rename(id: imported.id, displayName: "Renamed")
+        XCTAssertEqual(reloaded.characters.first?.displayName, "Renamed")
+
+        try reloaded.delete(id: imported.id)
+        XCTAssertTrue(reloaded.characters.isEmpty)
+        XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(imported.id).path))
+    }
+
+    func testCustomCharacterStoreRegeneratesStaticFramesWhenMotionChanges() throws {
+        let root = try temporaryDirectory()
+        let source = root.appendingPathComponent("source.png")
+        try writeTestImage(color: .systemPurple, to: source)
+        let store = CustomCharacterStore(rootDirectory: root)
+        let imported = try store.importStaticImage(
+            from: source,
+            displayName: "Pulse",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+        let originalFrame = try Data(contentsOf: store.frameURL(for: imported, frameIndex: 0))
+
+        try store.updateStaticCharacter(
+            id: imported.id,
+            motionStyle: .pixelJitterFlicker,
+            pixelationScale: .four
+        )
+
+        let updated = try XCTUnwrap(store.characters.first)
+        XCTAssertEqual(updated.motionStyle, .pixelJitterFlicker)
+        XCTAssertEqual(updated.pixelationScale, .four)
+        XCTAssertNotEqual(try Data(contentsOf: store.frameURL(for: updated, frameIndex: 0)), originalFrame)
+    }
+
+    func testCustomCharacterStoreIgnoresCorruptManifest() throws {
+        let root = try temporaryDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        try Data("not json".utf8).write(to: root.appendingPathComponent("manifest.json"))
+
+        let store = CustomCharacterStore(rootDirectory: root)
+
+        XCTAssertTrue(store.characters.isEmpty)
+    }
+
+    func testCustomCharacterWidthContributesToAutomaticStatusBarWidth() throws {
+        let root = try temporaryDirectory()
+        let source = root.appendingPathComponent("wide.png")
+        try writeTestImage(size: NSSize(width: 44, height: 18), color: .systemRed, to: source)
+        let store = CustomCharacterStore(rootDirectory: root)
+        let imported = try store.importStaticImage(
+            from: source,
+            displayName: "Wide",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = imported.id
+
+        let width = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            customCharacterStore: store,
+            catFrameIndex: 0
+        ).width
+
+        settings.catCharacter = "cat"
+        let builtInWidth = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            customCharacterStore: store,
+            catFrameIndex: 0
+        ).width
+
+        XCTAssertGreaterThan(width, builtInWidth)
+    }
+
+    func testCustomCharacterRendererDrawsImportedFramePixels() throws {
+        let root = try temporaryDirectory()
+        let source = root.appendingPathComponent("red.png")
+        try writeTestImage(color: .systemRed, to: source)
+        let store = CustomCharacterStore(rootDirectory: root)
+        let imported = try store.importStaticImage(
+            from: source,
+            displayName: "Red",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = imported.id
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.backgroundColor = .olive
+        settings.usesSystemTextColor = false
+        settings.textColor = .black
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            customCharacterStore: store,
+            catFrameIndex: 0
+        )
+
+        XCTAssertGreaterThan(redPixelCount(in: image, horizontalRegion: 0.0..<0.45), 10)
+    }
+
+    func testRunCatAnimationUsesCustomFrameCount() {
+        let character = CustomCharacter(
+            id: "custom.frames",
+            displayName: "Frames",
+            sourceKind: .frameSequence,
+            frameCount: 3,
+            frameWidth: 18,
+            frameHeight: 18,
+            motionStyle: nil,
+            pixelationScale: .off,
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 1)
+        )
+        var frames: [Int] = []
+        let animation = RunCatAnimation(
+            character: CharacterAsset(custom: character),
+            onFrameChange: { frames.append($0) }
+        )
+
+        animation.advanceFrameForTesting()
+        animation.advanceFrameForTesting()
+        animation.advanceFrameForTesting()
+
+        XCTAssertEqual(frames, [1, 2, 0])
+    }
+
+    func testImportPanelClassifiesSingleStaticImageVersusFrameSequence() throws {
+        let directory = try temporaryDirectory()
+        let staticImage = directory.appendingPathComponent("avatar.png")
+        let gif = directory.appendingPathComponent("avatar.gif")
+        let frameA = directory.appendingPathComponent("a.png")
+        let frameB = directory.appendingPathComponent("b.png")
+
+        XCTAssertEqual(CustomCharacterImportSelection.classify([staticImage])?.sourceKind, .staticImage)
+        XCTAssertEqual(CustomCharacterImportSelection.classify([gif])?.sourceKind, .gif)
+        XCTAssertEqual(CustomCharacterImportSelection.classify([frameB, frameA])?.sourceKind, .frameSequence)
+        XCTAssertEqual(CustomCharacterImportSelection.classify([frameB, frameA])?.urls, [frameA, frameB])
+    }
+
+    func testDeletingSelectedCustomCharacterFallsBackToDefaultCat() throws {
+        let root = try temporaryDirectory()
+        let source = root.appendingPathComponent("source.png")
+        try writeTestImage(color: .systemRed, to: source)
+        let store = CustomCharacterStore(rootDirectory: root)
+        let imported = try store.importStaticImage(
+            from: source,
+            displayName: "Delete Me",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+
+        try store.delete(id: imported.id)
+
+        XCTAssertEqual(store.validCharacterID(for: imported.id), RunCatCharacter.defaultCat.id)
+    }
+
     func testNetworkTotalsExcludeVirtualProxyInterfaces() {
         var sampleDate = Date(timeIntervalSince1970: 1_000)
         let reader = SequenceNetworkStatsReader(samples: [
@@ -678,6 +919,54 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    private func temporaryDirectory() throws -> URL {
+        let url = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NetBarTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+
+    private func writeTestImage(
+        size: NSSize = NSSize(width: 18, height: 18),
+        color: NSColor,
+        to url: URL
+    ) throws {
+        let image = makeTestImage(size: size, color: color)
+        guard
+            let tiffData = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffData),
+            let pngData = bitmap.representation(using: .png, properties: [:])
+        else {
+            throw NSError(domain: "NetBarTests", code: 1, userInfo: [NSLocalizedDescriptionKey: "Unable to encode test image"])
+        }
+        try pngData.write(to: url)
+    }
+
+    private func makeTestImage(size: NSSize, color: NSColor) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        NSColor.clear.setFill()
+        NSRect(origin: .zero, size: size).fill()
+        color.setFill()
+        NSBezierPath(roundedRect: NSRect(x: 1, y: 1, width: size.width - 2, height: size.height - 2), xRadius: 2, yRadius: 2).fill()
+        image.unlockFocus()
+        return image
+    }
+
+    private func makeCheckerboardImage(size: NSSize) -> NSImage {
+        let image = NSImage(size: size)
+        image.lockFocus()
+        for y in 0..<Int(size.height) {
+            for x in 0..<Int(size.width) {
+                let hue = CGFloat((x + y) % 16) / 16.0
+                NSColor(calibratedHue: hue, saturation: 0.95, brightness: 0.95, alpha: 1).setFill()
+                NSRect(x: x, y: y, width: 1, height: 1).fill()
+            }
+        }
+        image.unlockFocus()
+        return image
+    }
+
     private func release(tagName: String, name: String?, body: String?) -> GitHubRelease {
         GitHubRelease(
             tagName: tagName,
@@ -837,6 +1126,25 @@ final class PreferencesAndPresentationTests: XCTestCase {
         }
 
         return String(format: "best red-ish rgba %.3f %.3f %.3f %.3f", best.red, best.green, best.blue, best.alpha)
+    }
+
+    private func sampledColorVariation(in image: NSImage) -> Int {
+        guard
+            let tiffData = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffData)
+        else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        var colors = Set<String>()
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 2) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 2) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                colors.insert(String(format: "%.2f-%.2f-%.2f-%.2f", color.redComponent, color.greenComponent, color.blueComponent, color.alphaComponent))
+            }
+        }
+        return colors.count
     }
 
     private func hsbComponents(for color: NSColor) -> (hue: CGFloat, saturation: CGFloat, brightness: CGFloat, alpha: CGFloat)? {

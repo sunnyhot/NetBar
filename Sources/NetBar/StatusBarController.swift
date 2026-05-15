@@ -80,6 +80,7 @@ final class StatusBarController {
     private let monitor: NetworkMonitor
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
+    private let customCharacterStore: CustomCharacterStore
     private let openPreferences: () -> Void
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
@@ -88,7 +89,7 @@ final class StatusBarController {
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
-    private var currentCatCharacter: RunCatCharacter = RunCatCharacter.defaultCat
+    private var currentCatCharacter: CharacterAsset = CharacterAsset(builtIn: .defaultCat)
     private var googlyEyesTimer: Timer?
     private var googlyEyesState: GooglyEyesRenderState?
     private var blinkResetTask: Task<Void, Never>?
@@ -98,12 +99,14 @@ final class StatusBarController {
         monitor: NetworkMonitor,
         settings: StatusBarSettings,
         appPreferences: AppPreferences,
+        customCharacterStore: CustomCharacterStore,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
         self.monitor = monitor
         self.settings = settings
         self.appPreferences = appPreferences
+        self.customCharacterStore = customCharacterStore
         self.openPreferences = openPreferences
         self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -150,11 +153,26 @@ final class StatusBarController {
         }
         .store(in: &cancellables)
 
+        customCharacterStore.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.setupCatAnimation()
+                self?.updateStatusItem()
+            }
+        }
+        .store(in: &cancellables)
+
         setupCatAnimation()
     }
 
     private func setupCatAnimation() {
-        let character = RunCatCharacter.byId(settings.catCharacter)
+        let validCharacterID = customCharacterStore.validCharacterID(for: settings.catCharacter)
+        if validCharacterID != settings.catCharacter {
+            settings.catCharacter = validCharacterID
+        }
+        let character = CharacterAsset.resolve(
+            id: validCharacterID,
+            customCharacters: customCharacterStore.characters
+        )
         
         if settings.showsCat {
             if catAnimation == nil {
@@ -167,7 +185,7 @@ final class StatusBarController {
                     }
                 )
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
-                    self?.currentCatCharacter = newCharacter
+                    self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
                 currentCatCharacter = character
@@ -183,7 +201,7 @@ final class StatusBarController {
                     }
                 )
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
-                    self?.currentCatCharacter = newCharacter
+                    self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
                 currentCatCharacter = character
@@ -194,7 +212,11 @@ final class StatusBarController {
             // Configure rotation
             let poolIds = settings.catRotationPool.split(separator: ",").map(String.init)
             let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
-            catAnimation?.configureRotation(enabled: settings.catRotationEnabled, intervalMinutes: settings.catRotationIntervalMinutes, pool: pool)
+            catAnimation?.configureRotation(
+                enabled: settings.catRotationEnabled && !character.isCustom,
+                intervalMinutes: settings.catRotationIntervalMinutes,
+                pool: pool
+            )
             catAnimation?.setActive(true)
             configureGooglyEyesTracking()
         } else {
@@ -224,6 +246,7 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             appearanceName: appearanceName,
+            customCharacterStore: customCharacterStore,
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
             googlyEyesState: activeGooglyEyesState
         )
@@ -237,6 +260,7 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             scale: scale,
+            customCharacterStore: customCharacterStore,
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
             googlyEyesState: activeGooglyEyesState
         )
@@ -314,7 +338,10 @@ final class StatusBarController {
     }
 
     private var isGooglyEyesActive: Bool {
-        settings.showsCat && RunCatCharacter.byId(settings.catCharacter).isGooglyEyes
+        settings.showsCat && CharacterAsset.resolve(
+            id: customCharacterStore.validCharacterID(for: settings.catCharacter),
+            customCharacters: customCharacterStore.characters
+        ).isGooglyEyes
     }
 
     private func configureGooglyEyesTracking() {

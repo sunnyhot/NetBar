@@ -1,16 +1,24 @@
 import AppKit
 import SwiftUI
+import UniformTypeIdentifiers
 
 @MainActor
 final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
+    private let customCharacterStore: CustomCharacterStore
     private let updater: AppUpdater
     private var window: NSWindow?
 
-    init(settings: StatusBarSettings, appPreferences: AppPreferences, updater: AppUpdater) {
+    init(
+        settings: StatusBarSettings,
+        appPreferences: AppPreferences,
+        customCharacterStore: CustomCharacterStore,
+        updater: AppUpdater
+    ) {
         self.settings = settings
         self.appPreferences = appPreferences
+        self.customCharacterStore = customCharacterStore
         self.updater = updater
     }
 
@@ -38,7 +46,12 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         preferencesWindow.isReleasedWhenClosed = false
         preferencesWindow.delegate = self
         preferencesWindow.contentViewController = NSHostingController(
-            rootView: PreferencesView(settings: settings, appPreferences: appPreferences, updater: updater)
+            rootView: PreferencesView(
+                settings: settings,
+                appPreferences: appPreferences,
+                customCharacterStore: customCharacterStore,
+                updater: updater
+            )
         )
         preferencesWindow.collectionBehavior = [.moveToActiveSpace]
 
@@ -50,6 +63,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
 private struct PreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
     @ObservedObject var updater: AppUpdater
 
     var body: some View {
@@ -62,7 +76,11 @@ private struct PreferencesView: View {
                         Label(appPreferences.text("通用", "General"), systemImage: "gearshape")
                     }
 
-                MenuBarPreferencesView(settings: settings, appPreferences: appPreferences)
+                MenuBarPreferencesView(
+                    settings: settings,
+                    appPreferences: appPreferences,
+                    customCharacterStore: customCharacterStore
+                )
                     .tabItem {
                         Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
                     }
@@ -212,6 +230,7 @@ private struct GeneralPreferencesView: View {
 private struct MenuBarPreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
 
     private func applyCatColor(_ color: Color) {
         let newColor = PersistedColor(color: color)
@@ -249,10 +268,106 @@ private struct MenuBarPreferencesView: View {
         )
     }
 
+    private var selectedCustomCharacter: CustomCharacter? {
+        customCharacterStore.character(id: settings.catCharacter)
+    }
+
+    private func selectedCharacterAsset() -> CharacterAsset {
+        CharacterAsset.resolve(id: settings.catCharacter, customCharacters: customCharacterStore.characters)
+    }
+
+    private func importCustomCharacter() {
+        let panel = NSOpenPanel()
+        panel.title = appPreferences.text("导入自定义角色", "Import Custom Character")
+        panel.prompt = appPreferences.text("导入", "Import")
+        panel.canChooseFiles = true
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = true
+        panel.allowedContentTypes = ["png", "jpg", "jpeg", "gif", "webp", "tiff", "bmp"]
+            .compactMap { UTType(filenameExtension: $0) }
+
+        guard panel.runModal() == .OK, let selection = CustomCharacterImportSelection.classify(panel.urls) else {
+            return
+        }
+
+        do {
+            let defaultName = selection.urls.first?.deletingPathExtension().lastPathComponent ?? appPreferences.text("自定义角色", "Custom Character")
+            let character = try customCharacterStore.importSelection(
+                selection,
+                displayName: defaultName,
+                motionStyle: .bounceBreathe,
+                pixelationScale: .off
+            )
+            settings.catCharacter = character.id
+            settings.showsCat = true
+            settings.usesSystemTextColor = false
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func renameSelectedCustomCharacter(_ name: String) {
+        guard let selectedCustomCharacter else { return }
+        try? customCharacterStore.rename(id: selectedCustomCharacter.id, displayName: name)
+    }
+
+    private func updateSelectedCustomMotion(_ motionStyle: CustomCharacterMotionStyle) {
+        guard let selectedCustomCharacter else { return }
+        do {
+            try customCharacterStore.updateStaticCharacter(
+                id: selectedCustomCharacter.id,
+                motionStyle: motionStyle,
+                pixelationScale: selectedCustomCharacter.pixelationScale
+            )
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func updateSelectedCustomPixelation(_ pixelationScale: CustomCharacterPixelationScale) {
+        guard let selectedCustomCharacter else { return }
+        do {
+            if selectedCustomCharacter.sourceKind == .staticImage {
+                try customCharacterStore.updateStaticCharacter(
+                    id: selectedCustomCharacter.id,
+                    motionStyle: selectedCustomCharacter.motionStyle ?? .bounceBreathe,
+                    pixelationScale: pixelationScale
+                )
+            } else {
+                try customCharacterStore.updatePixelation(id: selectedCustomCharacter.id, pixelationScale: pixelationScale)
+            }
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func deleteSelectedCustomCharacter() {
+        guard let selectedCustomCharacter else { return }
+        do {
+            try customCharacterStore.delete(id: selectedCustomCharacter.id)
+            settings.catCharacter = RunCatCharacter.defaultCat.id
+        } catch {
+            showImportError(error)
+        }
+    }
+
+    private func showImportError(_ error: Error) {
+        let alert = NSAlert()
+        alert.messageText = appPreferences.text("无法导入角色", "Unable to Import Character")
+        alert.informativeText = error.localizedDescription
+        alert.alertStyle = .warning
+        alert.addButton(withTitle: appPreferences.text("知道了", "OK"))
+        alert.runModal()
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                StatusBarPreview(settings: settings, appPreferences: appPreferences)
+                StatusBarPreview(
+                    settings: settings,
+                    appPreferences: appPreferences,
+                    customCharacterStore: customCharacterStore
+                )
 
                 PreferenceSection(title: appPreferences.text("文字", "Text")) {
                     SliderPreference(
@@ -310,8 +425,101 @@ private struct MenuBarPreferencesView: View {
                                 }
                             }
 
+                            VStack(alignment: .leading, spacing: 6) {
+                                HStack {
+                                    Text(appPreferences.text("自定义角色", "Custom Characters"))
+                                        .font(.subheadline)
+                                        .foregroundColor(.secondary)
+                                    Spacer()
+                                    Button {
+                                        importCustomCharacter()
+                                    } label: {
+                                        Label(appPreferences.text("导入", "Import"), systemImage: "plus")
+                                    }
+                                    .font(.system(size: 11, weight: .medium))
+                                }
+
+                                if customCharacterStore.characters.isEmpty {
+                                    Text(appPreferences.text(
+                                        "可导入静态图、GIF 或多张帧图。",
+                                        "Import a static image, GIF, or multiple frame images."
+                                    ))
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                                } else {
+                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))], spacing: 4) {
+                                        ForEach(customCharacterStore.characters) { character in
+                                            Button(action: {
+                                                settings.catCharacter = character.id
+                                                settings.usesSystemTextColor = false
+                                            }) {
+                                                HStack(spacing: 4) {
+                                                    Circle()
+                                                        .fill(settings.catCharacter == character.id ? Color.accentColor : Color.clear)
+                                                        .frame(width: 6, height: 6)
+                                                    Text(character.displayName)
+                                                        .font(.system(size: 12))
+                                                        .lineLimit(1)
+                                                }
+                                                .padding(.horizontal, 6)
+                                                .padding(.vertical, 3)
+                                                .background(
+                                                    RoundedRectangle(cornerRadius: 4)
+                                                        .fill(settings.catCharacter == character.id ? Color.accentColor.opacity(0.15) : Color.clear)
+                                                )
+                                            }
+                                            .buttonStyle(.plain)
+                                        }
+                                    }
+                                }
+                            }
+
+                            if let selectedCustomCharacter {
+                                VStack(alignment: .leading, spacing: 8) {
+                                    HStack {
+                                        Text(appPreferences.text("名称", "Name"))
+                                            .font(.subheadline)
+                                        TextField("", text: Binding(
+                                            get: { selectedCustomCharacter.displayName },
+                                            set: { renameSelectedCustomCharacter($0) }
+                                        ))
+                                        .textFieldStyle(.roundedBorder)
+                                        .frame(maxWidth: 220)
+
+                                        Button(role: .destructive) {
+                                            deleteSelectedCustomCharacter()
+                                        } label: {
+                                            Label(appPreferences.text("删除", "Delete"), systemImage: "trash")
+                                        }
+                                        .font(.system(size: 11, weight: .medium))
+                                    }
+
+                                    if selectedCustomCharacter.sourceKind == .staticImage {
+                                        Picker(appPreferences.text("静态图动效", "Static Motion"), selection: Binding(
+                                            get: { selectedCustomCharacter.motionStyle ?? .bounceBreathe },
+                                            set: { updateSelectedCustomMotion($0) }
+                                        )) {
+                                            ForEach(CustomCharacterMotionStyle.allCases) { style in
+                                                Text(style.title(language: appPreferences.resolvedLanguage)).tag(style)
+                                            }
+                                        }
+                                        .pickerStyle(.segmented)
+                                    }
+
+                                    Picker(appPreferences.text("像素化", "Pixelation"), selection: Binding(
+                                        get: { selectedCustomCharacter.pixelationScale },
+                                        set: { updateSelectedCustomPixelation($0) }
+                                    )) {
+                                        ForEach(CustomCharacterPixelationScale.allCases) { scale in
+                                            Text(scale.displayValue).tag(scale)
+                                        }
+                                    }
+                                    .pickerStyle(.segmented)
+                                }
+                            }
+
                             // Color mode + picker for tintable characters
-                            let selectedChar = RunCatCharacter.byId(settings.catCharacter)
+                            let selectedChar = selectedCharacterAsset()
                             if selectedChar.supportsColorControls {
                                 VStack(alignment: .leading, spacing: 8) {
                                     // Color mode picker
@@ -701,6 +909,7 @@ private struct UpdatePreferencesView: View {
 private struct StatusBarPreview: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
 
     private let previewSnapshot = NetworkSnapshot(
         timestamp: Date(timeIntervalSince1970: 0),
@@ -719,17 +928,35 @@ private struct StatusBarPreview: View {
 
             HStack {
                 Spacer()
-                if StatusBarDisplayRenderer.presentation(snapshot: previewSnapshot, settings: settings, catFrameIndex: settings.showsCat ? 0 : nil).kind == .nativeTitle {
+                if StatusBarDisplayRenderer.presentation(
+                    snapshot: previewSnapshot,
+                    settings: settings,
+                    customCharacterStore: customCharacterStore,
+                    catFrameIndex: settings.showsCat ? 0 : nil
+                ).kind == .nativeTitle {
                     Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
                         .multilineTextAlignment(textAlignment)
                         .frame(
-                            width: StatusBarDisplayRenderer.width(snapshot: previewSnapshot, settings: settings),
+                            width: StatusBarDisplayRenderer.width(
+                                snapshot: previewSnapshot,
+                                settings: settings,
+                                customCharacterStore: customCharacterStore
+                            ),
                             height: max(NSStatusBar.system.thickness, 24)
                         )
                 } else {
-                    Image(nsImage: StatusBarDisplayRenderer.image(snapshot: previewSnapshot, settings: settings, catFrameIndex: settings.showsCat ? 0 : nil))
+                    Image(nsImage: StatusBarDisplayRenderer.image(
+                        snapshot: previewSnapshot,
+                        settings: settings,
+                        customCharacterStore: customCharacterStore,
+                        catFrameIndex: settings.showsCat ? 0 : nil
+                    ))
                         .frame(
-                            width: StatusBarDisplayRenderer.width(snapshot: previewSnapshot, settings: settings),
+                            width: StatusBarDisplayRenderer.width(
+                                snapshot: previewSnapshot,
+                                settings: settings,
+                                customCharacterStore: customCharacterStore
+                            ),
                             height: max(NSStatusBar.system.thickness, 24)
                         )
                 }
