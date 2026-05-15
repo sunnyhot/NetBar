@@ -20,7 +20,7 @@ enum CustomCharacterImageProcessorError: LocalizedError {
 }
 
 enum CustomCharacterImageProcessor {
-    static let generatedStaticFrameCount = 6
+    static let generatedStaticFrameCount = 8
 
     static func sortedFrameURLs(_ urls: [URL]) -> [URL] {
         urls.sorted {
@@ -35,7 +35,11 @@ enum CustomCharacterImageProcessor {
     ) throws -> [NSImage] {
         let source = try normalizedImage(from: image)
         let baseSize = source.size
-        let canvasSize = NSSize(width: max(baseSize.width + 4, 1), height: max(baseSize.height + 4, 1))
+        let canvasPadding = canvasPadding(for: motionStyle)
+        let canvasSize = NSSize(
+            width: max(baseSize.width + canvasPadding.width, 1),
+            height: max(baseSize.height + canvasPadding.height, 1)
+        )
 
         let frames = (0..<generatedStaticFrameCount).map { index in
             frame(from: source, canvasSize: canvasSize, motionStyle: motionStyle, index: index)
@@ -157,6 +161,8 @@ enum CustomCharacterImageProcessor {
         var offset = CGPoint.zero
         var alpha: CGFloat = 1
         var whiteOverlay: CGFloat = 0
+        var rotationDegrees: CGFloat = 0
+        var sparkles: [CGPoint] = []
 
         switch motionStyle {
         case .bounceBreathe:
@@ -177,6 +183,34 @@ enum CustomCharacterImageProcessor {
             offset = jitter[index % jitter.count]
             alpha = index % 2 == 0 ? 0.92 : 1
             whiteOverlay = index % 3 == 0 ? 0.08 : 0
+        case .materialize:
+            let reveal = min(progress * 1.8, 1)
+            alpha = 0.18 + 0.82 * reveal
+            scale = 0.72 + 0.32 * reveal + 0.03 * sin(progress * .pi * 2)
+            offset.y = -2.0 + 2.0 * reveal
+            whiteOverlay = index <= 2 ? 0.14 - CGFloat(index) * 0.04 : 0
+            sparkles = sparklePoints(for: index, count: 3, radius: 0.42)
+        case .flight:
+            offset.x = -2.8 * cos(progress * .pi * 2)
+            offset.y = 3.2 * sin(progress * .pi * 2)
+            rotationDegrees = -10 * sin(progress * .pi * 2)
+            scale = 0.98 + 0.04 * sin(progress * .pi * 4)
+        case .sparkleFlash:
+            let flash = index % 4 == 0
+            alpha = flash ? 0.82 : 1
+            scale = flash ? 1.08 : 0.98 + 0.02 * sin(progress * .pi * 2)
+            whiteOverlay = flash ? 0.24 : 0.04
+            sparkles = sparklePoints(for: index, count: 5, radius: 0.48)
+        case .heartbeat:
+            let beat = [1.0, 1.12, 0.96, 1.06, 1.0, 1.08, 0.98, 1.0]
+            scale = CGFloat(beat[index % beat.count])
+            offset.y = scale > 1.05 ? 0.8 : 0
+            whiteOverlay = scale > 1.08 ? 0.06 : 0
+        case .orbitFloat:
+            offset.x = 2.4 * cos(progress * .pi * 2)
+            offset.y = 2.0 * sin(progress * .pi * 2)
+            rotationDegrees = 7 * sin(progress * .pi * 2)
+            scale = 0.98 + 0.04 * (0.5 + 0.5 * cos(progress * .pi * 2))
         }
 
         let drawSize = NSSize(width: source.size.width * scale, height: source.size.height * scale)
@@ -188,11 +222,74 @@ enum CustomCharacterImageProcessor {
         )
 
         return drawImage(size: canvasSize) {
-            source.draw(in: drawRect, from: NSRect(origin: .zero, size: source.size), operation: .sourceOver, fraction: alpha)
+            draw(source, in: drawRect, rotationDegrees: rotationDegrees, alpha: alpha)
             if whiteOverlay > 0 {
                 NSColor.white.withAlphaComponent(whiteOverlay).setFill()
                 NSRect(origin: .zero, size: canvasSize).fill(using: .sourceAtop)
             }
+            drawSparkles(sparkles, in: canvasSize, alpha: max(alpha, 0.45))
+        }
+    }
+
+    private static func canvasPadding(for motionStyle: CustomCharacterMotionStyle) -> NSSize {
+        switch motionStyle {
+        case .bounceBreathe, .swayRun, .pixelJitterFlicker:
+            return NSSize(width: 4, height: 4)
+        case .materialize, .heartbeat, .sparkleFlash:
+            return NSSize(width: 8, height: 8)
+        case .flight, .orbitFloat:
+            return NSSize(width: 10, height: 10)
+        }
+    }
+
+    private static func draw(
+        _ source: NSImage,
+        in drawRect: NSRect,
+        rotationDegrees: CGFloat,
+        alpha: CGFloat
+    ) {
+        NSGraphicsContext.saveGraphicsState()
+        if rotationDegrees != 0 {
+            let transform = NSAffineTransform()
+            transform.translateX(by: drawRect.midX, yBy: drawRect.midY)
+            transform.rotate(byDegrees: rotationDegrees)
+            transform.translateX(by: -drawRect.midX, yBy: -drawRect.midY)
+            transform.concat()
+        }
+        source.draw(
+            in: drawRect,
+            from: NSRect(origin: .zero, size: source.size),
+            operation: .sourceOver,
+            fraction: alpha
+        )
+        NSGraphicsContext.restoreGraphicsState()
+    }
+
+    private static func sparklePoints(for index: Int, count: Int, radius: CGFloat) -> [CGPoint] {
+        (0..<count).map { sparkleIndex in
+            let angle = (CGFloat(index + sparkleIndex * 2) / CGFloat(generatedStaticFrameCount)) * .pi * 2
+            let distance = radius + CGFloat(sparkleIndex % 2) * 0.08
+            return CGPoint(
+                x: 0.5 + cos(angle) * distance,
+                y: 0.5 + sin(angle) * distance * 0.78
+            )
+        }
+    }
+
+    private static func drawSparkles(_ points: [CGPoint], in canvasSize: NSSize, alpha: CGFloat) {
+        guard !points.isEmpty else { return }
+        for (index, point) in points.enumerated() {
+            let center = CGPoint(x: point.x * canvasSize.width, y: point.y * canvasSize.height)
+            let length = CGFloat(1.7 + Double(index % 2) * 0.8)
+            let path = NSBezierPath()
+            path.move(to: CGPoint(x: center.x - length, y: center.y))
+            path.line(to: CGPoint(x: center.x + length, y: center.y))
+            path.move(to: CGPoint(x: center.x, y: center.y - length))
+            path.line(to: CGPoint(x: center.x, y: center.y + length))
+            path.lineWidth = 0.9
+            path.lineCapStyle = .round
+            NSColor.white.withAlphaComponent(0.55 * alpha).setStroke()
+            path.stroke()
         }
     }
 
