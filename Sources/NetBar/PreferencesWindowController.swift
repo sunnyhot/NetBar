@@ -99,6 +99,7 @@ private struct PreferencesView: View {
         .padding(20)
         .frame(minWidth: 620, minHeight: 520)
         .netBarPanelBackground()
+        .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
     }
 }
 

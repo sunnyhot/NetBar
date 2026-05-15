@@ -161,6 +161,14 @@ final class StatusBarController {
         }
         .store(in: &cancellables)
 
+        appPreferences.$appearanceMode.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.lastRenderSignature = nil
+                self?.updateStatusItem()
+            }
+        }
+        .store(in: &cancellables)
+
         setupCatAnimation()
     }
 

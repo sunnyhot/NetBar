@@ -204,6 +204,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(darkAppearance?.name, .darkAqua)
     }
 
+    func testAppearanceModeResolvesToCorrectSwiftUIColorScheme() {
+        XCTAssertNil(AppAppearanceMode.system.preferredColorScheme)
+        XCTAssertEqual(AppAppearanceMode.light.preferredColorScheme, .light)
+        XCTAssertEqual(AppAppearanceMode.dark.preferredColorScheme, .dark)
+    }
+
     func testAppearanceModeRawValueRoundTripPreservesSemantic() {
         for mode in AppAppearanceMode.allCases {
             XCTAssertEqual(AppAppearanceMode(rawValue: mode.rawValue), mode)

@@ -61,6 +61,7 @@ struct NetworkPopoverView: View {
         }
         .frame(minWidth: 440, idealWidth: 440, maxWidth: 440, minHeight: 500, idealHeight: 720, maxHeight: .infinity)
         .netBarPanelBackground()
+        .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
     }
 }
 

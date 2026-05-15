@@ -25,6 +25,7 @@ struct StatusBarPopoverContentView: View {
         .padding(10)
         .frame(width: 312)
         .netBarPanelBackground()
+        .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
     }
 
     // MARK: - Total Speed

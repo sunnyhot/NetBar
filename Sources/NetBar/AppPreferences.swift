@@ -1,4 +1,5 @@
 import AppKit
+import SwiftUI
 import ServiceManagement
 
 enum ApplicationSortMode: String, CaseIterable, Identifiable {
@@ -122,6 +123,17 @@ enum AppAppearanceMode: String, CaseIterable, Identifiable {
 
     var nsAppearance: NSAppearance? {
         nsAppearanceName.flatMap { NSAppearance(named: $0) }
+    }
+
+    var preferredColorScheme: ColorScheme? {
+        switch self {
+        case .system:
+            return nil
+        case .light:
+            return .light
+        case .dark:
+            return .dark
+        }
     }
 }
 
