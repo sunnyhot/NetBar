@@ -227,10 +227,37 @@ private struct GeneralPreferencesView: View {
     }
 }
 
+enum MenuBarPreferenceGroup: String, CaseIterable {
+    case preview
+    case display
+    case character
+    case animation
+    case layout
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .preview:
+            return language.text("实时预览", "Live Preview")
+        case .display:
+            return language.text("显示内容", "Display")
+        case .character:
+            return language.text("角色", "Character")
+        case .animation:
+            return language.text("动画与轮换", "Animation & Rotation")
+        case .layout:
+            return language.text("宽度与布局", "Width & Layout")
+        }
+    }
+}
+
 private struct MenuBarPreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
+    @State private var previewFrameTimeline = CharacterPreviewFrameTimeline()
+    @State private var characterPickerFrameTick = 0
+
+    private static let previewFrameInterval: TimeInterval = 1.0 / 8.0
 
     private func applyCatColor(_ color: Color) {
         let newColor = PersistedColor(color: color)
@@ -274,6 +301,11 @@ private struct MenuBarPreferencesView: View {
 
     private func selectedCharacterAsset() -> CharacterAsset {
         CharacterAsset.resolve(id: settings.catCharacter, customCharacters: customCharacterStore.characters)
+    }
+
+    private var selectedPreviewFrameIndex: Int? {
+        guard settings.showsCat else { return nil }
+        return previewFrameTimeline.frameIndex(for: selectedCharacterAsset())
     }
 
     private func importCustomCharacter() {
@@ -360,404 +392,37 @@ private struct MenuBarPreferencesView: View {
         alert.runModal()
     }
 
+    private func rotationPoolContains(_ characterID: String) -> Bool {
+        settings.catRotationPool.split(separator: ",").map(String.init).contains(characterID)
+    }
+
+    private func toggleRotationPoolCharacter(_ characterID: String) {
+        var ids = settings.catRotationPool.split(separator: ",").map(String.init)
+        if ids.contains(characterID) {
+            ids.removeAll { $0 == characterID }
+        } else {
+            ids.append(characterID)
+        }
+        settings.catRotationPool = ids.joined(separator: ",")
+    }
+
+    private func customCharacterIconName(for character: CustomCharacter) -> String {
+        switch character.sourceKind {
+        case .staticImage:
+            return "photo"
+        case .gif, .frameSequence:
+            return "film"
+        }
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                StatusBarPreview(
-                    settings: settings,
-                    appPreferences: appPreferences,
-                    customCharacterStore: customCharacterStore
-                )
-
-                PreferenceSection(title: appPreferences.text("文字", "Text")) {
-                    SliderPreference(
-                        title: appPreferences.text("字号", "Font size"),
-                        value: $settings.fontSize,
-                        range: 8...18,
-                        displayValue: "\(Int(settings.fontSize.rounded()))"
-                    )
-
-                    Toggle(appPreferences.text("系统文字颜色", "System text color"), isOn: $settings.usesSystemTextColor)
-
-                    if !settings.usesSystemTextColor {
-                        ColorPicker(appPreferences.text("文字颜色", "Text color"), selection: textColorBinding, supportsOpacity: true)
-                    }
-
-                    Toggle(appPreferences.text("加粗", "Bold"), isOn: $settings.isBold)
-                    Toggle(appPreferences.text("显示箭头", "Show arrows"), isOn: $settings.showsArrows)
-                    Toggle(appPreferences.text("奔跑的小猫", "Running Cat"), isOn: $settings.showsCat)
-
-                    if settings.showsCat {
-                        // Character picker with categories
-                        VStack(alignment: .leading, spacing: 8) {
-                            Text(appPreferences.text("角色", "Character"))
-                                .font(.headline)
-
-                            ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(category.rawValue)
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-
-                                    let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
-                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 80))], spacing: 4) {
-                                        ForEach(charsInCategory) { character in
-                                            Button(action: {
-                                                settings.catCharacter = character.id
-                                            }) {
-                                                HStack(spacing: 4) {
-                                                    Circle()
-                                                        .fill(settings.catCharacter == character.id ? Color.accentColor : Color.clear)
-                                                        .frame(width: 6, height: 6)
-                                                    Text(character.displayName)
-                                                        .font(.system(size: 12))
-                                                }
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 3)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 4)
-                                                        .fill(settings.catCharacter == character.id ? Color.accentColor.opacity(0.15) : Color.clear)
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                }
-                            }
-
-                            VStack(alignment: .leading, spacing: 6) {
-                                HStack {
-                                    Text(appPreferences.text("自定义角色", "Custom Characters"))
-                                        .font(.subheadline)
-                                        .foregroundColor(.secondary)
-                                    Spacer()
-                                    Button {
-                                        importCustomCharacter()
-                                    } label: {
-                                        Label(appPreferences.text("导入", "Import"), systemImage: "plus")
-                                    }
-                                    .font(.system(size: 11, weight: .medium))
-                                }
-
-                                if customCharacterStore.characters.isEmpty {
-                                    Text(appPreferences.text(
-                                        "可导入静态图、GIF 或多张帧图。",
-                                        "Import a static image, GIF, or multiple frame images."
-                                    ))
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                                } else {
-                                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 96))], spacing: 4) {
-                                        ForEach(customCharacterStore.characters) { character in
-                                            Button(action: {
-                                                settings.catCharacter = character.id
-                                                settings.usesSystemTextColor = false
-                                            }) {
-                                                HStack(spacing: 4) {
-                                                    Circle()
-                                                        .fill(settings.catCharacter == character.id ? Color.accentColor : Color.clear)
-                                                        .frame(width: 6, height: 6)
-                                                    Text(character.displayName)
-                                                        .font(.system(size: 12))
-                                                        .lineLimit(1)
-                                                }
-                                                .padding(.horizontal, 6)
-                                                .padding(.vertical, 3)
-                                                .background(
-                                                    RoundedRectangle(cornerRadius: 4)
-                                                        .fill(settings.catCharacter == character.id ? Color.accentColor.opacity(0.15) : Color.clear)
-                                                )
-                                            }
-                                            .buttonStyle(.plain)
-                                        }
-                                    }
-                                }
-                            }
-
-                            if let selectedCustomCharacter {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    HStack {
-                                        Text(appPreferences.text("名称", "Name"))
-                                            .font(.subheadline)
-                                        TextField("", text: Binding(
-                                            get: { selectedCustomCharacter.displayName },
-                                            set: { renameSelectedCustomCharacter($0) }
-                                        ))
-                                        .textFieldStyle(.roundedBorder)
-                                        .frame(maxWidth: 220)
-
-                                        Button(role: .destructive) {
-                                            deleteSelectedCustomCharacter()
-                                        } label: {
-                                            Label(appPreferences.text("删除", "Delete"), systemImage: "trash")
-                                        }
-                                        .font(.system(size: 11, weight: .medium))
-                                    }
-
-                                    if selectedCustomCharacter.sourceKind == .staticImage {
-                                        Picker(appPreferences.text("静态图动效", "Static Motion"), selection: Binding(
-                                            get: { selectedCustomCharacter.motionStyle ?? .bounceBreathe },
-                                            set: { updateSelectedCustomMotion($0) }
-                                        )) {
-                                            ForEach(CustomCharacterMotionStyle.allCases) { style in
-                                                Text(style.title(language: appPreferences.resolvedLanguage)).tag(style)
-                                            }
-                                        }
-                                        .pickerStyle(.segmented)
-                                    }
-
-                                    Picker(appPreferences.text("像素化", "Pixelation"), selection: Binding(
-                                        get: { selectedCustomCharacter.pixelationScale },
-                                        set: { updateSelectedCustomPixelation($0) }
-                                    )) {
-                                        ForEach(CustomCharacterPixelationScale.allCases) { scale in
-                                            Text(scale.displayValue).tag(scale)
-                                        }
-                                    }
-                                    .pickerStyle(.segmented)
-                                }
-                            }
-
-                            // Color mode + picker for tintable characters
-                            let selectedChar = selectedCharacterAsset()
-                            if selectedChar.supportsColorControls {
-                                VStack(alignment: .leading, spacing: 8) {
-                                    // Color mode picker
-                                    HStack {
-                                        Text(appPreferences.text("颜色模式", "Color Mode"))
-                                            .font(.subheadline)
-                                        Picker("", selection: $settings.catColorMode) {
-                                            ForEach(CatColorMode.allCases) { mode in
-                                                Text(mode.displayName(zh: appPreferences.resolvedLanguage == .simplifiedChinese))
-                                                    .tag(mode.rawValue)
-                                            }
-                                        }
-                                        .labelsHidden()
-                                        .frame(maxWidth: 200)
-                                        .onChange(of: settings.catColorMode) { newMode in
-                                            // Auto-disable system text color when fancy mode is selected
-                                            // because template rendering would override the custom colors
-                                            if newMode != CatColorMode.solid.rawValue && settings.usesSystemTextColor {
-                                                settings.usesSystemTextColor = false
-                                            }
-                                        }
-                                    }
-
-                                    // Solid color picker (only shown in solid mode)
-                                    if settings.catColorMode == CatColorMode.solid.rawValue {
-                                        HStack {
-                                            Text(appPreferences.text("角色颜色", "Character Color"))
-                                                .font(.subheadline)
-                                            ColorPicker("", selection: Binding(
-                                                get: { settings.catColor.swiftUIColor },
-                                                set: {
-                                                    settings.catColor = PersistedColor(color: $0)
-                                                    // Auto-disable system text color when choosing a non-white color
-                                                    if PersistedColor(color: $0) != PersistedColor.white && settings.usesSystemTextColor {
-                                                        settings.usesSystemTextColor = false
-                                                    }
-                                                }
-                                            ))
-                                            .labelsHidden()
-
-                                            // Preset colors (with black and white)
-                                            HStack(spacing: 4) {
-                                                PresetColorButton(color: Color.white, label: "白", settings: settings)
-                                                PresetColorButton(color: Color.black, label: "黑", settings: settings)
-                                                PresetColorButton(color: Color.red, label: "红", settings: settings)
-                                                PresetColorButton(color: Color.orange, label: "橙", settings: settings)
-                                                PresetColorButton(color: Color.yellow, label: "黄", settings: settings)
-                                                PresetColorButton(color: Color.green, label: "绿", settings: settings)
-                                                PresetColorButton(color: Color.cyan, label: "青", settings: settings)
-                                                PresetColorButton(color: Color.blue, label: "蓝", settings: settings)
-                                                PresetColorButton(color: Color.purple, label: "紫", settings: settings)
-                                            }
-
-                                            // Reset to white
-                                            Button(appPreferences.text("重置", "Reset")) {
-                                                settings.catColor = .white
-                                            }
-                                            .font(.system(size: 10))
-                                        }
-                                    }
-
-                                    // Dynamic mode preview hint
-                                    if settings.catColorMode != CatColorMode.solid.rawValue {
-                                        Text(appPreferences.text(
-                                            "炫彩模式：颜色将自动变化 ✨",
-                                            "Dynamic mode: color will change automatically ✨"
-                                        ))
-                                        .font(.system(size: 10))
-                                        .foregroundColor(.secondary)
-                                    }
-
-                                    // Warning when usesSystemTextColor is on but cat has custom color
-                                    if settings.usesSystemTextColor && (settings.catColorMode != CatColorMode.solid.rawValue || settings.catColor != PersistedColor.white) {
-                                        HStack(spacing: 4) {
-                                            Image(systemName: "exclamationmark.triangle.fill")
-                                                .foregroundColor(.orange)
-                                                .font(.system(size: 10))
-                                            Text(appPreferences.text(
-                                                "系统文字颜色会覆盖角色颜色，已自动切换为自定义颜色",
-                                                "System text color overrides character color, auto-switched to custom color"
-                                            ))
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.orange)
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                        .padding(.leading, 16)
-
-                        Picker(appPreferences.text("角色位置", "Character Position"), selection: $settings.catPosition) {
-                            ForEach(StatusBarCharacterPosition.allCases) { position in
-                                Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        Picker(appPreferences.text("角色朝向", "Character Facing"), selection: $settings.catFacing) {
-                            ForEach(StatusBarCharacterFacing.allCases) { facing in
-                                Text(facing.title(language: appPreferences.resolvedLanguage)).tag(facing)
-                            }
-                        }
-                        .pickerStyle(.segmented)
-
-                        SliderPreference(
-                            title: appPreferences.text("角色大小", "Character Size"),
-                            value: $settings.catScale,
-                            range: 0.7...1.3,
-                            displayValue: "\(Int((settings.catScale * 100).rounded()))%"
-                        )
-
-                        SliderPreference(
-                            title: appPreferences.text("动画速度", "Animation Speed"),
-                            value: $settings.catSpeedMultiplier,
-                            range: 0.25...4.0,
-                            displayValue: String(format: "%.1fx", settings.catSpeedMultiplier)
-                        )
-
-                        Text(appPreferences.text(
-                            "速度倍率影响动画快慢：1.0x 为默认，2.0x 为两倍速，0.5x 为半速。",
-                            "Speed multiplier affects animation rate: 1.0x is default, 2.0x is double speed, 0.5x is half speed."
-                        ))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-
-                        // Rotation settings
-                        Divider()
-                        Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: $settings.catRotationEnabled)
-                        Toggle(appPreferences.text("摇头效果", "Head Swing"), isOn: $settings.catHeadSwing)
-
-                        if settings.catRotationEnabled {
-                            SliderPreference(
-                                title: appPreferences.text("轮换间隔", "Rotation Interval"),
-                                value: $settings.catRotationIntervalMinutes,
-                                range: 1...60,
-                                displayValue: String(format: "%.0f分钟", settings.catRotationIntervalMinutes)
-                            )
-                            Text(appPreferences.text(
-                                "每隔一定时间随机切换到下一个角色。",
-                                "Randomly switch to the next character at intervals."
-                            ))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-
-                            VStack(alignment: .leading, spacing: 4) {
-                                Text(appPreferences.text("轮换角色池（空=全部）", "Rotation Pool (empty=all)"))
-                                    .font(.subheadline)
-                                ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(category.rawValue)
-                                            .font(.system(size: 10))
-                                            .foregroundColor(.secondary)
-                                        let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
-                                        LazyVGrid(columns: [GridItem(.adaptive(minimum: 70))], spacing: 2) {
-                                            ForEach(charsInCategory) { character in
-                                                Button(action: {
-                                                    var ids = settings.catRotationPool.split(separator: ",").map(String.init)
-                                                    if ids.contains(character.id) {
-                                                        ids.removeAll { $0 == character.id }
-                                                    } else {
-                                                        ids.append(character.id)
-                                                    }
-                                                    settings.catRotationPool = ids.joined(separator: ",")
-                                                }) {
-                                                    HStack(spacing: 3) {
-                                                        Image(systemName: settings.catRotationPool.split(separator: ",").map(String.init).contains(character.id) ? "checkmark.square" : "square")
-                                                            .font(.system(size: 9))
-                                                        Text(character.displayName)
-                                                            .font(.system(size: 11))
-                                                    }
-                                                }
-                                                .buttonStyle(.plain)
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                PreferenceSection(title: appPreferences.text("宽度与布局", "Width and Layout")) {
-                    Toggle(appPreferences.text("自动宽度", "Automatic width"), isOn: $settings.usesAutomaticWidth)
-
-                    if !settings.usesAutomaticWidth {
-                        SliderPreference(
-                            title: appPreferences.text("手动宽度", "Manual width"),
-                            value: $settings.itemWidth,
-                            range: 36...220,
-                            displayValue: "\(Int(settings.itemWidth.rounded()))"
-                        )
-                    }
-
-                    SliderPreference(
-                        title: appPreferences.text("行距", "Line spacing"),
-                        value: $settings.lineSpacing,
-                        range: -5...8,
-                        displayValue: String(format: "%.1f", settings.lineSpacing)
-                    )
-
-                    Picker(appPreferences.text("排列", "Order"), selection: $settings.order) {
-                        ForEach(StatusBarOrder.allCases) { order in
-                            Text(order.title(language: appPreferences.resolvedLanguage)).tag(order)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-
-                    Picker(appPreferences.text("对齐", "Alignment"), selection: $settings.alignment) {
-                        ForEach(StatusBarAlignment.allCases) { alignment in
-                            Text(alignment.title(language: appPreferences.resolvedLanguage)).tag(alignment)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                }
-
-                PreferenceSection(title: appPreferences.text("背景", "Background")) {
-                    Toggle(appPreferences.text("透明背景", "Transparent background"), isOn: transparentBackgroundBinding)
-
-                    if settings.showsBackground {
-                        ColorPicker(appPreferences.text("背景颜色", "Background color"), selection: backgroundColorBinding, supportsOpacity: true)
-
-                        SliderPreference(
-                            title: appPreferences.text("不透明度", "Opacity"),
-                            value: $settings.backgroundOpacity,
-                            range: 0...1,
-                            displayValue: "\(Int((settings.backgroundOpacity * 100).rounded()))%"
-                        )
-
-                        Text(appPreferences.text(
-                            "启用背景时会使用 Retina bitmap 渲染；透明背景会使用原生菜单栏文字渲染，性能和清晰度更稳。",
-                            "Backgrounds use Retina bitmap rendering. Transparent mode uses native menu bar text for steadier performance and clarity."
-                        ))
-                            .font(.system(size: 11))
-                            .foregroundStyle(.tertiary)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                }
+                previewPreferences
+                displayPreferences
+                characterPreferences
+                animationPreferences
+                layoutPreferences
 
                 HStack {
                     Spacer()
@@ -767,6 +432,462 @@ private struct MenuBarPreferencesView: View {
                 }
             }
             .padding(.trailing, 2)
+        }
+        .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .common).autoconnect()) { _ in
+            guard settings.showsCat else {
+                previewFrameTimeline.reset()
+                characterPickerFrameTick = 0
+                return
+            }
+            previewFrameTimeline.advance(for: selectedCharacterAsset())
+            characterPickerFrameTick = (characterPickerFrameTick + 1) % 10_000
+        }
+    }
+
+    private var previewPreferences: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.preview.title(language: appPreferences.resolvedLanguage)) {
+            StatusBarPreview(
+                settings: settings,
+                appPreferences: appPreferences,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: selectedPreviewFrameIndex
+            )
+
+            MenuBarSettingsSummary(
+                settings: settings,
+                appPreferences: appPreferences,
+                characterName: selectedCharacterAsset().displayName
+            )
+        }
+    }
+
+    private var displayPreferences: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.display.title(language: appPreferences.resolvedLanguage)) {
+            MenuBarSubsectionHeader(
+                systemImage: "textformat.size",
+                title: appPreferences.text("文字样式", "Text Style")
+            )
+
+            SliderPreference(
+                title: appPreferences.text("字号", "Font size"),
+                value: $settings.fontSize,
+                range: 8...18,
+                displayValue: "\(Int(settings.fontSize.rounded()))"
+            )
+
+            HStack {
+                Toggle(appPreferences.text("系统文字颜色", "System text color"), isOn: $settings.usesSystemTextColor)
+                Toggle(appPreferences.text("加粗", "Bold"), isOn: $settings.isBold)
+                Toggle(appPreferences.text("显示箭头", "Show arrows"), isOn: $settings.showsArrows)
+            }
+
+            if !settings.usesSystemTextColor {
+                ColorPicker(appPreferences.text("文字颜色", "Text color"), selection: textColorBinding, supportsOpacity: true)
+            }
+
+            Divider()
+
+            MenuBarSubsectionHeader(
+                systemImage: "rectangle.inset.filled",
+                title: appPreferences.text("背景", "Background")
+            )
+
+            Toggle(appPreferences.text("透明背景", "Transparent background"), isOn: transparentBackgroundBinding)
+
+            if settings.showsBackground {
+                ColorPicker(appPreferences.text("背景颜色", "Background color"), selection: backgroundColorBinding, supportsOpacity: true)
+
+                SliderPreference(
+                    title: appPreferences.text("不透明度", "Opacity"),
+                    value: $settings.backgroundOpacity,
+                    range: 0...1,
+                    displayValue: "\(Int((settings.backgroundOpacity * 100).rounded()))%"
+                )
+
+                Text(appPreferences.text(
+                    "启用背景时会使用 Retina bitmap 渲染；透明背景会使用原生菜单栏文字渲染，性能和清晰度更稳。",
+                    "Backgrounds use Retina bitmap rendering. Transparent mode uses native menu bar text for steadier performance and clarity."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    private var characterPreferences: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.character.title(language: appPreferences.resolvedLanguage)) {
+            Toggle(appPreferences.text("启用角色", "Enable Character"), isOn: $settings.showsCat)
+
+            if settings.showsCat {
+                MenuBarSubsectionHeader(
+                    systemImage: "pawprint",
+                    title: appPreferences.text("内置角色", "Built-in Characters")
+                )
+
+                characterCatalog
+
+                Divider()
+
+                customCharacterCatalog
+
+                if let selectedCustomCharacter {
+                    Divider()
+                    selectedCustomCharacterControls(selectedCustomCharacter)
+                }
+
+                let selectedChar = selectedCharacterAsset()
+                if selectedChar.supportsColorControls {
+                    Divider()
+                    characterColorControls
+                }
+            } else {
+                Text(appPreferences.text(
+                    "开启后可选择内置角色或导入自定义角色。",
+                    "Enable this to choose built-in characters or import your own."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var characterCatalog: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(category.rawValue)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 118))], spacing: 5) {
+                        ForEach(charsInCategory) { character in
+                            Button(action: {
+                                settings.catCharacter = character.id
+                            }) {
+                                CharacterChoiceLabel(
+                                    title: character.displayName,
+                                    isSelected: settings.catCharacter == character.id
+                                ) {
+                                    CharacterPickerPreviewIcon(
+                                        character: character,
+                                        frameIndex: characterPickerFrameTick
+                                    )
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    private var customCharacterCatalog: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                MenuBarSubsectionHeader(
+                    systemImage: "photo.badge.plus",
+                    title: appPreferences.text("自定义角色", "Custom Characters")
+                )
+                Spacer()
+                Button {
+                    importCustomCharacter()
+                } label: {
+                    Label(appPreferences.text("导入", "Import"), systemImage: "plus")
+                }
+                .font(.system(size: 11, weight: .medium))
+            }
+
+            if customCharacterStore.characters.isEmpty {
+                Text(appPreferences.text(
+                    "可导入静态图、GIF 或多张帧图。",
+                    "Import a static image, GIF, or multiple frame images."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+            } else {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 108))], spacing: 5) {
+                    ForEach(customCharacterStore.characters) { character in
+                        Button(action: {
+                            settings.catCharacter = character.id
+                            settings.usesSystemTextColor = false
+                        }) {
+                        CharacterChoiceLabel(
+                            title: character.displayName,
+                            isSelected: settings.catCharacter == character.id
+                        ) {
+                            Image(systemName: customCharacterIconName(for: character))
+                                .font(.system(size: 12, weight: .semibold))
+                                .frame(width: 24, height: 18)
+                        }
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+            }
+        }
+    }
+
+    private func selectedCustomCharacterControls(_ character: CustomCharacter) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            MenuBarSubsectionHeader(
+                systemImage: "slider.horizontal.3",
+                title: appPreferences.text("当前自定义角色", "Selected Custom Character")
+            )
+
+            HStack {
+                Text(appPreferences.text("名称", "Name"))
+                    .font(.subheadline)
+                TextField("", text: Binding(
+                    get: { character.displayName },
+                    set: { renameSelectedCustomCharacter($0) }
+                ))
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 220)
+
+                Button(role: .destructive) {
+                    deleteSelectedCustomCharacter()
+                } label: {
+                    Label(appPreferences.text("删除", "Delete"), systemImage: "trash")
+                }
+                .font(.system(size: 11, weight: .medium))
+            }
+
+            if character.sourceKind == .staticImage {
+                Picker(appPreferences.text("静态图动效", "Static Motion"), selection: Binding(
+                    get: { character.motionStyle ?? .bounceBreathe },
+                    set: { updateSelectedCustomMotion($0) }
+                )) {
+                    ForEach(CustomCharacterMotionStyle.allCases) { style in
+                        Text(style.title(language: appPreferences.resolvedLanguage)).tag(style)
+                    }
+                }
+                .pickerStyle(.menu)
+                .frame(maxWidth: 240)
+            }
+
+            Picker(appPreferences.text("像素化", "Pixelation"), selection: Binding(
+                get: { character.pixelationScale },
+                set: { updateSelectedCustomPixelation($0) }
+            )) {
+                ForEach(CustomCharacterPixelationScale.allCases) { scale in
+                    Text(scale.displayValue).tag(scale)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+    }
+
+    private var characterColorControls: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            MenuBarSubsectionHeader(
+                systemImage: "paintpalette",
+                title: appPreferences.text("角色颜色", "Character Color")
+            )
+
+            HStack {
+                Text(appPreferences.text("颜色模式", "Color Mode"))
+                    .font(.subheadline)
+                Picker("", selection: $settings.catColorMode) {
+                    ForEach(CatColorMode.allCases) { mode in
+                        Text(mode.displayName(zh: appPreferences.resolvedLanguage == .simplifiedChinese))
+                            .tag(mode.rawValue)
+                    }
+                }
+                .labelsHidden()
+                .frame(maxWidth: 220)
+                .onChange(of: settings.catColorMode) { newMode in
+                    if newMode != CatColorMode.solid.rawValue && settings.usesSystemTextColor {
+                        settings.usesSystemTextColor = false
+                    }
+                }
+            }
+
+            if settings.catColorMode == CatColorMode.solid.rawValue {
+                HStack {
+                    Text(appPreferences.text("纯色", "Solid Color"))
+                        .font(.subheadline)
+                    ColorPicker("", selection: Binding(
+                        get: { settings.catColor.swiftUIColor },
+                        set: { applyCatColor($0) }
+                    ))
+                    .labelsHidden()
+
+                    HStack(spacing: 4) {
+                        PresetColorButton(color: Color.white, label: "白", settings: settings)
+                        PresetColorButton(color: Color.black, label: "黑", settings: settings)
+                        PresetColorButton(color: Color.red, label: "红", settings: settings)
+                        PresetColorButton(color: Color.orange, label: "橙", settings: settings)
+                        PresetColorButton(color: Color.yellow, label: "黄", settings: settings)
+                        PresetColorButton(color: Color.green, label: "绿", settings: settings)
+                        PresetColorButton(color: Color.cyan, label: "青", settings: settings)
+                        PresetColorButton(color: Color.blue, label: "蓝", settings: settings)
+                        PresetColorButton(color: Color.purple, label: "紫", settings: settings)
+                    }
+
+                    Button(appPreferences.text("重置", "Reset")) {
+                        settings.catColor = .white
+                    }
+                    .font(.system(size: 10))
+                }
+            }
+
+            if settings.catColorMode != CatColorMode.solid.rawValue {
+                Text(appPreferences.text(
+                    "炫彩模式会自动变化颜色。",
+                    "Dynamic modes change color automatically."
+                ))
+                .font(.system(size: 10))
+                .foregroundColor(.secondary)
+            }
+
+            if settings.usesSystemTextColor && (settings.catColorMode != CatColorMode.solid.rawValue || settings.catColor != PersistedColor.white) {
+                HStack(spacing: 4) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .foregroundColor(.orange)
+                        .font(.system(size: 10))
+                    Text(appPreferences.text(
+                        "系统文字颜色会覆盖角色颜色，已自动切换为自定义颜色",
+                        "System text color overrides character color, auto-switched to custom color"
+                    ))
+                    .font(.system(size: 10))
+                    .foregroundColor(.orange)
+                }
+            }
+        }
+    }
+
+    private var animationPreferences: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.animation.title(language: appPreferences.resolvedLanguage)) {
+            if settings.showsCat {
+                Picker(appPreferences.text("角色位置", "Character Position"), selection: $settings.catPosition) {
+                    ForEach(StatusBarCharacterPosition.allCases) { position in
+                        Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                Picker(appPreferences.text("角色朝向", "Character Facing"), selection: $settings.catFacing) {
+                    ForEach(StatusBarCharacterFacing.allCases) { facing in
+                        Text(facing.title(language: appPreferences.resolvedLanguage)).tag(facing)
+                    }
+                }
+                .pickerStyle(.segmented)
+
+                SliderPreference(
+                    title: appPreferences.text("角色大小", "Character Size"),
+                    value: $settings.catScale,
+                    range: 0.7...1.3,
+                    displayValue: "\(Int((settings.catScale * 100).rounded()))%"
+                )
+
+                SliderPreference(
+                    title: appPreferences.text("动画速度", "Animation Speed"),
+                    value: $settings.catSpeedMultiplier,
+                    range: 0.25...4.0,
+                    displayValue: String(format: "%.1fx", settings.catSpeedMultiplier)
+                )
+
+                Text(appPreferences.text(
+                    "速度倍率影响动画快慢：1.0x 为默认，2.0x 为两倍速，0.5x 为半速。",
+                    "Speed multiplier affects animation rate: 1.0x is default, 2.0x is double speed, 0.5x is half speed."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+
+                Divider()
+
+                Toggle(appPreferences.text("摇头效果", "Head Swing"), isOn: $settings.catHeadSwing)
+                Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: $settings.catRotationEnabled)
+
+                if settings.catRotationEnabled {
+                    SliderPreference(
+                        title: appPreferences.text("轮换间隔", "Rotation Interval"),
+                        value: $settings.catRotationIntervalMinutes,
+                        range: 1...60,
+                        displayValue: String(format: "%.0f分钟", settings.catRotationIntervalMinutes)
+                    )
+
+                    VStack(alignment: .leading, spacing: 6) {
+                        MenuBarSubsectionHeader(
+                            systemImage: "shuffle",
+                            title: appPreferences.text("轮换角色池（空=全部）", "Rotation Pool (empty=all)")
+                        )
+
+                        ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
+                            VStack(alignment: .leading, spacing: 3) {
+                                Text(category.rawValue)
+                                    .font(.system(size: 10, weight: .medium))
+                                    .foregroundColor(.secondary)
+                                let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
+                                LazyVGrid(columns: [GridItem(.adaptive(minimum: 86))], spacing: 3) {
+                                    ForEach(charsInCategory) { character in
+                                        Button(action: {
+                                            toggleRotationPoolCharacter(character.id)
+                                        }) {
+                                            HStack(spacing: 4) {
+                                                Image(systemName: rotationPoolContains(character.id) ? "checkmark.square" : "square")
+                                                    .font(.system(size: 9))
+                                                Text(character.displayName)
+                                                    .font(.system(size: 11))
+                                                    .lineLimit(1)
+                                            }
+                                            .frame(maxWidth: .infinity, alignment: .leading)
+                                        }
+                                        .buttonStyle(.plain)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                Text(appPreferences.text(
+                    "启用角色后可配置动画速度、朝向与轮换。",
+                    "Enable the character to configure speed, facing, and rotation."
+                ))
+                .font(.system(size: 11))
+                .foregroundStyle(.tertiary)
+            }
+        }
+    }
+
+    private var layoutPreferences: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.layout.title(language: appPreferences.resolvedLanguage)) {
+            Toggle(appPreferences.text("自动宽度", "Automatic width"), isOn: $settings.usesAutomaticWidth)
+
+            if !settings.usesAutomaticWidth {
+                SliderPreference(
+                    title: appPreferences.text("手动宽度", "Manual width"),
+                    value: $settings.itemWidth,
+                    range: 36...220,
+                    displayValue: "\(Int(settings.itemWidth.rounded()))"
+                )
+            }
+
+            SliderPreference(
+                title: appPreferences.text("行距", "Line spacing"),
+                value: $settings.lineSpacing,
+                range: -5...8,
+                displayValue: String(format: "%.1f", settings.lineSpacing)
+            )
+
+            Picker(appPreferences.text("排列", "Order"), selection: $settings.order) {
+                ForEach(StatusBarOrder.allCases) { order in
+                    Text(order.title(language: appPreferences.resolvedLanguage)).tag(order)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker(appPreferences.text("对齐", "Alignment"), selection: $settings.alignment) {
+                ForEach(StatusBarAlignment.allCases) { alignment in
+                    Text(alignment.title(language: appPreferences.resolvedLanguage)).tag(alignment)
+                }
+            }
+            .pickerStyle(.segmented)
         }
     }
 }
@@ -906,10 +1027,56 @@ private struct UpdatePreferencesView: View {
     }
 }
 
+private struct MenuBarSettingsSummary: View {
+    @ObservedObject var settings: StatusBarSettings
+    @ObservedObject var appPreferences: AppPreferences
+    let characterName: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            NetBarBadge(
+                text: settings.showsCat ? characterName : appPreferences.text("无角色", "No character"),
+                tone: settings.showsCat ? .download : .neutral
+            )
+            NetBarBadge(
+                text: settings.usesAutomaticWidth ? appPreferences.text("自动宽度", "Auto width") : appPreferences.text("手动宽度", "Manual width"),
+                tone: .neutral
+            )
+            NetBarBadge(
+                text: settings.showsBackground ? appPreferences.text("背景开启", "Background on") : appPreferences.text("透明背景", "Transparent"),
+                tone: settings.showsBackground ? .success : .neutral
+            )
+            if settings.showsCat {
+                NetBarBadge(text: String(format: "%.1fx", settings.catSpeedMultiplier), tone: .upload)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+private struct MenuBarSubsectionHeader: View {
+    let systemImage: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
 private struct StatusBarPreview: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
+    let catFrameIndex: Int?
 
     private let previewSnapshot = NetworkSnapshot(
         timestamp: Date(timeIntervalSince1970: 0),
@@ -928,20 +1095,18 @@ private struct StatusBarPreview: View {
 
             HStack {
                 Spacer()
-                if StatusBarDisplayRenderer.presentation(
+                let presentation = StatusBarDisplayRenderer.presentation(
                     snapshot: previewSnapshot,
                     settings: settings,
                     customCharacterStore: customCharacterStore,
-                    catFrameIndex: settings.showsCat ? 0 : nil
-                ).kind == .nativeTitle {
+                    catFrameIndex: catFrameIndex
+                )
+
+                if presentation.kind == .nativeTitle {
                     Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
                         .multilineTextAlignment(textAlignment)
                         .frame(
-                            width: StatusBarDisplayRenderer.width(
-                                snapshot: previewSnapshot,
-                                settings: settings,
-                                customCharacterStore: customCharacterStore
-                            ),
+                            width: presentation.width,
                             height: max(NSStatusBar.system.thickness, 24)
                         )
                 } else {
@@ -949,14 +1114,10 @@ private struct StatusBarPreview: View {
                         snapshot: previewSnapshot,
                         settings: settings,
                         customCharacterStore: customCharacterStore,
-                        catFrameIndex: settings.showsCat ? 0 : nil
+                        catFrameIndex: catFrameIndex
                     ))
                         .frame(
-                            width: StatusBarDisplayRenderer.width(
-                                snapshot: previewSnapshot,
-                                settings: settings,
-                                customCharacterStore: customCharacterStore
-                            ),
+                            width: presentation.width,
                             height: max(NSStatusBar.system.thickness, 24)
                         )
                 }
@@ -983,6 +1144,73 @@ private struct StatusBarPreview: View {
         case .trailing:
             return .trailing
         }
+    }
+}
+
+private struct CharacterChoiceLabel<Icon: View>: View {
+    let title: String
+    let isSelected: Bool
+    @ViewBuilder var icon: Icon
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(isSelected ? Color.accentColor : Color.clear)
+                .frame(width: 6, height: 6)
+            icon
+            Text(title)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+        )
+    }
+}
+
+private struct CharacterPickerPreviewIcon: View {
+    let character: RunCatCharacter
+    let frameIndex: Int
+
+    var body: some View {
+        Group {
+            if let image = Self.image(for: character, frameIndex: frameIndex) {
+                Image(nsImage: image)
+                    .renderingMode(character.isTemplate ? .template : .original)
+                    .resizable()
+                    .interpolation(.none)
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: character.isGooglyEyes ? "eye" : "questionmark.square.dashed")
+                    .symbolRenderingMode(.hierarchical)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+        }
+        .foregroundStyle(.primary)
+        .frame(width: 24, height: 18)
+        .accessibilityHidden(true)
+    }
+
+    private static func image(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
+        let safeFrameIndex = frameIndex % max(character.frameCount, 1)
+        let resourcePath = "RunCat/\(character.id)"
+        if let url = Bundle.main.url(
+            forResource: "frame_\(safeFrameIndex)",
+            withExtension: "png",
+            subdirectory: resourcePath
+        ) {
+            return NSImage(contentsOf: url)
+        }
+        if let resourcePath = Bundle.main.resourcePath {
+            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(safeFrameIndex).png"))
+        }
+        return nil
     }
 }
 

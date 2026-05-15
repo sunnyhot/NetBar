@@ -34,6 +34,15 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.kind, .retinaImage)
     }
 
+    func testMenuBarPreferenceGroupsFollowPreviewToLayoutWorkflow() {
+        XCTAssertEqual(
+            MenuBarPreferenceGroup.allCases,
+            [.preview, .display, .character, .animation, .layout]
+        )
+        XCTAssertEqual(MenuBarPreferenceGroup.display.title(language: .simplifiedChinese), "显示内容")
+        XCTAssertEqual(MenuBarPreferenceGroup.animation.title(language: .english), "Animation & Rotation")
+    }
+
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true
@@ -545,6 +554,11 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(CustomCharacterMotionStyle.bounceBreathe.title(language: .simplifiedChinese), "呼吸/弹跳")
         XCTAssertEqual(CustomCharacterMotionStyle.swayRun.title(language: .english), "Sway/Run")
         XCTAssertEqual(CustomCharacterMotionStyle.pixelJitterFlicker.title(language: .simplifiedChinese), "像素抖动/闪烁")
+        XCTAssertEqual(CustomCharacterMotionStyle.materialize.title(language: .simplifiedChinese), "显现")
+        XCTAssertEqual(CustomCharacterMotionStyle.flight.title(language: .english), "Flight")
+        XCTAssertEqual(CustomCharacterMotionStyle.sparkleFlash.title(language: .simplifiedChinese), "闪光")
+        XCTAssertEqual(CustomCharacterMotionStyle.heartbeat.title(language: .english), "Heartbeat")
+        XCTAssertEqual(CustomCharacterMotionStyle.orbitFloat.title(language: .simplifiedChinese), "漂浮旋转")
     }
 
     func testCharacterAssetFallsBackToBuiltInCatForMissingCustomCharacter() {
@@ -555,7 +569,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(asset.frameCount, RunCatCharacter.defaultCat.frameCount)
     }
 
-    func testStaticImageProcessorCreatesSixFramesForEachMotionStyle() throws {
+    func testStaticImageProcessorCreatesEightDistinctFramesForEachMotionStyle() throws {
         let image = makeTestImage(size: NSSize(width: 18, height: 18), color: .systemRed)
 
         for style in CustomCharacterMotionStyle.allCases {
@@ -565,9 +579,23 @@ final class PreferencesAndPresentationTests: XCTestCase {
                 pixelation: .off
             )
 
-            XCTAssertEqual(frames.count, 6, "Expected \(style) to generate a small looping frame set")
+            XCTAssertEqual(frames.count, 8, "Expected \(style) to generate a smoother looping frame set")
             XCTAssertTrue(frames.allSatisfy { $0.size.width > 0 && $0.size.height > 0 })
+            let uniqueFrames = try Set(frames.map { try CustomCharacterImageProcessor.pngData(for: $0) })
+            XCTAssertGreaterThan(uniqueFrames.count, 2, "Expected \(style) to generate visible animation changes")
         }
+    }
+
+    func testMaterializeMotionFadesImportedStaticImageIntoView() throws {
+        let image = makeTestImage(size: NSSize(width: 18, height: 18), color: .systemRed)
+
+        let frames = try CustomCharacterImageProcessor.processedStaticFrames(
+            from: image,
+            motionStyle: .materialize,
+            pixelation: .off
+        )
+
+        XCTAssertLessThan(alphaTotal(in: frames[0]), alphaTotal(in: frames[3]) * 0.7)
     }
 
     func testPixelationProcessorReducesInteriorColorVariation() throws {
@@ -806,6 +834,22 @@ final class PreferencesAndPresentationTests: XCTestCase {
         animation.advanceFrameForTesting()
 
         XCTAssertEqual(frames, [1, 2, 0])
+    }
+
+    func testPreviewFrameTimelineAnimatesNonCatBuiltInCharacters() {
+        var timeline = CharacterPreviewFrameTimeline()
+        let cheetah = CharacterAsset(builtIn: RunCatCharacter.byId("cheetah"))
+        let pendulum = CharacterAsset(builtIn: RunCatCharacter.byId("pendulum"))
+
+        XCTAssertEqual(timeline.displayedFrame(for: cheetah), 0)
+        timeline.advance(for: cheetah)
+        XCTAssertEqual(timeline.displayedFrame(for: cheetah), 1)
+        timeline.advance(for: cheetah)
+        XCTAssertEqual(timeline.displayedFrame(for: cheetah), 2)
+
+        XCTAssertEqual(timeline.displayedFrame(for: pendulum), 0)
+        timeline.advance(for: pendulum)
+        XCTAssertEqual(timeline.displayedFrame(for: pendulum), 1)
     }
 
     func testImportPanelClassifiesSingleStaticImageVersusFrameSequence() throws {
@@ -1273,6 +1317,25 @@ final class PreferencesAndPresentationTests: XCTestCase {
             }
         }
         return colors.count
+    }
+
+    private func alphaTotal(in image: NSImage) -> CGFloat {
+        guard
+            let tiffData = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffData)
+        else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        var total = CGFloat.zero
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                total += color.alphaComponent
+            }
+        }
+        return total
     }
 
     private func hsbComponents(for color: NSColor) -> (hue: CGFloat, saturation: CGFloat, brightness: CGFloat, alpha: CGFloat)? {

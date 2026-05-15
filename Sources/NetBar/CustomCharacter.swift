@@ -13,6 +13,11 @@ enum CustomCharacterMotionStyle: String, Codable, CaseIterable, Identifiable {
     case bounceBreathe
     case swayRun
     case pixelJitterFlicker
+    case materialize
+    case flight
+    case sparkleFlash
+    case heartbeat
+    case orbitFloat
 
     var id: String { rawValue }
 
@@ -24,6 +29,16 @@ enum CustomCharacterMotionStyle: String, Codable, CaseIterable, Identifiable {
             return language.text("左右摇摆/跑动", "Sway/Run")
         case .pixelJitterFlicker:
             return language.text("像素抖动/闪烁", "Pixel Jitter/Flicker")
+        case .materialize:
+            return language.text("显现", "Materialize")
+        case .flight:
+            return language.text("飞翔", "Flight")
+        case .sparkleFlash:
+            return language.text("闪光", "Spark Flash")
+        case .heartbeat:
+            return language.text("心跳", "Heartbeat")
+        case .orbitFloat:
+            return language.text("漂浮旋转", "Orbit Float")
         }
     }
 }
@@ -197,4 +212,3 @@ struct CharacterAsset: Equatable, Identifiable {
         }
     }
 }
-

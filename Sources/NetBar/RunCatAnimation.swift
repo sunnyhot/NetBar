@@ -129,6 +129,37 @@ enum GooglyEyesTracker {
     }
 }
 
+struct CharacterPreviewFrameTimeline: Equatable {
+    private(set) var characterID: String?
+    private(set) var frameIndex = 0
+
+    func frameIndex(for character: CharacterAsset) -> Int {
+        guard characterID == character.id else { return 0 }
+        return frameIndex % max(character.frameCount, 1)
+    }
+
+    mutating func displayedFrame(for character: CharacterAsset) -> Int {
+        sync(to: character)
+        return frameIndex(for: character)
+    }
+
+    mutating func advance(for character: CharacterAsset) {
+        sync(to: character)
+        frameIndex = (frameIndex + 1) % max(character.frameCount, 1)
+    }
+
+    mutating func reset() {
+        characterID = nil
+        frameIndex = 0
+    }
+
+    private mutating func sync(to character: CharacterAsset) {
+        guard characterID != character.id else { return }
+        characterID = character.id
+        frameIndex = 0
+    }
+}
+
 // MARK: - RunCat Animation Controller
 
 final class RunCatAnimation {
