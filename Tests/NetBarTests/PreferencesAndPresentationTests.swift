@@ -224,6 +224,90 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testArcanePrismColorModeUsesRichHighSaturationPalette() {
+        let mode = CatColorMode.arcanePrism
+
+        XCTAssertEqual(mode.displayName(zh: true), "魔法炫彩")
+        XCTAssertEqual(mode.displayName(zh: false), "Arcane Prism")
+        XCTAssertTrue(mode.isDynamic)
+        XCTAssertTrue(mode.hasSparkles)
+
+        let colors = mode.gradientColors(
+            at: 12.5,
+            frameIndex: 3,
+            baseColor: PersistedColor.white,
+            size: NSSize(width: 28, height: 18)
+        )
+        XCTAssertGreaterThanOrEqual(colors.count, 6)
+        XCTAssertEqual(colors.first?.position, 0)
+        XCTAssertEqual(colors.last?.position, 1)
+
+        let components = colors.compactMap { hsbComponents(for: $0.color) }
+        XCTAssertEqual(components.count, colors.count)
+        XCTAssertTrue(components.allSatisfy { $0.saturation >= 0.72 })
+        XCTAssertTrue(components.allSatisfy { $0.brightness >= 0.78 })
+        XCTAssertGreaterThan(hueSpread(in: components), 0.45)
+
+        let shiftedColors = mode.gradientColors(
+            at: 13.1,
+            frameIndex: 3,
+            baseColor: PersistedColor.white,
+            size: NSSize(width: 28, height: 18)
+        )
+        guard
+            let firstHue = hsbComponents(for: colors[0].color)?.hue,
+            let shiftedFirstHue = hsbComponents(for: shiftedColors[0].color)?.hue
+        else {
+            return XCTFail("Expected arcane prism colors to expose HSB components")
+        }
+        let hueDelta = max(firstHue, shiftedFirstHue) - min(firstHue, shiftedFirstHue)
+        XCTAssertGreaterThan(hueDelta, 0.02)
+    }
+
+    func testHeatVisionColorModeAddsDirectionalEyeBeams() {
+        let mode = CatColorMode.heatVision
+
+        XCTAssertEqual(mode.displayName(zh: true), "热视线")
+        XCTAssertEqual(mode.displayName(zh: false), "Heat Vision")
+        XCTAssertTrue(mode.isDynamic)
+        XCTAssertTrue(mode.hasSparkles)
+
+        let colors = mode.gradientColors(
+            at: 8.25,
+            frameIndex: 1,
+            baseColor: PersistedColor.white,
+            size: NSSize(width: 36, height: 18)
+        )
+        XCTAssertGreaterThanOrEqual(colors.count, 4)
+
+        let components = colors.compactMap { hsbComponents(for: $0.color) }
+        XCTAssertEqual(components.count, colors.count)
+        XCTAssertTrue(components.allSatisfy { $0.saturation >= 0.78 })
+        XCTAssertTrue(components.allSatisfy { $0.brightness >= 0.82 })
+        XCTAssertTrue(components.allSatisfy { component in
+            component.hue <= 0.14 || component.hue >= 0.94
+        })
+
+        let rect = NSRect(x: 12, y: 4, width: 36, height: 18)
+        let start = CGPoint(x: rect.midX, y: rect.midY)
+        let rightEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
+            from: start,
+            in: rect,
+            facing: .right,
+            scale: 1
+        )
+        let leftEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
+            from: start,
+            in: rect,
+            facing: .left,
+            scale: 1
+        )
+
+        XCTAssertGreaterThan(rightEnd.x, rect.maxX)
+        XCTAssertLessThan(leftEnd.x, rect.minX)
+        XCTAssertEqual(rightEnd.y, leftEnd.y, accuracy: 0.01)
+    }
+
     func testGooglyEyesPupilOffsetTracksMouseAndStaysInsideEye() {
         let offset = GooglyEyesTracker.pupilOffset(
             from: CGPoint(x: 10, y: 10),
@@ -316,19 +400,22 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(removedTokens.sorted(), ["global", "local"])
     }
 
-    func testCharacterSizeAndPositionDefaultPersistAndClamp() {
+    func testCharacterSizePositionAndFacingDefaultPersistAndClamp() {
         let defaults = isolatedDefaults()
         var settings = StatusBarSettings(defaults: defaults)
 
         XCTAssertEqual(settings.catScale, 1.0)
         XCTAssertEqual(settings.catPosition, .left)
+        XCTAssertEqual(settings.catFacing, .right)
 
         settings.catScale = 1.2
         settings.catPosition = .right
+        settings.catFacing = .left
         settings = StatusBarSettings(defaults: defaults)
 
         XCTAssertEqual(settings.catScale, 1.2)
         XCTAssertEqual(settings.catPosition, .right)
+        XCTAssertEqual(settings.catFacing, .left)
 
         settings.catScale = 3
         XCTAssertEqual(settings.clampedCatScale, 1.3)
@@ -388,6 +475,39 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertLessThan(whitePixelCount(in: leftImage, horizontalRegion: 0.66..<1.0), 5)
         XCTAssertGreaterThan(whitePixelCount(in: rightImage, horizontalRegion: 0.66..<1.0), 10)
         XCTAssertLessThan(whitePixelCount(in: rightImage, horizontalRegion: 0.0..<0.34), 5)
+    }
+
+    func testCharacterFacingControlsMirrorDirectionAndRenderSignature() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "googly_cat"
+        settings.catFacing = .right
+        settings.catHeadSwing = false
+
+        XCTAssertFalse(StatusBarDisplayRenderer.shouldMirrorCharacter(settings: settings, frameIndex: 0))
+
+        let rightSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua",
+            catFrameIndex: 0
+        )
+
+        settings.catFacing = .left
+        XCTAssertTrue(StatusBarDisplayRenderer.shouldMirrorCharacter(settings: settings, frameIndex: 0))
+
+        let leftSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua",
+            catFrameIndex: 0
+        )
+
+        XCTAssertNotEqual(leftSignature, rightSignature)
+
+        settings.catHeadSwing = true
+        XCTAssertTrue(StatusBarDisplayRenderer.shouldMirrorCharacter(settings: settings, frameIndex: 0))
+        XCTAssertFalse(StatusBarDisplayRenderer.shouldMirrorCharacter(settings: settings, frameIndex: 1))
     }
 
     func testNetworkTotalsExcludeVirtualProxyInterfaces() {
@@ -717,6 +837,26 @@ final class PreferencesAndPresentationTests: XCTestCase {
         }
 
         return String(format: "best red-ish rgba %.3f %.3f %.3f %.3f", best.red, best.green, best.blue, best.alpha)
+    }
+
+    private func hsbComponents(for color: NSColor) -> (hue: CGFloat, saturation: CGFloat, brightness: CGFloat, alpha: CGFloat)? {
+        guard let rgb = color.usingColorSpace(.deviceRGB) else { return nil }
+        var hue = CGFloat.zero
+        var saturation = CGFloat.zero
+        var brightness = CGFloat.zero
+        var alpha = CGFloat.zero
+        rgb.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+        return (hue, saturation, brightness, alpha)
+    }
+
+    private func hueSpread(in components: [(hue: CGFloat, saturation: CGFloat, brightness: CGFloat, alpha: CGFloat)]) -> CGFloat {
+        guard
+            let minimum = components.map(\.hue).min(),
+            let maximum = components.map(\.hue).max()
+        else {
+            return 0
+        }
+        return maximum - minimum
     }
 }
 

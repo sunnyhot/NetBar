@@ -62,6 +62,8 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     case galaxy          // Galaxy (deep purple → blue → pink → white)
     case matrix          // Matrix (green shades)
     case roseGold        // Rose gold (warm pink → gold → copper)
+    case arcanePrism     // Arcane prism (gem-like magic color flow)
+    case heatVision      // Heat vision (red eye beams)
     case randomPop       // Random color per frame change (拼色)
     case randomCycle     // Smooth random color cycling (随机炫彩)
 
@@ -84,6 +86,8 @@ enum CatColorMode: String, CaseIterable, Identifiable {
         case .galaxy:      return zh ? "星河" : "Galaxy"
         case .matrix:      return zh ? "黑客" : "Matrix"
         case .roseGold:    return zh ? "玫瑰金" : "Rose Gold"
+        case .arcanePrism: return zh ? "魔法炫彩" : "Arcane Prism"
+        case .heatVision:  return zh ? "热视线" : "Heat Vision"
         case .randomPop:   return zh ? "随机拼色" : "Random Pop"
         case .randomCycle: return zh ? "随机炫彩" : "Random Cycle"
         }
@@ -236,6 +240,31 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             let hue = 0.05 + 0.9 * (0.5 + 0.5 * cos(progress * .pi * 2))
             let saturation = 0.4 + 0.3 * sin(progress * .pi * 2)
             return NSColor(calibratedHue: hue, saturation: saturation, brightness: 0.85, alpha: 1.0)
+
+        case .arcanePrism:
+            // Gem-like magical highlight: violet → azure → cyan → gold → rose.
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.8)
+            let progress = CGFloat(cycleTime / 4.8)
+            let hue = (0.76 + progress * 0.42 + CGFloat(frameIndex % 5) * 0.025).truncatingRemainder(dividingBy: 1.0)
+            let pulse = 0.5 + 0.5 * sin(progress * .pi * 4)
+            return NSColor(
+                calibratedHue: hue,
+                saturation: 0.86 + 0.12 * pulse,
+                brightness: 0.9 + 0.1 * (1 - pulse),
+                alpha: 1.0
+            )
+
+        case .heatVision:
+            let cycleTime = time.truncatingRemainder(dividingBy: 1.6)
+            let progress = CGFloat(cycleTime / 1.6)
+            let pulse = 0.5 + 0.5 * sin(progress * .pi * 2)
+            let hue = 0.01 + 0.035 * pulse
+            return NSColor(
+                calibratedHue: hue,
+                saturation: 0.95,
+                brightness: 0.92 + 0.08 * pulse,
+                alpha: 1.0
+            )
 
         case .randomPop:
             // Change color on each frame change — truly random-feeling jumps
@@ -397,6 +426,40 @@ enum CatColorMode: String, CaseIterable, Identifiable {
                 (color: NSColor(calibratedHue: 0.06, saturation: 0.7, brightness: 0.75, alpha: 1.0), position: 1.0),
             ]
 
+        case .arcanePrism:
+            // Arcane prism: saturated gem facets with a slow hue drift.
+            let drift = CGFloat((time.truncatingRemainder(dividingBy: 4.8)) / 4.8) * 0.2 + CGFloat(frameIndex % 5) * 0.012
+            let stops: [(hue: CGFloat, saturation: CGFloat, brightness: CGFloat, position: CGFloat)] = [
+                (0.77, 0.92, 0.98, 0.0),
+                (0.63, 0.90, 1.00, 0.16),
+                (0.54, 0.86, 1.00, 0.31),
+                (0.46, 0.82, 0.96, 0.47),
+                (0.12, 0.88, 1.00, 0.64),
+                (0.93, 0.86, 1.00, 0.81),
+                (0.82, 0.92, 0.98, 1.0),
+            ]
+            return stops.map { stop in
+                (
+                    color: NSColor(
+                        calibratedHue: (stop.hue + drift).truncatingRemainder(dividingBy: 1.0),
+                        saturation: stop.saturation,
+                        brightness: stop.brightness,
+                        alpha: 1.0
+                    ),
+                    position: stop.position
+                )
+            }
+
+        case .heatVision:
+            let pulse = CGFloat(0.5 + 0.5 * sin(time * 4.2 + Double(frameIndex) * 0.3))
+            let redCore = 0.98 + 0.02 * pulse
+            return [
+                (color: NSColor(calibratedHue: 0.0, saturation: 0.98, brightness: redCore, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.025, saturation: 0.96, brightness: 1.0, alpha: 1.0), position: 0.28),
+                (color: NSColor(calibratedHue: 0.07, saturation: 0.88, brightness: 1.0, alpha: 1.0), position: 0.55),
+                (color: NSColor(calibratedHue: 0.0, saturation: 1.0, brightness: 0.82 + 0.14 * pulse, alpha: 1.0), position: 1.0),
+            ]
+
         case .randomPop:
             // Random: 2-3 random colors split across the body
             let timeBucket = Int(time * 2)
@@ -428,7 +491,7 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     /// Whether this mode should show sparkle/star decorations on the character
     var hasSparkles: Bool {
         switch self {
-        case .galaxy, .neon, .aurora, .cyber, .candy, .randomPop, .rainbow:
+        case .galaxy, .neon, .aurora, .cyber, .candy, .arcanePrism, .heatVision, .randomPop, .rainbow:
             return true
         default:
             return false
@@ -506,6 +569,22 @@ enum StatusBarCharacterPosition: String, CaseIterable, Identifiable {
     }
 }
 
+enum StatusBarCharacterFacing: String, CaseIterable, Identifiable {
+    case right
+    case left
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .right:
+            return language.text("向右", "Right")
+        case .left:
+            return language.text("向左", "Left")
+        }
+    }
+}
+
 @MainActor
 final class StatusBarSettings: ObservableObject {
     @Published var fontSize: Double { didSet { save() } }
@@ -525,6 +604,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var catCharacter: String { didSet { save() } }
     @Published var catScale: Double { didSet { save() } }
     @Published var catPosition: StatusBarCharacterPosition { didSet { save() } }
+    @Published var catFacing: StatusBarCharacterFacing { didSet { save() } }
     @Published var catSpeedMultiplier: Double { didSet { save() } }
     @Published var catColor: PersistedColor { didSet { save() } }
     @Published var catColorMode: String { didSet { save() } }
@@ -554,6 +634,7 @@ final class StatusBarSettings: ObservableObject {
         catCharacter = defaults.string(forKey: Keys.catCharacter) ?? Defaults.catCharacter
         catScale = defaults.object(forKey: Keys.catScale) as? Double ?? Defaults.catScale
         catPosition = StatusBarCharacterPosition(rawValue: defaults.string(forKey: Keys.catPosition) ?? "") ?? Defaults.catPosition
+        catFacing = StatusBarCharacterFacing(rawValue: defaults.string(forKey: Keys.catFacing) ?? "") ?? Defaults.catFacing
         catSpeedMultiplier = defaults.object(forKey: Keys.catSpeedMultiplier) as? Double ?? Defaults.catSpeedMultiplier
         catColor = Self.color(prefix: Keys.catColor, defaults: defaults, fallback: Defaults.catColor)
         catColorMode = defaults.string(forKey: Keys.catColorMode) ?? Defaults.catColorMode
@@ -605,6 +686,7 @@ final class StatusBarSettings: ObservableObject {
         catCharacter = Defaults.catCharacter
         catScale = Defaults.catScale
         catPosition = Defaults.catPosition
+        catFacing = Defaults.catFacing
         catSpeedMultiplier = Defaults.catSpeedMultiplier
         catColor = Defaults.catColor
         catColorMode = Defaults.catColorMode
@@ -632,6 +714,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(catCharacter, forKey: Keys.catCharacter)
         defaults.set(catScale, forKey: Keys.catScale)
         defaults.set(catPosition.rawValue, forKey: Keys.catPosition)
+        defaults.set(catFacing.rawValue, forKey: Keys.catFacing)
         defaults.set(catSpeedMultiplier, forKey: Keys.catSpeedMultiplier)
         save(catColor, prefix: Keys.catColor)
         defaults.set(catColorMode, forKey: Keys.catColorMode)
@@ -679,6 +762,7 @@ final class StatusBarSettings: ObservableObject {
         static let catCharacter = "cat"
         static let catScale = 1.0
         static let catPosition = StatusBarCharacterPosition.left
+        static let catFacing = StatusBarCharacterFacing.right
         static let catSpeedMultiplier = 1.0
         static let catColor = PersistedColor.white
         static let catColorMode = CatColorMode.solid.rawValue
@@ -706,6 +790,7 @@ final class StatusBarSettings: ObservableObject {
         static let catCharacter = "statusBar.catCharacter"
         static let catScale = "statusBar.catScale"
         static let catPosition = "statusBar.catPosition"
+        static let catFacing = "statusBar.catFacing"
         static let catSpeedMultiplier = "statusBar.catSpeedMultiplier"
         static let catColor = "statusBar.catColor"
         static let catColorMode = "statusBar.catColorMode"
@@ -748,6 +833,7 @@ struct StatusBarRenderSignature: Equatable {
     let catCharacter: String
     let catScale: Double
     let catPosition: StatusBarCharacterPosition
+    let catFacing: StatusBarCharacterFacing
     let catColor: PersistedColor
     let catColorMode: String
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
@@ -799,6 +885,7 @@ enum StatusBarDisplayRenderer {
             catCharacter: settings.catCharacter,
             catScale: settings.catScale,
             catPosition: settings.catPosition,
+            catFacing: settings.catFacing,
             catColor: settings.catColor,
             catColorMode: settings.catColorMode,
             catColorTimeBucket: {
@@ -937,7 +1024,9 @@ enum StatusBarDisplayRenderer {
                 drawGooglyEyes(
                     in: drawRect,
                     state: googlyEyesState,
-                    accentColor: googlyEyesAccentColor(colorMode: colorMode, settings: settings, frameIndex: frameIdx)
+                    accentColor: googlyEyesAccentColor(colorMode: colorMode, settings: settings, frameIndex: frameIdx),
+                    colorMode: colorMode,
+                    facing: settings.catFacing
                 )
             } else {
                 let resourcePath = "RunCat/\(character.id)"
@@ -953,11 +1042,10 @@ enum StatusBarDisplayRenderer {
                 if let catImg = catImage {
                     let now = Date().timeIntervalSince1970
 
-                    // Head swing: flip image horizontally on odd frames for a head-bobbing effect
-                    let shouldFlip = settings.catHeadSwing && frameIdx % 2 == 1
+                    let shouldFlip = shouldMirrorCharacter(settings: settings, frameIndex: frameIdx)
 
                     if shouldFlip {
-                        // Flip the drawing context horizontally for head-swing effect
+                        // Mirror the drawing context for character facing and optional head swing.
                         if let currentContext = NSGraphicsContext.current {
                             let transform = currentContext.cgContext
                             transform.saveGState()
@@ -1000,7 +1088,6 @@ enum StatusBarDisplayRenderer {
                     }
 
                     if shouldFlip {
-                        // Restore the context after flip
                         if let currentContext = NSGraphicsContext.current {
                             currentContext.cgContext.restoreGState()
                         }
@@ -1036,7 +1123,9 @@ enum StatusBarDisplayRenderer {
     private static func drawGooglyEyes(
         in rect: NSRect,
         state: GooglyEyesRenderState?,
-        accentColor: NSColor
+        accentColor: NSColor,
+        colorMode: CatColorMode,
+        facing: StatusBarCharacterFacing
     ) {
         let scale = max(min(rect.width / 36, rect.height / 18), 0.1)
         let eyeDiameter: CGFloat = 13.8 * scale
@@ -1098,6 +1187,11 @@ enum StatusBarDisplayRenderer {
                 width: pupilDiameter,
                 height: pupilDiameter
             )
+            let pupilCenter = CGPoint(x: pupilRect.midX, y: pupilRect.midY)
+            if colorMode == .heatVision {
+                drawHeatVisionBeam(from: pupilCenter, in: rect, facing: facing, scale: scale)
+            }
+
             accentColor.withAlphaComponent(0.88).setFill()
             NSBezierPath(ovalIn: pupilRect).fill()
 
@@ -1110,6 +1204,55 @@ enum StatusBarDisplayRenderer {
             NSColor.white.withAlphaComponent(0.82).setFill()
             NSBezierPath(ovalIn: catchlightRect).fill()
         }
+    }
+
+    static func heatVisionBeamEnd(
+        from start: CGPoint,
+        in rect: NSRect,
+        facing: StatusBarCharacterFacing,
+        scale: CGFloat
+    ) -> CGPoint {
+        let travel = rect.width * 0.9 + 7 * scale
+        let verticalDrift = (start.y - rect.midY) * 0.08
+        switch facing {
+        case .right:
+            return CGPoint(x: start.x + travel, y: start.y + verticalDrift)
+        case .left:
+            return CGPoint(x: start.x - travel, y: start.y + verticalDrift)
+        }
+    }
+
+    private static func drawHeatVisionBeam(
+        from start: CGPoint,
+        in rect: NSRect,
+        facing: StatusBarCharacterFacing,
+        scale: CGFloat
+    ) {
+        let end = heatVisionBeamEnd(from: start, in: rect, facing: facing, scale: scale)
+
+        func strokeBeam(color: NSColor, lineWidth: CGFloat) {
+            let path = NSBezierPath()
+            path.move(to: start)
+            path.line(to: end)
+            path.lineCapStyle = .round
+            path.lineWidth = lineWidth
+            color.setStroke()
+            path.stroke()
+        }
+
+        if let context = NSGraphicsContext.current {
+            context.cgContext.saveGState()
+            context.cgContext.setShadow(
+                offset: .zero,
+                blur: 3.6 * scale,
+                color: NSColor.systemRed.withAlphaComponent(0.55).cgColor
+            )
+            strokeBeam(color: NSColor.systemRed.withAlphaComponent(0.32), lineWidth: 4.8 * scale)
+            context.cgContext.restoreGState()
+        }
+
+        strokeBeam(color: NSColor.systemRed.withAlphaComponent(0.75), lineWidth: 2.4 * scale)
+        strokeBeam(color: NSColor(calibratedRed: 1, green: 0.9, blue: 0.54, alpha: 0.9), lineWidth: 0.85 * scale)
     }
 
     private static func googlyEyesAccentColor(
@@ -1138,6 +1281,12 @@ enum StatusBarDisplayRenderer {
 
     private static func characterSpacing(settings: StatusBarSettings) -> CGFloat {
         max(2, 3 * settings.clampedCatScale)
+    }
+
+    static func shouldMirrorCharacter(settings: StatusBarSettings, frameIndex: Int) -> Bool {
+        let baseMirror = settings.catFacing == .left
+        let swingMirror = settings.catHeadSwing && frameIndex % 2 == 1
+        return baseMirror != swingMirror
     }
 
     static func width(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> CGFloat {

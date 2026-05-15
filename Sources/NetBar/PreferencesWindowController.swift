@@ -409,6 +409,13 @@ private struct MenuBarPreferencesView: View {
                         }
                         .pickerStyle(.segmented)
 
+                        Picker(appPreferences.text("角色朝向", "Character Facing"), selection: $settings.catFacing) {
+                            ForEach(StatusBarCharacterFacing.allCases) { facing in
+                                Text(facing.title(language: appPreferences.resolvedLanguage)).tag(facing)
+                            }
+                        }
+                        .pickerStyle(.segmented)
+
                         SliderPreference(
                             title: appPreferences.text("角色大小", "Character Size"),
                             value: $settings.catScale,
