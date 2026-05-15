@@ -201,9 +201,28 @@ enum CustomCharacterImageProcessor {
         let size = first.size
         return frames.map { frame in
             drawImage(size: size) {
-                frame.draw(in: NSRect(origin: .zero, size: size), from: NSRect(origin: .zero, size: frame.size), operation: .sourceOver, fraction: 1)
+                frame.draw(
+                    in: aspectFitRect(contentSize: frame.size, canvasSize: size),
+                    from: NSRect(origin: .zero, size: frame.size),
+                    operation: .sourceOver,
+                    fraction: 1
+                )
             }
         }
+    }
+
+    private static func aspectFitRect(contentSize: NSSize, canvasSize: NSSize) -> NSRect {
+        guard contentSize.width > 0, contentSize.height > 0 else {
+            return NSRect(origin: .zero, size: canvasSize)
+        }
+        let scale = min(canvasSize.width / contentSize.width, canvasSize.height / contentSize.height)
+        let fittedSize = NSSize(width: contentSize.width * scale, height: contentSize.height * scale)
+        return NSRect(
+            x: (canvasSize.width - fittedSize.width) / 2,
+            y: (canvasSize.height - fittedSize.height) / 2,
+            width: fittedSize.width,
+            height: fittedSize.height
+        )
     }
 
     private static func normalizedImage(from image: NSImage) throws -> NSImage {
@@ -289,4 +308,3 @@ enum CustomCharacterImageProcessor {
         )
     }
 }
-

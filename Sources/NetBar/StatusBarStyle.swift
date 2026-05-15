@@ -1213,7 +1213,7 @@ enum StatusBarDisplayRenderer {
             )
             let pupilCenter = CGPoint(x: pupilRect.midX, y: pupilRect.midY)
             if colorMode == .heatVision {
-                drawHeatVisionBeam(from: pupilCenter, in: rect, facing: facing, scale: scale)
+                drawHeatVisionBeam(from: pupilCenter, gazeOffset: offset, in: rect, facing: facing, scale: scale)
             }
 
             accentColor.withAlphaComponent(0.88).setFill()
@@ -1232,11 +1232,20 @@ enum StatusBarDisplayRenderer {
 
     static func heatVisionBeamEnd(
         from start: CGPoint,
+        gazeOffset: CGSize = .zero,
         in rect: NSRect,
         facing: StatusBarCharacterFacing,
         scale: CGFloat
     ) -> CGPoint {
         let travel = rect.width * 0.9 + 7 * scale
+        let gazeDistance = hypot(gazeOffset.width, gazeOffset.height)
+        if gazeDistance > 0.01 {
+            return CGPoint(
+                x: start.x + gazeOffset.width / gazeDistance * travel,
+                y: start.y + gazeOffset.height / gazeDistance * travel
+            )
+        }
+
         let verticalDrift = (start.y - rect.midY) * 0.08
         switch facing {
         case .right:
@@ -1248,11 +1257,12 @@ enum StatusBarDisplayRenderer {
 
     private static func drawHeatVisionBeam(
         from start: CGPoint,
+        gazeOffset: CGSize,
         in rect: NSRect,
         facing: StatusBarCharacterFacing,
         scale: CGFloat
     ) {
-        let end = heatVisionBeamEnd(from: start, in: rect, facing: facing, scale: scale)
+        let end = heatVisionBeamEnd(from: start, gazeOffset: gazeOffset, in: rect, facing: facing, scale: scale)
 
         func strokeBeam(color: NSColor, lineWidth: CGFloat) {
             let path = NSBezierPath()
@@ -1338,11 +1348,18 @@ enum StatusBarDisplayRenderer {
 
     private static func characterSize(for character: CharacterAsset, settings: StatusBarSettings) -> CGSize {
         let scale = settings.clampedCatScale
-        let width = CGFloat(character.frameWidth) * scale
-        let height = character.isCustom
-            ? min(CGFloat(character.frameHeight) * scale, 18 * scale)
-            : 18 * scale
-        return CGSize(width: width, height: max(height, 1))
+        let rawWidth = CGFloat(character.frameWidth) * scale
+        let rawHeight = CGFloat(character.frameHeight) * scale
+        guard character.isCustom else {
+            return CGSize(width: rawWidth, height: 18 * scale)
+        }
+
+        let maxHeight = 18 * scale
+        let fitScale = rawHeight > maxHeight ? maxHeight / max(rawHeight, 1) : 1
+        return CGSize(
+            width: max(rawWidth * fitScale, 1),
+            height: max(rawHeight * fitScale, 1)
+        )
     }
 
     private static func characterSpacing(settings: StatusBarSettings) -> CGFloat {

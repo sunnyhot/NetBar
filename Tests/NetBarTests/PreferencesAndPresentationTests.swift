@@ -308,6 +308,31 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(rightEnd.y, leftEnd.y, accuracy: 0.01)
     }
 
+    func testHeatVisionBeamEndFollowsGooglyEyeGazeOffset() {
+        let rect = NSRect(x: 12, y: 4, width: 36, height: 18)
+        let start = CGPoint(x: rect.midX, y: rect.midY)
+
+        let upperLeftEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
+            from: start,
+            gazeOffset: CGSize(width: -3, height: 2),
+            in: rect,
+            facing: .right,
+            scale: 1
+        )
+        let lowerRightEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
+            from: start,
+            gazeOffset: CGSize(width: 3, height: -2),
+            in: rect,
+            facing: .left,
+            scale: 1
+        )
+
+        XCTAssertLessThan(upperLeftEnd.x, rect.minX)
+        XCTAssertGreaterThan(upperLeftEnd.y, rect.midY)
+        XCTAssertGreaterThan(lowerRightEnd.x, rect.maxX)
+        XCTAssertLessThan(lowerRightEnd.y, rect.midY)
+    }
+
     func testGooglyEyesPupilOffsetTracksMouseAndStaysInsideEye() {
         let offset = GooglyEyesTracker.pupilOffset(
             from: CGPoint(x: 10, y: 10),
@@ -569,6 +594,27 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.lastPathComponent), ["frame_1.png", "frame_2.png", "frame_10.png"])
     }
 
+    func testFrameSequenceProcessorAspectFitsFramesWithoutStretching() throws {
+        let directory = try temporaryDirectory()
+        let square = directory.appendingPathComponent("frame_1.png")
+        let tall = directory.appendingPathComponent("frame_2.png")
+        try writeTestImage(size: NSSize(width: 20, height: 20), color: .systemBlue, to: square)
+        try writeTestImage(size: NSSize(width: 10, height: 20), color: .systemRed, to: tall)
+
+        let frames = try CustomCharacterImageProcessor.processedFrameSequence(
+            from: [square, tall],
+            pixelation: .off
+        )
+
+        let redBounds = coloredPixelBounds(
+            in: frames[1],
+            matching: { color in
+                color.redComponent > 0.6 && color.redComponent > color.blueComponent + 0.3
+            }
+        )
+        XCTAssertLessThan(redBounds.width, 14)
+    }
+
     func testCustomCharacterStorePersistsReloadsRenamesAndDeletesCharacter() throws {
         let root = try temporaryDirectory()
         let source = root.appendingPathComponent("source.png")
@@ -662,6 +708,47 @@ final class PreferencesAndPresentationTests: XCTestCase {
         ).width
 
         XCTAssertGreaterThan(width, builtInWidth)
+    }
+
+    func testTallUploadedCharacterKeepsAspectRatioWhenMenuBarHeightIsClamped() throws {
+        let root = try temporaryDirectory()
+        let squareSource = root.appendingPathComponent("square.png")
+        let tallSource = root.appendingPathComponent("tall.png")
+        try writeTestImage(size: NSSize(width: 18, height: 18), color: .systemBlue, to: squareSource)
+        try writeTestImage(size: NSSize(width: 18, height: 36), color: .systemRed, to: tallSource)
+        let store = CustomCharacterStore(rootDirectory: root)
+        let square = try store.importStaticImage(
+            from: squareSource,
+            displayName: "Square",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+        let tall = try store.importStaticImage(
+            from: tallSource,
+            displayName: "Tall",
+            motionStyle: .bounceBreathe,
+            pixelationScale: .off
+        )
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+
+        settings.catCharacter = square.id
+        let squareWidth = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            customCharacterStore: store,
+            catFrameIndex: 0
+        ).width
+
+        settings.catCharacter = tall.id
+        let tallWidth = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            customCharacterStore: store,
+            catFrameIndex: 0
+        ).width
+
+        XCTAssertLessThan(tallWidth, squareWidth - 5)
     }
 
     func testCustomCharacterRendererDrawsImportedFramePixels() throws {
@@ -1106,6 +1193,47 @@ final class PreferencesAndPresentationTests: XCTestCase {
         }
 
         return count
+    }
+
+    private func coloredPixelBounds(
+        in image: NSImage,
+        matching predicate: (NSColor) -> Bool,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> (x: Int, y: Int, width: Int, height: Int) {
+        guard
+            let tiffData = image.tiffRepresentation,
+            let bitmap = NSBitmapImageRep(data: tiffData)
+        else {
+            XCTFail("Expected bitmap image representation", file: file, line: line)
+            return (0, 0, 0, 0)
+        }
+
+        var minX = bitmap.pixelsWide
+        var minY = bitmap.pixelsHigh
+        var maxX = -1
+        var maxY = -1
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.4,
+                    predicate(color)
+                else { continue }
+                minX = min(minX, x)
+                minY = min(minY, y)
+                maxX = max(maxX, x)
+                maxY = max(maxY, y)
+            }
+        }
+
+        guard maxX >= minX, maxY >= minY else {
+            XCTFail("Expected matching colored pixels", file: file, line: line)
+            return (0, 0, 0, 0)
+        }
+
+        return (minX, minY, maxX - minX + 1, maxY - minY + 1)
     }
 
     private func dominantColorSummary(in image: NSImage) -> String {
