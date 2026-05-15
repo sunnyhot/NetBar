@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         updater: updater
     )
     private var cancellables: Set<AnyCancellable> = []
+    private var lastAppliedAppearanceMode: AppAppearanceMode?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         applyAppAppearance()
@@ -91,6 +92,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             .store(in: &cancellables)
 
         appPreferences.$appearanceMode
+            .removeDuplicates()
             .sink { [weak self] _ in
                 self?.applyAppAppearance()
             }
@@ -102,9 +104,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyAppAppearance() {
-        let appearance = appPreferences.appearanceMode.nsAppearance
+        let mode = appPreferences.appearanceMode
+        guard mode != lastAppliedAppearanceMode else { return }
+        lastAppliedAppearanceMode = mode
+
+        let appearance = mode.nsAppearance
         NSApplication.shared.appearance = appearance
-        NSApplication.shared.windows.forEach { window in
+        for window in NSApplication.shared.windows {
+            guard window.appearance !== appearance else { continue }
             window.appearance = appearance
         }
     }

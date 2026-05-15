@@ -188,6 +188,45 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(AppAppearanceMode.dark.nsAppearanceName, .darkAqua)
     }
 
+    func testAppearanceModeCaseOrderMatchesSegmentedPickerLayout() {
+        XCTAssertEqual(AppAppearanceMode.allCases, [.system, .light, .dark])
+    }
+
+    func testAppearanceModeResolvesToCorrectNSAppearance() {
+        XCTAssertNil(AppAppearanceMode.system.nsAppearance)
+
+        let lightAppearance = AppAppearanceMode.light.nsAppearance
+        XCTAssertNotNil(lightAppearance)
+        XCTAssertEqual(lightAppearance?.name, .aqua)
+
+        let darkAppearance = AppAppearanceMode.dark.nsAppearance
+        XCTAssertNotNil(darkAppearance)
+        XCTAssertEqual(darkAppearance?.name, .darkAqua)
+    }
+
+    func testAppearanceModeRawValueRoundTripPreservesSemantic() {
+        for mode in AppAppearanceMode.allCases {
+            XCTAssertEqual(AppAppearanceMode(rawValue: mode.rawValue), mode)
+        }
+    }
+
+    func testRepeatedAppearanceModeSetPersistsCorrectly() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+
+        preferences.appearanceMode = .dark
+        XCTAssertEqual(defaults.string(forKey: "app.appearanceMode"), "dark")
+
+        preferences.appearanceMode = .dark
+        XCTAssertEqual(defaults.string(forKey: "app.appearanceMode"), "dark")
+
+        preferences.appearanceMode = .light
+        XCTAssertEqual(defaults.string(forKey: "app.appearanceMode"), "light")
+    }
+
     func testInterfaceIconNamesMatchInterfaceFamilies() {
         XCTAssertEqual(InterfacePresentation.iconName(for: "en0"), "wifi")
         XCTAssertEqual(InterfacePresentation.iconName(for: "bridge100"), "network.badge.shieldbell.fill")
