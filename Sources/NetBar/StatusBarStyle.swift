@@ -850,6 +850,49 @@ struct GooglyEyesRenderState: Equatable {
 
 @MainActor
 enum StatusBarDisplayRenderer {
+
+    // MARK: - Image Caches
+
+    private static let characterImageCache = NSCache<CharacterImageCacheKey, NSImage>()
+
+    private static let tintImageCache = NSCache<TintImageCacheKey, NSImage>()
+
+    private final class CharacterImageCacheKey: NSObject {
+        let characterID: String
+        let frameIndex: Int
+        init(characterID: String, frameIndex: Int) {
+            self.characterID = characterID
+            self.frameIndex = frameIndex
+        }
+        override var hash: Int { characterID.hashValue ^ frameIndex.hashValue }
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? CharacterImageCacheKey else { return false }
+            return characterID == other.characterID && frameIndex == other.frameIndex
+        }
+    }
+
+    private final class TintImageCacheKey: NSObject {
+        let imagePointer: Int
+        let colorRGBA: (CGFloat, CGFloat, CGFloat, CGFloat)
+        init(image: NSImage, color: NSColor) {
+            self.imagePointer = Int(bitPattern: Unmanaged.passUnretained(image).toOpaque())
+            var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+            color.getRed(&r, green: &g, blue: &b, alpha: &a)
+            self.colorRGBA = (r, g, b, a)
+        }
+        override var hash: Int {
+            imagePointer.hashValue ^ colorRGBA.0.hashValue ^ colorRGBA.1.hashValue ^ colorRGBA.2.hashValue
+        }
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? TintImageCacheKey else { return false }
+            return imagePointer == other.imagePointer
+                && colorRGBA.0 == other.colorRGBA.0
+                && colorRGBA.1 == other.colorRGBA.1
+                && colorRGBA.2 == other.colorRGBA.2
+                && colorRGBA.3 == other.colorRGBA.3
+        }
+    }
+
     static func presentation(
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
@@ -1315,25 +1358,37 @@ enum StatusBarDisplayRenderer {
         frameIndex: Int,
         customCharacterStore: CustomCharacterStore?
     ) -> NSImage? {
-        switch character.source {
-        case .builtIn(let runCatCharacter):
-            let resourcePath = "RunCat/\(runCatCharacter.id)"
-            if let url = Bundle.main.url(forResource: "frame_\(frameIndex)", withExtension: "png", subdirectory: resourcePath) {
-                return NSImage(contentsOf: url)
-            }
-            if let resPath = Bundle.main.resourcePath {
-                return NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(runCatCharacter.id)/frame_\(frameIndex).png"))
-            }
-            return nil
-        case .custom(let customCharacter):
-            guard let customCharacterStore else { return nil }
-            let url = customCharacterStore.frameURL(for: customCharacter, frameIndex: frameIndex)
-            if let image = NSImage(contentsOf: url) {
-                return image
-            }
-            let fallbackURL = customCharacterStore.frameURL(for: customCharacter, frameIndex: 0)
-            return NSImage(contentsOf: fallbackURL)
+        let cacheKey = CharacterImageCacheKey(characterID: character.id, frameIndex: frameIndex)
+        if let cached = characterImageCache.object(forKey: cacheKey) {
+            return cached
         }
+
+        let image: NSImage? = {
+            switch character.source {
+            case .builtIn(let runCatCharacter):
+                let resourcePath = "RunCat/\(runCatCharacter.id)"
+                if let url = Bundle.main.url(forResource: "frame_\(frameIndex)", withExtension: "png", subdirectory: resourcePath) {
+                    return NSImage(contentsOf: url)
+                }
+                if let resPath = Bundle.main.resourcePath {
+                    return NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(runCatCharacter.id)/frame_\(frameIndex).png"))
+                }
+                return nil
+            case .custom(let customCharacter):
+                guard let customCharacterStore else { return nil }
+                let url = customCharacterStore.frameURL(for: customCharacter, frameIndex: frameIndex)
+                if let image = NSImage(contentsOf: url) {
+                    return image
+                }
+                let fallbackURL = customCharacterStore.frameURL(for: customCharacter, frameIndex: 0)
+                return NSImage(contentsOf: fallbackURL)
+            }
+        }()
+
+        if let image {
+            characterImageCache.setObject(image, forKey: cacheKey)
+        }
+        return image
     }
 
     private static func characterExtraWidth(
@@ -1485,6 +1540,19 @@ enum StatusBarDisplayRenderer {
     }
 
     private static func tintImage(_ image: NSImage, color: NSColor) -> NSImage? {
+        let cacheKey = TintImageCacheKey(image: image, color: color)
+        if let cached = tintImageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let result = _renderTintImage(image, color: color)
+        if let result {
+            tintImageCache.setObject(result, forKey: cacheKey)
+        }
+        return result
+    }
+
+    private static func _renderTintImage(_ image: NSImage, color: NSColor) -> NSImage? {
         let size = image.size
         guard let bitmapRep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
