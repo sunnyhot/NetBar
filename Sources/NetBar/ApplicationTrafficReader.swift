@@ -10,6 +10,133 @@ protocol ApplicationTrafficReading: Sendable {
     func readApplications() -> ApplicationTrafficReadResult
 }
 
+// MARK: - Streaming nettop reader (persistent process)
+
+final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendable {
+    private let executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
+    private let fallback = NettopApplicationTrafficReader()
+
+    private var process: Process?
+    private var outputPipe: Pipe?
+    private var latestOutput: String = ""
+    private let lock = NSLock()
+    private var isRunning = false
+    private var restartAttempts = 0
+    private let maxRestartAttempts = 3
+
+    private static let arguments = [
+        "-P",
+        "-L", "0",
+        "-x",
+        "-t", "external",
+        "-J", "bytes_in,bytes_out"
+    ]
+
+    func start() {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !isRunning else { return }
+        launchProcess()
+    }
+
+    func stop() {
+        lock.lock()
+        defer { lock.unlock() }
+        isRunning = false
+        process?.terminate()
+        process = nil
+        outputPipe = nil
+    }
+
+    func readApplications() -> ApplicationTrafficReadResult {
+        lock.lock()
+        let output = latestOutput
+        let hasProcess = process != nil
+        lock.unlock()
+
+        if hasProcess {
+            let stats = Self.parse(output)
+            if !stats.isEmpty {
+                return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
+            }
+        }
+
+        return fallback.readApplications()
+    }
+
+    private func launchProcess() {
+        let process = Process()
+        let pipe = Pipe()
+
+        process.executableURL = executableURL
+        process.arguments = Self.arguments
+        process.standardOutput = pipe
+
+        process.terminationHandler = { [weak self] _ in
+            self?.handleProcessTermination()
+        }
+
+        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            let text = String(data: data, encoding: .utf8) ?? ""
+            self?.appendOutput(text)
+        }
+
+        do {
+            try process.run()
+            self.process = process
+            self.outputPipe = pipe
+            self.isRunning = true
+            restartAttempts = 0
+        } catch {
+            self.process = nil
+            self.outputPipe = nil
+        }
+    }
+
+    private func appendOutput(_ text: String) {
+        lock.lock()
+        defer { lock.unlock() }
+        latestOutput += text
+        if latestOutput.count > 1_000_000 {
+            if let newlineRange = latestOutput.range(of: "\n", options: .backwards) {
+                latestOutput = String(latestOutput[newlineRange.upperBound...])
+            } else {
+                latestOutput = ""
+            }
+        }
+    }
+
+    private func handleProcessTermination() {
+        lock.lock()
+        guard isRunning else {
+            lock.unlock()
+            return
+        }
+        lock.unlock()
+
+        if restartAttempts < maxRestartAttempts {
+            restartAttempts += 1
+            lock.lock()
+            launchProcess()
+            lock.unlock()
+        }
+    }
+
+    private static func parse(_ output: String) -> [ApplicationTrafficStats] {
+        output
+            .split(whereSeparator: \.isNewline)
+            .compactMap { NettopApplicationTrafficReader.parseLinePublic(String($0)) }
+    }
+
+    deinit {
+        process?.terminate()
+    }
+}
+
+// MARK: - One-shot nettop reader (fallback)
+
 final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecked Sendable {
     static let arguments = [
         "-P",
@@ -59,13 +186,13 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         )
     }
 
-    private static func parse(_ output: String) -> [ApplicationTrafficStats] {
+    fileprivate static func parse(_ output: String) -> [ApplicationTrafficStats] {
         output
             .split(whereSeparator: \.isNewline)
-            .compactMap { parseLine(String($0)) }
+            .compactMap { parseLinePublic(String($0)) }
     }
 
-    private static func parseLine(_ line: String) -> ApplicationTrafficStats? {
+    fileprivate static func parseLinePublic(_ line: String) -> ApplicationTrafficStats? {
         guard !line.hasPrefix(",") else { return nil }
 
         let columns = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
@@ -78,7 +205,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         let sentBytes = UInt64(columns[2].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
 
         let parsedProcess = parseProcessToken(processToken)
-        let displayName = displayName(for: parsedProcess.pid, fallback: parsedProcess.name)
+        let displayName = displayNamePublic(for: parsedProcess.pid, fallback: parsedProcess.name)
         let id = parsedProcess.pid.map { "\(parsedProcess.name).\($0)" } ?? parsedProcess.name
 
         return ApplicationTrafficStats(
@@ -91,7 +218,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         )
     }
 
-    private static func parseProcessToken(_ token: String) -> (name: String, pid: Int32?) {
+    fileprivate static func parseProcessToken(_ token: String) -> (name: String, pid: Int32?) {
         guard
             let dotIndex = token.lastIndex(of: "."),
             dotIndex < token.index(before: token.endIndex)
@@ -104,7 +231,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         return (name, Int32(pidText))
     }
 
-    private static func displayName(for pid: Int32?, fallback: String) -> String {
+    fileprivate static func displayNamePublic(for pid: Int32?, fallback: String) -> String {
         guard
             let pid,
             let runningApplication = NSRunningApplication(processIdentifier: pid),

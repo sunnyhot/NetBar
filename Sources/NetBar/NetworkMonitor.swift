@@ -9,6 +9,7 @@ final class NetworkMonitor: ObservableObject {
 
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
+    private let streamingReader: StreamingNettopReader?
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
@@ -26,17 +27,25 @@ final class NetworkMonitor: ObservableObject {
 
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
-        appTrafficReader: ApplicationTrafficReading = NettopApplicationTrafficReader(),
+        appTrafficReader: ApplicationTrafficReading? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
-        self.appTrafficReader = appTrafficReader
         self.now = now
+        if let appTrafficReader {
+            self.appTrafficReader = appTrafficReader
+            self.streamingReader = nil
+        } else {
+            let streaming = StreamingNettopReader()
+            self.appTrafficReader = streaming
+            self.streamingReader = streaming
+        }
     }
 
     func start() {
         guard !isRunning else { return }
         isRunning = true
+        streamingReader?.start()
         refresh()
         refreshApplicationTraffic()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
@@ -56,6 +65,7 @@ final class NetworkMonitor: ObservableObject {
         timer = nil
         applicationTimer?.invalidate()
         applicationTimer = nil
+        streamingReader?.stop()
         isRunning = false
     }
 
