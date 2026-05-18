@@ -19,10 +19,17 @@ final class NetworkMonitor: ObservableObject {
     private var isRefreshing = false
     private var timer: Timer?
     private var applicationTimer: Timer?
-    private var history: [RatePoint] = []
+    private var historyBuffer: [RatePoint] = []
+    private var historyWriteIndex = 0
+    private let historyCapacity = 90
 
     var recentHistory: [RatePoint] {
-        history
+        guard !historyBuffer.isEmpty else { return [] }
+        if historyBuffer.count < historyCapacity {
+            return historyBuffer
+        }
+        let start = historyWriteIndex % historyCapacity
+        return Array(historyBuffer[start...]) + Array(historyBuffer[..<start])
     }
 
     init(
@@ -176,14 +183,17 @@ final class NetworkMonitor: ObservableObject {
             sampleCount: snapshot.sampleCount + 1
         )
 
-        history.append(RatePoint(
+        let point = RatePoint(
             timestamp: now,
             downloadBytesPerSecond: totalDownload,
             uploadBytesPerSecond: totalUpload
-        ))
-        if history.count > 90 {
-            history.removeFirst(history.count - 90)
+        )
+        if historyBuffer.count < historyCapacity {
+            historyBuffer.append(point)
+        } else {
+            historyBuffer[historyWriteIndex % historyCapacity] = point
         }
+        historyWriteIndex += 1
 
         previousStats = currentByName
         previousSampleDate = now

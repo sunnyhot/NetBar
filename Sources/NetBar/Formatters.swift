@@ -32,8 +32,6 @@ enum ByteFormat {
     }
 
     static func packets(_ value: UInt64) -> String {
-        let formatter = NumberFormatter()
-        formatter.numberStyle = .decimal
-        return formatter.string(from: NSNumber(value: value)) ?? "\(value)"
+        value.formatted(.number)
     }
 }
