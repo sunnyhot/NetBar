@@ -255,10 +255,6 @@ private struct MenuBarPreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
-    @State private var previewFrameTimeline = CharacterPreviewFrameTimeline()
-    @State private var characterPickerFrameTick = 0
-
-    private static let previewFrameInterval: TimeInterval = 1.0 / 8.0
 
     private func applyCatColor(_ color: Color) {
         let newColor = PersistedColor(color: color)
@@ -302,11 +298,6 @@ private struct MenuBarPreferencesView: View {
 
     private func selectedCharacterAsset() -> CharacterAsset {
         CharacterAsset.resolve(id: settings.catCharacter, customCharacters: customCharacterStore.characters)
-    }
-
-    private var selectedPreviewFrameIndex: Int? {
-        guard settings.showsCat else { return nil }
-        return previewFrameTimeline.frameIndex(for: selectedCharacterAsset())
     }
 
     private func importCustomCharacter() {
@@ -393,8 +384,8 @@ private struct MenuBarPreferencesView: View {
         alert.runModal()
     }
 
-    private func rotationPoolContains(_ characterID: String) -> Bool {
-        settings.catRotationPool.split(separator: ",").map(String.init).contains(characterID)
+    private var rotationPoolSet: Set<String> {
+        Set(settings.catRotationPool.split(separator: ",").map(String.init))
     }
 
     private func toggleRotationPoolCharacter(_ characterID: String) {
@@ -419,7 +410,13 @@ private struct MenuBarPreferencesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                previewPreferences
+                AnimatedPreviewSection(
+                    settings: settings,
+                    appPreferences: appPreferences,
+                    customCharacterStore: customCharacterStore,
+                    selectedCharacterAsset: selectedCharacterAsset()
+                )
+
                 displayPreferences
                 characterPreferences
                 animationPreferences
@@ -433,32 +430,6 @@ private struct MenuBarPreferencesView: View {
                 }
             }
             .padding(.trailing, 2)
-        }
-        .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .common).autoconnect()) { _ in
-            guard settings.showsCat else {
-                previewFrameTimeline.reset()
-                characterPickerFrameTick = 0
-                return
-            }
-            previewFrameTimeline.advance(for: selectedCharacterAsset())
-            characterPickerFrameTick = (characterPickerFrameTick + 1) % 10_000
-        }
-    }
-
-    private var previewPreferences: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.preview.title(language: appPreferences.resolvedLanguage)) {
-            StatusBarPreview(
-                settings: settings,
-                appPreferences: appPreferences,
-                customCharacterStore: customCharacterStore,
-                catFrameIndex: selectedPreviewFrameIndex
-            )
-
-            MenuBarSettingsSummary(
-                settings: settings,
-                appPreferences: appPreferences,
-                characterName: selectedCharacterAsset().displayName
-            )
         }
     }
 
@@ -554,35 +525,10 @@ private struct MenuBarPreferencesView: View {
     }
 
     private var characterCatalog: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
-                VStack(alignment: .leading, spacing: 5) {
-                    Text(category.rawValue)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
-
-                    let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 118))], spacing: 5) {
-                        ForEach(charsInCategory) { character in
-                            Button(action: {
-                                settings.catCharacter = character.id
-                            }) {
-                                CharacterChoiceLabel(
-                                    title: character.displayName,
-                                    isSelected: settings.catCharacter == character.id
-                                ) {
-                                    CharacterPickerPreviewIcon(
-                                        character: character,
-                                        frameIndex: characterPickerFrameTick
-                                    )
-                                }
-                            }
-                            .buttonStyle(.plain)
-                        }
-                    }
-                }
-            }
-        }
+        AnimatedCharacterCatalog(
+            settings: settings,
+            characterPickerFrameTick: nil
+        )
     }
 
     private var customCharacterCatalog: some View {
@@ -812,6 +758,7 @@ private struct MenuBarPreferencesView: View {
                         displayValue: String(format: "%.0f分钟", settings.catRotationIntervalMinutes)
                     )
 
+                    let pool = rotationPoolSet
                     VStack(alignment: .leading, spacing: 6) {
                         MenuBarSubsectionHeader(
                             systemImage: "shuffle",
@@ -830,7 +777,7 @@ private struct MenuBarPreferencesView: View {
                                             toggleRotationPoolCharacter(character.id)
                                         }) {
                                             HStack(spacing: 4) {
-                                                Image(systemName: rotationPoolContains(character.id) ? "checkmark.square" : "square")
+                                                Image(systemName: pool.contains(character.id) ? "checkmark.square" : "square")
                                                     .font(.system(size: 9))
                                                 Text(character.displayName)
                                                     .font(.system(size: 11))
@@ -1178,9 +1125,11 @@ private struct CharacterPickerPreviewIcon: View {
     let character: RunCatCharacter
     let frameIndex: Int
 
+    private static let imageCache = NSCache<NSString, NSImage>()
+
     var body: some View {
         Group {
-            if let image = Self.image(for: character, frameIndex: frameIndex) {
+            if let image = Self.cachedImage(for: character, frameIndex: frameIndex) {
                 Image(nsImage: image)
                     .renderingMode(character.isTemplate ? .template : .original)
                     .resizable()
@@ -1198,18 +1147,32 @@ private struct CharacterPickerPreviewIcon: View {
         .accessibilityHidden(true)
     }
 
-    private static func image(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
+    private static func cachedImage(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
         let safeFrameIndex = frameIndex % max(character.frameCount, 1)
+        let cacheKey = "\(character.id)_\(safeFrameIndex)" as NSString
+
+        if let cached = imageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let image = loadFromDisk(character: character, frameIndex: safeFrameIndex)
+        if let image {
+            imageCache.setObject(image, forKey: cacheKey)
+        }
+        return image
+    }
+
+    private static func loadFromDisk(character: RunCatCharacter, frameIndex: Int) -> NSImage? {
         let resourcePath = "RunCat/\(character.id)"
         if let url = Bundle.main.url(
-            forResource: "frame_\(safeFrameIndex)",
+            forResource: "frame_\(frameIndex)",
             withExtension: "png",
             subdirectory: resourcePath
         ) {
             return NSImage(contentsOf: url)
         }
         if let resourcePath = Bundle.main.resourcePath {
-            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(safeFrameIndex).png"))
+            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(frameIndex).png"))
         }
         return nil
     }
@@ -1273,5 +1236,93 @@ private struct PresetColorButton: View {
                     settings.usesSystemTextColor = false
                 }
             }
+    }
+}
+
+// MARK: - Animated Preview Section (owns its own timer)
+
+private struct AnimatedPreviewSection: View {
+    @ObservedObject var settings: StatusBarSettings
+    @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
+    let selectedCharacterAsset: CharacterAsset
+
+    @State private var previewFrameTimeline = CharacterPreviewFrameTimeline()
+
+    private static let previewFrameInterval: TimeInterval = 1.0 / 8.0
+
+    private var selectedPreviewFrameIndex: Int? {
+        guard settings.showsCat else { return nil }
+        return previewFrameTimeline.frameIndex(for: selectedCharacterAsset)
+    }
+
+    var body: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.preview.title(language: appPreferences.resolvedLanguage)) {
+            StatusBarPreview(
+                settings: settings,
+                appPreferences: appPreferences,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: selectedPreviewFrameIndex
+            )
+
+            MenuBarSettingsSummary(
+                settings: settings,
+                appPreferences: appPreferences,
+                characterName: selectedCharacterAsset.displayName
+            )
+        }
+        .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .common).autoconnect()) { _ in
+            guard settings.showsCat else {
+                previewFrameTimeline.reset()
+                return
+            }
+            previewFrameTimeline.advance(for: selectedCharacterAsset)
+        }
+    }
+}
+
+// MARK: - Animated Character Catalog (owns its own timer)
+
+private struct AnimatedCharacterCatalog: View {
+    @ObservedObject var settings: StatusBarSettings
+    let characterPickerFrameTick: Int?
+
+    @State private var frameTick = 0
+
+    private static let frameInterval: TimeInterval = 1.0 / 8.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(category.rawValue)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 118))], spacing: 5) {
+                        ForEach(charsInCategory) { character in
+                            Button(action: {
+                                settings.catCharacter = character.id
+                            }) {
+                                CharacterChoiceLabel(
+                                    title: character.displayName,
+                                    isSelected: settings.catCharacter == character.id
+                                ) {
+                                    CharacterPickerPreviewIcon(
+                                        character: character,
+                                        frameIndex: frameTick
+                                    )
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .onReceive(Timer.publish(every: Self.frameInterval, on: .main, in: .common).autoconnect()) { _ in
+            frameTick = (frameTick + 1) % 10_000
+        }
     }
 }
