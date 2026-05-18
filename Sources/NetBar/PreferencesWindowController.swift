@@ -65,35 +65,41 @@ private struct PreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
     @ObservedObject var updater: AppUpdater
+    @State private var selectedTab: Int = 0
 
     var body: some View {
         VStack(spacing: 16) {
             PreferencesHeroHeader(appPreferences: appPreferences, updater: updater)
 
-            TabView {
+            TabView(selection: $selectedTab) {
                 GeneralPreferencesView(appPreferences: appPreferences)
                     .tabItem {
                         Label(appPreferences.text("通用", "General"), systemImage: "gearshape")
                     }
+                    .tag(0)
 
                 MenuBarPreferencesView(
                     settings: settings,
                     appPreferences: appPreferences,
-                    customCharacterStore: customCharacterStore
+                    customCharacterStore: customCharacterStore,
+                    isTabActive: selectedTab == 1
                 )
                     .tabItem {
                         Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
                     }
+                    .tag(1)
 
                 ApplicationPreferencesView(appPreferences: appPreferences)
                     .tabItem {
                         Label(appPreferences.text("应用", "Apps"), systemImage: "app.connected.to.app.below.fill")
                     }
+                    .tag(2)
 
                 UpdatePreferencesView(appPreferences: appPreferences, updater: updater)
                     .tabItem {
                         Label(appPreferences.text("更新", "Updates"), systemImage: "arrow.triangle.2.circlepath")
                     }
+                    .tag(3)
             }
         }
         .padding(20)
@@ -255,6 +261,7 @@ private struct MenuBarPreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
+    let isTabActive: Bool
     @State private var previewFrameTimeline = CharacterPreviewFrameTimeline()
     @State private var characterPickerFrameTick = 0
 
@@ -435,6 +442,7 @@ private struct MenuBarPreferencesView: View {
             .padding(.trailing, 2)
         }
         .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .common).autoconnect()) { _ in
+            guard isTabActive else { return }
             guard settings.showsCat else {
                 previewFrameTimeline.reset()
                 characterPickerFrameTick = 0
@@ -1180,7 +1188,7 @@ private struct CharacterPickerPreviewIcon: View {
 
     var body: some View {
         Group {
-            if let image = Self.image(for: character, frameIndex: frameIndex) {
+            if let image = Self.cachedImage(for: character, frameIndex: frameIndex) {
                 Image(nsImage: image)
                     .renderingMode(character.isTemplate ? .template : .original)
                     .resizable()
@@ -1198,18 +1206,39 @@ private struct CharacterPickerPreviewIcon: View {
         .accessibilityHidden(true)
     }
 
-    private static func image(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
+    private static let imageCache: NSCache<NSString, NSImage> = {
+        let cache = NSCache<NSString, NSImage>()
+        cache.countLimit = 128
+        return cache
+    }()
+
+    private static func cachedImage(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
         let safeFrameIndex = frameIndex % max(character.frameCount, 1)
+        let cacheKey = "\(character.id)_\(safeFrameIndex)" as NSString
+
+        if let cached = imageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        guard let image = loadFromDisk(character: character, frameIndex: safeFrameIndex) else {
+            return nil
+        }
+
+        imageCache.setObject(image, forKey: cacheKey)
+        return image
+    }
+
+    private static func loadFromDisk(character: RunCatCharacter, frameIndex: Int) -> NSImage? {
         let resourcePath = "RunCat/\(character.id)"
         if let url = Bundle.main.url(
-            forResource: "frame_\(safeFrameIndex)",
+            forResource: "frame_\(frameIndex)",
             withExtension: "png",
             subdirectory: resourcePath
         ) {
             return NSImage(contentsOf: url)
         }
         if let resourcePath = Bundle.main.resourcePath {
-            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(safeFrameIndex).png"))
+            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(frameIndex).png"))
         }
         return nil
     }
