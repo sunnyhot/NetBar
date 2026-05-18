@@ -31,8 +31,16 @@ fi
 
 chmod +x "$MACOS_DIR/$APP_NAME"
 
+ENTITLEMENTS="$ROOT_DIR/Resources/NetBar.entitlements"
+if [ -f "$ENTITLEMENTS" ]; then
+    CODESIGN_FLAGS="--force --deep --sign - --entitlements $ENTITLEMENTS"
+else
+    CODESIGN_FLAGS="--force --deep --sign -"
+fi
+
 if command -v codesign >/dev/null 2>&1; then
-    codesign --force --deep --sign - "$APP_DIR" >/dev/null
+    codesign $CODESIGN_FLAGS "$APP_DIR" >/dev/null 2>&1 || \
+        codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
 fi
 
 echo "$APP_DIR"

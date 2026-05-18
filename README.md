@@ -52,6 +52,20 @@ dist/NetBar.app.zip.sha256
 swift run NetBar
 ```
 
+## macOS 提示"已损坏"的解决方法
+
+从 GitHub Release 下载的 App 未经过 Apple 公证（notarization），macOS Gatekeeper 会阻止打开并提示「"NetBar" is damaged and can't be opened」。
+
+**解决方法**：在终端执行以下命令，移除隔离属性：
+
+```bash
+xattr -cr /Applications/NetBar.app
+```
+
+> 如果放在其他位置，把路径替换为实际的 `NetBar.app` 路径。
+
+或者：右键点击 App → 选择「打开」→ 在弹出的对话框中再次点击「打开」。
+
 ## 说明
 
 macOS 的网卡计数器通常是从系统启动或接口启动以来累计的字节数。NetBar 展示的实时上下行速度来自相邻两次采样的差值；累计收发流量是接口计数器当前值，不等同于 App 启动后的流量。
