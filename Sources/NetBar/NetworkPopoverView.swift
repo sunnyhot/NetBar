@@ -9,26 +9,26 @@ struct NetworkPopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             HeaderView(snapshot: monitor.snapshot, appPreferences: appPreferences)
-                .padding(.horizontal, 16)
-                .padding(.top, 16)
-                .padding(.bottom, 12)
+                .padding(.horizontal, 18)
+                .padding(.top, 18)
+                .padding(.bottom, 14)
                 .layoutPriority(1)
 
-            Divider()
+            Divider().opacity(0.55)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 16) {
                     if !appPreferences.hasCompletedOnboarding {
                         FirstLaunchGuide(
                             appPreferences: appPreferences,
                             openPreferences: openPreferences,
                             completeOnboarding: appPreferences.completeOnboarding
                         )
-                        .padding(.top, 14)
+                        .padding(.top, 16)
                     } else {
                         TrafficChart(points: monitor.recentHistory)
-                            .frame(height: 100)
-                            .padding(.top, 14)
+                            .frame(height: 132)
+                            .padding(.top, 16)
                     }
 
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
@@ -46,21 +46,22 @@ struct NetworkPopoverView: View {
                         refresh: monitor.refresh
                     )
                 }
-                .padding(.horizontal, 16)
-                .padding(.bottom, 14)
+                .padding(.horizontal, 18)
+                .padding(.bottom, 16)
             }
             .frame(minHeight: 0)
 
-            Divider()
+            Divider().opacity(0.55)
 
             FooterView(monitor: monitor, appPreferences: appPreferences, openPreferences: openPreferences)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 10)
+                .padding(.horizontal, 18)
+                .padding(.vertical, 11)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
         }
-        .frame(minWidth: 460, idealWidth: 520, minHeight: 460, idealHeight: 680)
-        .background(Color(nsColor: .windowBackgroundColor))
+        .frame(minWidth: 440, idealWidth: 440, maxWidth: 440, minHeight: 500, idealHeight: 720, maxHeight: .infinity)
+        .netBarPanelBackground()
+        .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
     }
 }
 
@@ -71,37 +72,38 @@ private struct HeaderView: View {
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack(alignment: .firstTextBaseline) {
-                Text("NetBar")
-                    .font(.system(size: 19, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .center) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("NetBar")
+                        .font(.system(size: 20, weight: .bold, design: .rounded))
+                        .foregroundStyle(.primary)
+                    Text(appPreferences.text("实时网络仪表盘", "Realtime Network Console"))
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                }
 
                 Spacer()
 
-                HStack(spacing: 4) {
-                    Circle()
-                        .fill(Color.green)
-                        .frame(width: 6, height: 6)
+                HStack(spacing: 8) {
+                    NetBarBadge(text: appPreferences.text("实时", "Live"), tone: .success)
                     Text(snapshot.timestamp, style: .time)
-                        .font(.system(size: 11, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.secondary)
                 }
             }
 
-            HStack(spacing: 10) {
+            HStack(spacing: 12) {
                 SpeedTile(
                     title: appPreferences.text("下载", "Download"),
                     value: ByteFormat.speed(snapshot.downloadBytesPerSecond),
-                    tint: .blue,
-                    gradient: Gradient(colors: [Color.blue, Color(red: 0.3, green: 0.7, blue: 1.0)]),
+                    tone: .download,
                     symbol: "arrow.down"
                 )
                 SpeedTile(
                     title: appPreferences.text("上传", "Upload"),
                     value: ByteFormat.speed(snapshot.uploadBytesPerSecond),
-                    tint: .orange,
-                    gradient: Gradient(colors: [Color.orange, Color(red: 1.0, green: 0.5, blue: 0.3)]),
+                    tone: .upload,
                     symbol: "arrow.up"
                 )
             }
@@ -150,8 +152,7 @@ private struct FirstLaunchGuide: View {
                 Spacer()
             }
         }
-        .padding(14)
-        .background(cardBackground)
+        .netBarCard(cornerRadius: 14, padding: 14, isProminent: true)
     }
 }
 
@@ -160,35 +161,43 @@ private struct FirstLaunchGuide: View {
 private struct SpeedTile: View {
     let title: String
     let value: String
-    let tint: Color
-    let gradient: Gradient
+    let tone: NetBarTone
     let symbol: String
 
     var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 13, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 30, height: 30)
-                .background(
-                    LinearGradient(gradient: gradient, startPoint: .topLeading, endPoint: .bottomTrailing),
-                    in: RoundedRectangle(cornerRadius: 8)
-                )
+        HStack(spacing: 12) {
+            NetBarIconTile(systemName: symbol, tone: tone, size: 34)
 
             VStack(alignment: .leading, spacing: 1) {
                 Text(title)
-                    .font(.system(size: 10, weight: .semibold))
+                    .font(.system(size: 10, weight: .bold))
                     .foregroundStyle(.tertiary)
                 Text(value)
-                    .font(.system(size: 20, weight: .bold, design: .rounded))
+                    .font(.system(size: 22, weight: .bold, design: .rounded))
                     .lineLimit(1)
                     .minimumScaleFactor(0.6)
+                    .animation(NetBarMotion.quick, value: value)
+                ActivityLevelBars(tone: tone)
+                    .padding(.top, 3)
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(cardBackground)
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(tint.opacity(0.1), lineWidth: 0.5))
+        .netBarCard(cornerRadius: 14, padding: 12, isProminent: true)
+        .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous).strokeBorder(tone.color.opacity(0.12), lineWidth: 0.7))
+    }
+}
+
+private struct ActivityLevelBars: View {
+    let tone: NetBarTone
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(0..<8, id: \.self) { index in
+                Capsule()
+                    .fill(tone.color.opacity(0.18 + Double(index) * 0.055))
+                    .frame(width: 8, height: CGFloat(3 + index % 4 * 2))
+            }
+        }
     }
 }
 
@@ -199,26 +208,26 @@ private struct SummaryGrid: View {
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             SummaryCell(
                 title: appPreferences.text("总下载", "Total Down"),
                 value: ByteFormat.bytes(snapshot.totalReceivedBytes),
-                tint: .blue
+                tone: .download
             )
             SummaryCell(
                 title: appPreferences.text("总上传", "Total Up"),
                 value: ByteFormat.bytes(snapshot.totalSentBytes),
-                tint: .orange
+                tone: .upload
             )
             SummaryCell(
                 title: appPreferences.text("接口", "Ifaces"),
                 value: "\(snapshot.interfaces.count)",
-                tint: .secondary
+                tone: .neutral
             )
             SummaryCell(
                 title: appPreferences.text("采样", "Samples"),
                 value: "\(snapshot.sampleCount)",
-                tint: .secondary
+                tone: .neutral
             )
         }
     }
@@ -227,22 +236,26 @@ private struct SummaryGrid: View {
 private struct SummaryCell: View {
     let title: String
     let value: String
-    let tint: Color
+    let tone: NetBarTone
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(title)
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(.tertiary)
-            Text(value)
-                .font(.system(size: 14, weight: .bold, design: .rounded))
-                .foregroundStyle(.primary)
-                .lineLimit(1)
-                .minimumScaleFactor(0.7)
+        HStack(spacing: 8) {
+            Circle()
+                .fill(tone.color.opacity(tone == .neutral ? 0.22 : 0.75))
+                .frame(width: 6, height: 6)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                Text(value)
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(10)
-        .background(cardBackground)
+        .netBarCard(cornerRadius: 11, padding: 10)
     }
 }
 
@@ -264,18 +277,11 @@ private struct ApplicationTrafficList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Text(preferences.text("应用流量", "Application Traffic"))
-                    .font(.system(size: 13, weight: .bold))
-
-                Spacer()
-
-                if let timestamp = appTraffic.timestamp {
-                    Text("\(preferences.text("更新于", "Updated")) \(timestamp, style: .time)")
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                }
-            }
+            NetBarSectionHeader(
+                title: preferences.text("应用流量", "Application Traffic"),
+                subtitle: preferences.text("按实时网络活动排序和筛选", "Sorted and filtered by realtime activity"),
+                trailing: appTraffic.timestamp.map { "\(preferences.text("更新", "Updated")) \($0.formatted(date: .omitted, time: .shortened))" }
+            )
 
             if let errorMessage = appTraffic.errorMessage {
                 AppTrafficNotice(
@@ -290,6 +296,7 @@ private struct ApplicationTrafficList: View {
                     HStack(spacing: 8) {
                         TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
                             .textFieldStyle(.roundedBorder)
+                            .font(.system(size: 12))
 
                         Picker(preferences.text("排序", "Sort"), selection: $preferences.applicationSort) {
                             ForEach(ApplicationSortMode.allCases) { sortMode in
@@ -297,8 +304,9 @@ private struct ApplicationTrafficList: View {
                             }
                         }
                         .labelsHidden()
-                        .frame(width: 110)
+                        .frame(width: 126)
                     }
+                    .netBarCard(cornerRadius: 11, padding: 8)
                 }
 
                 if visibleApplications.isEmpty {
@@ -308,7 +316,7 @@ private struct ApplicationTrafficList: View {
                         message: emptyMessage
                     )
                 } else {
-                    VStack(spacing: 6) {
+                    VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(application: application)
                         }
@@ -379,66 +387,116 @@ private struct AppTrafficNotice: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(12)
-        .background(cardBackground)
+        .netBarCard(cornerRadius: 12, padding: 12)
     }
 }
 
 private struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
+    @State private var isHovering = false
 
     var body: some View {
-        HStack(spacing: 10) {
-            AppBadge(title: application.displayName)
+        HStack(spacing: 8) {
+            AppBadge(title: application.displayName, pids: application.pids)
 
-            VStack(alignment: .leading, spacing: 2) {
-                HStack(spacing: 6) {
-                    Text(application.displayName)
-                        .font(.system(size: 12, weight: .bold))
-                        .lineLimit(1)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(application.displayName)
+                    .font(.system(size: 11, weight: .bold))
+                    .lineLimit(1)
+                    .truncationMode(.tail)
 
-                    if !application.processLabel.isEmpty {
-                        Text("PID \(application.processLabel)")
-                            .font(.system(size: 9, weight: .medium, design: .monospaced))
-                            .foregroundStyle(.quaternary)
-                            .lineLimit(1)
-                    }
-                }
-
-                Text(application.processNames.prefix(2).joined(separator: ", "))
-                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                Text(detailSubtitle)
+                    .font(.system(size: 9, weight: .medium, design: .monospaced))
                     .foregroundStyle(.tertiary)
                     .lineLimit(1)
+                    .truncationMode(.tail)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
-            Spacer()
-
-            VStack(alignment: .trailing, spacing: 4) {
-                MetricPill(symbol: "arrow.down", value: ByteFormat.speed(application.downloadBytesPerSecond), tint: .blue)
-                MetricPill(symbol: "arrow.up", value: ByteFormat.speed(application.uploadBytesPerSecond), tint: .orange)
+            HStack(spacing: 8) {
+                CompactMetric(
+                    symbol: "arrow.down",
+                    value: ByteFormat.speed(application.downloadBytesPerSecond),
+                    tint: .blue
+                )
+                CompactMetric(
+                    symbol: "arrow.up",
+                    value: ByteFormat.speed(application.uploadBytesPerSecond),
+                    tint: .orange
+                )
             }
         }
-        .padding(10)
-        .background(cardBackground)
+        .netBarCard(cornerRadius: 10, padding: 6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(isHovering ? 0.12 : 0.0), lineWidth: 0.5)
+        )
+        .animation(NetBarMotion.quick, value: isHovering)
+        .onHover { isHovering = $0 }
+    }
+
+    private var detailSubtitle: String {
+        let processNames = application.processNames.prefix(2).joined(separator: ", ")
+        guard !application.processLabel.isEmpty else {
+            return processNames
+        }
+        guard !processNames.isEmpty else {
+            return "PID \(application.processLabel)"
+        }
+        return "\(processNames)  PID \(application.processLabel)"
+    }
+}
+
+private struct CompactMetric: View {
+    let symbol: String
+    let value: String
+    let tint: Color
+
+    var body: some View {
+        Label(value, systemImage: symbol)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .monospacedDigit()
+            .foregroundStyle(tint)
+            .lineLimit(1)
+            .minimumScaleFactor(0.7)
     }
 }
 
 private struct AppBadge: View {
     let title: String
+    let pids: [Int32]
+
+    private var appIcon: NSImage? {
+        for pid in pids {
+            if let app = NSRunningApplication(processIdentifier: pid) {
+                return app.icon
+            }
+        }
+        return nil
+    }
 
     var body: some View {
-        Text(initial)
-            .font(.system(size: 11, weight: .bold, design: .rounded))
-            .foregroundStyle(.white)
-            .frame(width: 28, height: 28)
-            .background(
-                LinearGradient(
-                    colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                in: RoundedRectangle(cornerRadius: 7)
-            )
+        Group {
+            if let icon = appIcon {
+                Image(nsImage: icon)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Text(initial)
+                    .font(.system(size: 10, weight: .bold, design: .rounded))
+                    .foregroundStyle(.white)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(
+                        LinearGradient(
+                            colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
+                            startPoint: .topLeading,
+                            endPoint: .bottomTrailing
+                        )
+                    )
+            }
+        }
+        .frame(width: 24, height: 24)
+        .clipShape(RoundedRectangle(cornerRadius: 6))
     }
 
     private var initial: String {
@@ -455,8 +513,10 @@ private struct InterfaceList: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(appPreferences.text("接口明细", "Interfaces"))
-                .font(.system(size: 13, weight: .bold))
+            NetBarSectionHeader(
+                title: appPreferences.text("接口明细", "Interfaces"),
+                subtitle: appPreferences.text("活动接口与累计包量", "Active interfaces and cumulative packets")
+            )
 
             if interfaces.isEmpty {
                 EmptyInterfacesView(appPreferences: appPreferences, refresh: refresh)
@@ -491,30 +551,28 @@ private struct EmptyInterfacesView: View {
             .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, minHeight: 120)
-        .background(cardBackground)
+        .netBarCard(cornerRadius: 12, padding: 12)
     }
 }
 
 private struct InterfaceRow: View {
     let interface: InterfaceRate
+    @State private var isHovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline) {
+                Image(systemName: InterfacePresentation.iconName(for: interface.name))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(interface.isPrimary ? Color.blue : Color.secondary)
+                    .frame(width: 18)
+
                 Text(interface.displayName)
                     .font(.system(size: 12, weight: .bold))
                     .lineLimit(1)
 
                 if interface.isPrimary {
-                    Text("主接口")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 5)
-                        .padding(.vertical, 2)
-                        .background(
-                            LinearGradient(colors: [.blue, .cyan], startPoint: .leading, endPoint: .trailing),
-                            in: Capsule()
-                        )
+                    NetBarBadge(text: "主接口", tone: .download)
                 }
 
                 Spacer()
@@ -571,8 +629,13 @@ private struct InterfaceRow: View {
                 }
             }
         }
-        .padding(10)
-        .background(cardBackground)
+        .netBarCard(cornerRadius: 12, padding: 10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(Color.primary.opacity(isHovering ? 0.12 : 0.0), lineWidth: 0.7)
+        )
+        .animation(NetBarMotion.quick, value: isHovering)
+        .onHover { isHovering = $0 }
     }
 }
 
@@ -582,14 +645,17 @@ private struct MetricPill: View {
     let symbol: String
     let value: String
     let tint: Color
+    var fixedWidth: CGFloat? = nil
 
     var body: some View {
         Label(value, systemImage: symbol)
             .font(.system(size: 10, weight: .bold, design: .rounded))
+            .monospacedDigit()
             .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
-            .frame(maxWidth: .infinity)
+            .frame(width: fixedWidth)
+            .frame(maxWidth: fixedWidth == nil ? .infinity : fixedWidth)
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
@@ -628,9 +694,8 @@ private struct FooterView: View {
             HStack(spacing: 12) {
                 Button { openPreferences() } label: {
                     Image(systemName: "gearshape")
-                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(NetBarIconButtonStyle())
                 .help(appPreferences.text("偏好设置", "Preferences"))
 
                 Button {
@@ -638,16 +703,14 @@ private struct FooterView: View {
                     monitor.refreshApplicationTraffic()
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .foregroundStyle(.secondary)
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(NetBarIconButtonStyle())
                 .help(appPreferences.text("立即刷新", "Refresh Now"))
 
                 Button { NSApplication.shared.terminate(nil) } label: {
                     Image(systemName: "power")
-                        .foregroundStyle(.red.opacity(0.6))
                 }
-                .buttonStyle(.borderless)
+                .buttonStyle(NetBarIconButtonStyle(tone: .warning))
                 .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
             }
         }
@@ -660,22 +723,27 @@ private struct TrafficChart: View {
     let points: [RatePoint]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text("最近 90 秒")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundStyle(.secondary)
-                Spacer()
-                HStack(spacing: 10) {
-                    LegendDot(title: "下载", color: .blue)
-                    LegendDot(title: "上传", color: .orange)
-                }
-            }
+        VStack(alignment: .leading, spacing: 10) {
+            NetBarSectionHeader(
+                title: "最近 90 秒",
+                subtitle: "下载 / 上传实时趋势",
+                trailing: "\(points.count) pts"
+            )
 
             GeometryReader { geometry in
                 ZStack {
-                    RoundedRectangle(cornerRadius: 10)
-                        .fill(Color(nsColor: .controlBackgroundColor))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(Color.primary.opacity(0.035))
+                    chartGrid
+                    VStack {
+                        Spacer()
+                        HStack(spacing: 10) {
+                            LegendDot(title: "下载", color: .blue)
+                            LegendDot(title: "上传", color: .orange)
+                        }
+                        .padding(.horizontal, 10)
+                        .padding(.bottom, 8)
+                    }
 
                     ChartLine(
                         points: points.map(\.uploadBytesPerSecond),
@@ -690,6 +758,23 @@ private struct TrafficChart: View {
                 }
             }
         }
+        .netBarCard(cornerRadius: 14, padding: 12, isProminent: true)
+    }
+
+    private var chartGrid: some View {
+        VStack(spacing: 0) {
+            ForEach(0..<4, id: \.self) { _ in
+                Rectangle()
+                    .fill(Color.primary.opacity(0.055))
+                    .frame(height: 0.5)
+                Spacer()
+            }
+            Rectangle()
+                .fill(Color.primary.opacity(0.055))
+                .frame(height: 0.5)
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 10)
     }
 }
 
@@ -759,10 +844,4 @@ private struct ChartLine: View {
             path.closeSubpath()
         }
     }
-}
-
-// MARK: - Shared Styles
-
-private var cardBackground: some ShapeStyle {
-    Color(nsColor: .controlBackgroundColor)
 }

@@ -62,6 +62,8 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     case galaxy          // Galaxy (deep purple → blue → pink → white)
     case matrix          // Matrix (green shades)
     case roseGold        // Rose gold (warm pink → gold → copper)
+    case arcanePrism     // Arcane prism (gem-like magic color flow)
+    case heatVision      // Heat vision (red eye beams)
     case randomPop       // Random color per frame change (拼色)
     case randomCycle     // Smooth random color cycling (随机炫彩)
 
@@ -84,6 +86,8 @@ enum CatColorMode: String, CaseIterable, Identifiable {
         case .galaxy:      return zh ? "星河" : "Galaxy"
         case .matrix:      return zh ? "黑客" : "Matrix"
         case .roseGold:    return zh ? "玫瑰金" : "Rose Gold"
+        case .arcanePrism: return zh ? "魔法炫彩" : "Arcane Prism"
+        case .heatVision:  return zh ? "热视线" : "Heat Vision"
         case .randomPop:   return zh ? "随机拼色" : "Random Pop"
         case .randomCycle: return zh ? "随机炫彩" : "Random Cycle"
         }
@@ -236,6 +240,31 @@ enum CatColorMode: String, CaseIterable, Identifiable {
             let hue = 0.05 + 0.9 * (0.5 + 0.5 * cos(progress * .pi * 2))
             let saturation = 0.4 + 0.3 * sin(progress * .pi * 2)
             return NSColor(calibratedHue: hue, saturation: saturation, brightness: 0.85, alpha: 1.0)
+
+        case .arcanePrism:
+            // Gem-like magical highlight: violet → azure → cyan → gold → rose.
+            let cycleTime = time.truncatingRemainder(dividingBy: 4.8)
+            let progress = CGFloat(cycleTime / 4.8)
+            let hue = (0.76 + progress * 0.42 + CGFloat(frameIndex % 5) * 0.025).truncatingRemainder(dividingBy: 1.0)
+            let pulse = 0.5 + 0.5 * sin(progress * .pi * 4)
+            return NSColor(
+                calibratedHue: hue,
+                saturation: 0.86 + 0.12 * pulse,
+                brightness: 0.9 + 0.1 * (1 - pulse),
+                alpha: 1.0
+            )
+
+        case .heatVision:
+            let cycleTime = time.truncatingRemainder(dividingBy: 1.6)
+            let progress = CGFloat(cycleTime / 1.6)
+            let pulse = 0.5 + 0.5 * sin(progress * .pi * 2)
+            let hue = 0.01 + 0.035 * pulse
+            return NSColor(
+                calibratedHue: hue,
+                saturation: 0.95,
+                brightness: 0.92 + 0.08 * pulse,
+                alpha: 1.0
+            )
 
         case .randomPop:
             // Change color on each frame change — truly random-feeling jumps
@@ -397,6 +426,40 @@ enum CatColorMode: String, CaseIterable, Identifiable {
                 (color: NSColor(calibratedHue: 0.06, saturation: 0.7, brightness: 0.75, alpha: 1.0), position: 1.0),
             ]
 
+        case .arcanePrism:
+            // Arcane prism: saturated gem facets with a slow hue drift.
+            let drift = CGFloat((time.truncatingRemainder(dividingBy: 4.8)) / 4.8) * 0.2 + CGFloat(frameIndex % 5) * 0.012
+            let stops: [(hue: CGFloat, saturation: CGFloat, brightness: CGFloat, position: CGFloat)] = [
+                (0.77, 0.92, 0.98, 0.0),
+                (0.63, 0.90, 1.00, 0.16),
+                (0.54, 0.86, 1.00, 0.31),
+                (0.46, 0.82, 0.96, 0.47),
+                (0.12, 0.88, 1.00, 0.64),
+                (0.93, 0.86, 1.00, 0.81),
+                (0.82, 0.92, 0.98, 1.0),
+            ]
+            return stops.map { stop in
+                (
+                    color: NSColor(
+                        calibratedHue: (stop.hue + drift).truncatingRemainder(dividingBy: 1.0),
+                        saturation: stop.saturation,
+                        brightness: stop.brightness,
+                        alpha: 1.0
+                    ),
+                    position: stop.position
+                )
+            }
+
+        case .heatVision:
+            let pulse = CGFloat(0.5 + 0.5 * sin(time * 4.2 + Double(frameIndex) * 0.3))
+            let redCore = 0.98 + 0.02 * pulse
+            return [
+                (color: NSColor(calibratedHue: 0.0, saturation: 0.98, brightness: redCore, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: 0.025, saturation: 0.96, brightness: 1.0, alpha: 1.0), position: 0.28),
+                (color: NSColor(calibratedHue: 0.07, saturation: 0.88, brightness: 1.0, alpha: 1.0), position: 0.55),
+                (color: NSColor(calibratedHue: 0.0, saturation: 1.0, brightness: 0.82 + 0.14 * pulse, alpha: 1.0), position: 1.0),
+            ]
+
         case .randomPop:
             // Random: 2-3 random colors split across the body
             let timeBucket = Int(time * 2)
@@ -428,7 +491,7 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     /// Whether this mode should show sparkle/star decorations on the character
     var hasSparkles: Bool {
         switch self {
-        case .galaxy, .neon, .aurora, .cyber, .candy, .randomPop, .rainbow:
+        case .galaxy, .neon, .aurora, .cyber, .candy, .arcanePrism, .heatVision, .randomPop, .rainbow:
             return true
         default:
             return false
@@ -490,6 +553,38 @@ enum StatusBarAlignment: String, CaseIterable, Identifiable {
     }
 }
 
+enum StatusBarCharacterPosition: String, CaseIterable, Identifiable {
+    case left
+    case right
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .left:
+            return language.text("左侧", "Left")
+        case .right:
+            return language.text("右侧", "Right")
+        }
+    }
+}
+
+enum StatusBarCharacterFacing: String, CaseIterable, Identifiable {
+    case right
+    case left
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .right:
+            return language.text("向右", "Right")
+        case .left:
+            return language.text("向左", "Left")
+        }
+    }
+}
+
 @MainActor
 final class StatusBarSettings: ObservableObject {
     @Published var fontSize: Double { didSet { save() } }
@@ -507,6 +602,9 @@ final class StatusBarSettings: ObservableObject {
     @Published var backgroundColor: PersistedColor { didSet { save() } }
     @Published var showsCat: Bool { didSet { save() } }
     @Published var catCharacter: String { didSet { save() } }
+    @Published var catScale: Double { didSet { save() } }
+    @Published var catPosition: StatusBarCharacterPosition { didSet { save() } }
+    @Published var catFacing: StatusBarCharacterFacing { didSet { save() } }
     @Published var catSpeedMultiplier: Double { didSet { save() } }
     @Published var catColor: PersistedColor { didSet { save() } }
     @Published var catColorMode: String { didSet { save() } }
@@ -534,6 +632,9 @@ final class StatusBarSettings: ObservableObject {
         backgroundColor = Self.color(prefix: Keys.backgroundColor, defaults: defaults, fallback: Defaults.backgroundColor)
         showsCat = defaults.object(forKey: Keys.showsCat) as? Bool ?? Defaults.showsCat
         catCharacter = defaults.string(forKey: Keys.catCharacter) ?? Defaults.catCharacter
+        catScale = defaults.object(forKey: Keys.catScale) as? Double ?? Defaults.catScale
+        catPosition = StatusBarCharacterPosition(rawValue: defaults.string(forKey: Keys.catPosition) ?? "") ?? Defaults.catPosition
+        catFacing = StatusBarCharacterFacing(rawValue: defaults.string(forKey: Keys.catFacing) ?? "") ?? Defaults.catFacing
         catSpeedMultiplier = defaults.object(forKey: Keys.catSpeedMultiplier) as? Double ?? Defaults.catSpeedMultiplier
         catColor = Self.color(prefix: Keys.catColor, defaults: defaults, fallback: Defaults.catColor)
         catColorMode = defaults.string(forKey: Keys.catColorMode) ?? Defaults.catColorMode
@@ -553,6 +654,10 @@ final class StatusBarSettings: ObservableObject {
 
     var clampedLineSpacing: CGFloat {
         CGFloat(lineSpacing.clamped(to: -5...8))
+    }
+
+    var clampedCatScale: CGFloat {
+        CGFloat(catScale.clamped(to: 0.7...1.3))
     }
 
     var fontWeight: NSFont.Weight {
@@ -579,6 +684,9 @@ final class StatusBarSettings: ObservableObject {
         backgroundColor = Defaults.backgroundColor
         showsCat = Defaults.showsCat
         catCharacter = Defaults.catCharacter
+        catScale = Defaults.catScale
+        catPosition = Defaults.catPosition
+        catFacing = Defaults.catFacing
         catSpeedMultiplier = Defaults.catSpeedMultiplier
         catColor = Defaults.catColor
         catColorMode = Defaults.catColorMode
@@ -604,6 +712,9 @@ final class StatusBarSettings: ObservableObject {
         save(backgroundColor, prefix: Keys.backgroundColor)
         defaults.set(showsCat, forKey: Keys.showsCat)
         defaults.set(catCharacter, forKey: Keys.catCharacter)
+        defaults.set(catScale, forKey: Keys.catScale)
+        defaults.set(catPosition.rawValue, forKey: Keys.catPosition)
+        defaults.set(catFacing.rawValue, forKey: Keys.catFacing)
         defaults.set(catSpeedMultiplier, forKey: Keys.catSpeedMultiplier)
         save(catColor, prefix: Keys.catColor)
         defaults.set(catColorMode, forKey: Keys.catColorMode)
@@ -649,6 +760,9 @@ final class StatusBarSettings: ObservableObject {
         static let backgroundColor = PersistedColor.olive
         static let showsCat = true
         static let catCharacter = "cat"
+        static let catScale = 1.0
+        static let catPosition = StatusBarCharacterPosition.left
+        static let catFacing = StatusBarCharacterFacing.right
         static let catSpeedMultiplier = 1.0
         static let catColor = PersistedColor.white
         static let catColorMode = CatColorMode.solid.rawValue
@@ -674,6 +788,9 @@ final class StatusBarSettings: ObservableObject {
         static let backgroundColor = "statusBar.backgroundColor"
         static let showsCat = "statusBar.showsCat"
         static let catCharacter = "statusBar.catCharacter"
+        static let catScale = "statusBar.catScale"
+        static let catPosition = "statusBar.catPosition"
+        static let catFacing = "statusBar.catFacing"
         static let catSpeedMultiplier = "statusBar.catSpeedMultiplier"
         static let catColor = "statusBar.catColor"
         static let catColorMode = "statusBar.catColorMode"
@@ -714,16 +831,37 @@ struct StatusBarRenderSignature: Equatable {
     let appearanceName: String
     let catFrameIndex: Int?
     let catCharacter: String
+    let catScale: Double
+    let catPosition: StatusBarCharacterPosition
+    let catFacing: StatusBarCharacterFacing
     let catColor: PersistedColor
     let catColorMode: String
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
     let catHeadSwing: Bool
+    let customCharacterRevision: Int
+    let googlyEyesState: GooglyEyesRenderState?
+}
+
+struct GooglyEyesRenderState: Equatable {
+    let mouseLocation: CGPoint
+    let statusItemFrame: CGRect
+    let isBlinking: Bool
 }
 
 @MainActor
 enum StatusBarDisplayRenderer {
-    static func presentation(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> StatusBarPresentation {
-        let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
+    static func presentation(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore? = nil,
+        catFrameIndex: Int? = nil
+    ) -> StatusBarPresentation {
+        let layout = layout(
+            snapshot: snapshot,
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex
+        )
         return StatusBarPresentation(
             kind: .retinaImage,
             width: layout.width,
@@ -735,10 +873,17 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         appearanceName: String,
-        catFrameIndex: Int? = nil
+        customCharacterStore: CustomCharacterStore? = nil,
+        catFrameIndex: Int? = nil,
+        googlyEyesState: GooglyEyesRenderState? = nil
     ) -> StatusBarRenderSignature {
         StatusBarRenderSignature(
-            presentation: presentation(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex),
+            presentation: presentation(
+                snapshot: snapshot,
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex
+            ),
             fontSize: settings.fontSize,
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
@@ -755,18 +900,23 @@ enum StatusBarDisplayRenderer {
             appearanceName: appearanceName,
             catFrameIndex: catFrameIndex,
             catCharacter: settings.catCharacter,
+            catScale: settings.catScale,
+            catPosition: settings.catPosition,
+            catFacing: settings.catFacing,
             catColor: settings.catColor,
             catColorMode: settings.catColorMode,
             catColorTimeBucket: {
                 let mode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
                 return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
             }(),
-            catHeadSwing: settings.catHeadSwing
+            catHeadSwing: settings.catHeadSwing,
+            customCharacterRevision: customCharacterStore?.revision ?? 0,
+            googlyEyesState: googlyEyesState
         )
     }
 
     static func attributedTitle(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSAttributedString {
-        let layout = layout(snapshot: snapshot, settings: settings)
+        let layout = layout(snapshot: snapshot, settings: settings, customCharacterStore: nil)
         return attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings)
     }
 
@@ -774,12 +924,37 @@ enum StatusBarDisplayRenderer {
         image(snapshot: snapshot, settings: settings, scale: NSScreen.main?.backingScaleFactor ?? 2)
     }
 
-    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> NSImage {
-        image(snapshot: snapshot, settings: settings, scale: NSScreen.main?.backingScaleFactor ?? 2, catFrameIndex: catFrameIndex)
+    static func image(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore? = nil,
+        catFrameIndex: Int? = nil,
+        googlyEyesState: GooglyEyesRenderState? = nil
+    ) -> NSImage {
+        image(
+            snapshot: snapshot,
+            settings: settings,
+            scale: NSScreen.main?.backingScaleFactor ?? 2,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex,
+            googlyEyesState: googlyEyesState
+        )
     }
 
-    static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings, scale: CGFloat, catFrameIndex: Int? = nil) -> NSImage {
-        let layout = layout(snapshot: snapshot, settings: settings, catFrameIndex: catFrameIndex)
+    static func image(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        scale: CGFloat,
+        customCharacterStore: CustomCharacterStore? = nil,
+        catFrameIndex: Int? = nil,
+        googlyEyesState: GooglyEyesRenderState? = nil
+    ) -> NSImage {
+        let layout = layout(
+            snapshot: snapshot,
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex
+        )
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
         let size = NSSize(width: width, height: height)
@@ -822,8 +997,12 @@ enum StatusBarDisplayRenderer {
         let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
         let catHasCustomColor: Bool
         if settings.showsCat, catFrameIndex != nil {
-            let character = RunCatCharacter.byId(settings.catCharacter)
-            if character.isTemplate {
+            let character = characterAsset(settings: settings, customCharacterStore: customCharacterStore)
+            if character.isCustom {
+                catHasCustomColor = true
+            } else if character.isGooglyEyes {
+                catHasCustomColor = true
+            } else if character.isTemplate {
                 // Template character with non-solid mode, or solid mode with non-white color
                 catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white
             } else {
@@ -840,63 +1019,69 @@ enum StatusBarDisplayRenderer {
         let useTemplate = settings.usesSystemTextColor && !settings.showsBackground && !catHasCustomColor
         let textColor = useTemplate ? NSColor.black : settings.effectiveTextColor
 
-        // Draw cat frame if enabled
-        var textXOffset: CGFloat = layout.horizontalPadding
+        var textRect = NSRect(
+            x: layout.horizontalPadding,
+            y: 0,
+            width: max(width - layout.horizontalPadding * 2, 1),
+            height: height
+        )
         if let catIndex = catFrameIndex, settings.showsCat {
             // Load the cat character image from the pre-cached animation frames
-            let character = RunCatCharacter.byId(settings.catCharacter)
-            let resourcePath = "RunCat/\(character.id)"
+            let character = characterAsset(settings: settings, customCharacterStore: customCharacterStore)
             let frameIdx = catIndex % character.frameCount
-            let catImage: NSImage?
-            if let url = Bundle.main.url(forResource: "frame_\(frameIdx)", withExtension: "png", subdirectory: resourcePath) {
-                catImage = NSImage(contentsOf: url)
-            } else if let resPath = Bundle.main.resourcePath {
-                catImage = NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(character.id)/frame_\(frameIdx).png"))
-            } else {
-                catImage = nil
+
+            // Scale: sprite is at 1x (e.g. 28x36). Draw at 1x logical size.
+            // Frame width varies by character, use character.frameWidth
+            let catSize = characterSize(for: character, settings: settings)
+            let catPadding = characterSpacing(settings: settings)
+            let catY = (height - catSize.height) / 2
+            let catX: CGFloat
+            switch settings.catPosition {
+            case .left:
+                catX = layout.horizontalPadding
+                textRect.origin.x = layout.horizontalPadding + catSize.width + catPadding
+                textRect.size.width = max(width - textRect.origin.x - layout.horizontalPadding, 1)
+            case .right:
+                catX = width - layout.horizontalPadding - catSize.width
+                textRect.origin.x = layout.horizontalPadding
+                textRect.size.width = max(catX - catPadding - layout.horizontalPadding, 1)
             }
+            let drawRect = NSRect(x: catX, y: catY, width: catSize.width, height: catSize.height)
 
-            if let catImg = catImage {
-                // Scale: sprite is at 1x (e.g. 28x36). Draw at 1x logical size.
-                // Frame width varies by character, use character.frameWidth
-                let catWidth: CGFloat = CGFloat(character.frameWidth)
-                let catHeight: CGFloat = 18
-                let catY = (height - catHeight) / 2
-                let catPadding: CGFloat = 3
-                let drawRect = NSRect(x: layout.horizontalPadding, y: catY, width: catWidth, height: catHeight)
-                let now = Date().timeIntervalSince1970
+            if character.isGooglyEyes {
+                drawGooglyEyes(
+                    in: drawRect,
+                    state: googlyEyesState,
+                    accentColor: googlyEyesAccentColor(colorMode: colorMode, settings: settings, frameIndex: frameIdx),
+                    colorMode: colorMode,
+                    facing: settings.catFacing
+                )
+            } else {
+                let catImage = characterImage(
+                    for: character,
+                    frameIndex: frameIdx,
+                    customCharacterStore: customCharacterStore
+                )
 
-                // Head swing: flip image horizontally on odd frames for a head-bobbing effect
-                let shouldFlip = settings.catHeadSwing && frameIdx % 2 == 1
+                if let catImg = catImage {
+                    let now = Date().timeIntervalSince1970
 
-                if shouldFlip {
-                    // Flip the drawing context horizontally for head-swing effect
-                    if let currentContext = NSGraphicsContext.current {
-                        let transform = currentContext.cgContext
-                        transform.saveGState()
-                        transform.translateBy(x: drawRect.midX * 2, y: 0)
-                        transform.scaleBy(x: -1, y: 1)
-                    }
-                }
+                    let shouldFlip = shouldMirrorCharacter(settings: settings, frameIndex: frameIdx)
 
-                if character.isTemplate {
-                    // Template mode: tint with color from CatColorMode
-                    if colorMode == .solid {
-                        // Solid color: use single-color tint
-                        let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
-                        if let tinted = tintImage(catImg, color: tintColor) {
-                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
-                        } else {
-                            catImg.isTemplate = true
-                            catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                    if shouldFlip {
+                        // Mirror the drawing context for character facing and optional head swing.
+                        if let currentContext = NSGraphicsContext.current {
+                            let transform = currentContext.cgContext
+                            transform.saveGState()
+                            transform.translateBy(x: drawRect.midX * 2, y: 0)
+                            transform.scaleBy(x: -1, y: 1)
                         }
-                    } else {
-                        // Fancy mode: use gradient/multi-color tinting
-                        let colors = colorMode.gradientColors(at: now, frameIndex: frameIdx, baseColor: settings.catColor, size: catImg.size)
-                        if let tinted = tintImageGradient(catImg, colors: colors) {
-                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
-                        } else {
-                            // Fallback to single-color tint
+                    }
+
+                    if character.isTemplate {
+                        // Template mode: tint with color from CatColorMode
+                        if colorMode == .solid {
+                            // Solid color: use single-color tint
                             let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                             if let tinted = tintImage(catImg, color: tintColor) {
                                 tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
@@ -904,47 +1089,52 @@ enum StatusBarDisplayRenderer {
                                 catImg.isTemplate = true
                                 catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
                             }
+                        } else {
+                            // Fancy mode: use gradient/multi-color tinting
+                            let colors = colorMode.gradientColors(at: now, frameIndex: frameIdx, baseColor: settings.catColor, size: catImg.size)
+                            if let tinted = tintImageGradient(catImg, colors: colors) {
+                                tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                            } else {
+                                // Fallback to single-color tint
+                                let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                                if let tinted = tintImage(catImg, color: tintColor) {
+                                    tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                                } else {
+                                    catImg.isTemplate = true
+                                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                                }
+                            }
+                        }
+                    } else {
+                        // Color mode (gaming-cat, party-parrot, etc.): draw with original colors
+                        catImg.isTemplate = false
+                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                    }
+
+                    if shouldFlip {
+                        if let currentContext = NSGraphicsContext.current {
+                            currentContext.cgContext.restoreGState()
                         }
                     }
-                } else {
-                    // Color mode (gaming-cat, party-parrot, etc.): draw with original colors
-                    catImg.isTemplate = false
-                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
-                }
 
-                if shouldFlip {
-                    // Restore the context after flip
-                    if let currentContext = NSGraphicsContext.current {
-                        currentContext.cgContext.restoreGState()
+                    // Draw sparkle decorations for modes that have them
+                    if !character.isCustom && colorMode.hasSparkles {
+                        if let currentContext = NSGraphicsContext.current {
+                            let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                            drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
+                        }
                     }
-                }
 
-                // Draw sparkle decorations for modes that have them
-                if colorMode.hasSparkles {
-                    if let currentContext = NSGraphicsContext.current {
-                        let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
-                        drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
-                    }
                 }
-
-                textXOffset = layout.horizontalPadding + catWidth + catPadding
-            } else {
-                // Fallback: no image loaded, skip cat rendering
-                let catWidth: CGFloat = CGFloat(character.frameWidth)
-                let catPadding: CGFloat = 3
-                textXOffset = layout.horizontalPadding + catWidth + catPadding
             }
         }
 
         let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings, color: textColor)
         let textHeight = lineHeight(for: layout.font, settings: settings) * CGFloat(layout.lines.count)
+        textRect.origin.y = (height - textHeight) / 2
+        textRect.size.height = textHeight
         text.draw(
-            with: NSRect(
-                x: textXOffset,
-                y: (height - textHeight) / 2,
-                width: width - textXOffset - layout.horizontalPadding,
-                height: textHeight
-            ),
+            with: textRect,
             options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine]
         )
 
@@ -954,8 +1144,240 @@ enum StatusBarDisplayRenderer {
         return image
     }
 
-    static func width(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> CGFloat {
-        layout(snapshot: snapshot, settings: settings).width
+    private static func drawGooglyEyes(
+        in rect: NSRect,
+        state: GooglyEyesRenderState?,
+        accentColor: NSColor,
+        colorMode: CatColorMode,
+        facing: StatusBarCharacterFacing
+    ) {
+        let scale = max(min(rect.width / 36, rect.height / 18), 0.1)
+        let eyeDiameter: CGFloat = 13.8 * scale
+        let pupilDiameter: CGFloat = 5.2 * scale
+        let maximumPupilTravel: CGFloat = 3.4 * scale
+        let eyeY = rect.midY - eyeDiameter / 2
+        let centers = [
+            CGPoint(x: rect.minX + rect.width * 0.32, y: rect.midY),
+            CGPoint(x: rect.minX + rect.width * 0.68, y: rect.midY)
+        ]
+
+        for center in centers {
+            let eyeRect = NSRect(
+                x: center.x - eyeDiameter / 2,
+                y: eyeY,
+                width: eyeDiameter,
+                height: eyeDiameter
+            )
+            let eyePath = NSBezierPath(ovalIn: eyeRect)
+            NSColor.white.withAlphaComponent(0.96).setFill()
+            eyePath.fill()
+            accentColor.withAlphaComponent(0.38).setStroke()
+            eyePath.lineWidth = 0.8 * scale
+            eyePath.stroke()
+
+            if state?.isBlinking == true {
+                let blinkPath = NSBezierPath()
+                blinkPath.move(to: CGPoint(x: eyeRect.minX + 1.8 * scale, y: center.y))
+                blinkPath.curve(
+                    to: CGPoint(x: eyeRect.maxX - 1.8 * scale, y: center.y),
+                    controlPoint1: CGPoint(x: center.x - 2.2 * scale, y: center.y - 1.3 * scale),
+                    controlPoint2: CGPoint(x: center.x + 2.2 * scale, y: center.y - 1.3 * scale)
+                )
+                accentColor.withAlphaComponent(0.82).setStroke()
+                blinkPath.lineWidth = 1.6 * scale
+                blinkPath.lineCapStyle = .round
+                blinkPath.stroke()
+                continue
+            }
+
+            let offset: CGSize
+            if let state {
+                let screenCenter = GooglyEyesTracker.screenCenter(
+                    forLocalCenter: center,
+                    statusItemFrame: state.statusItemFrame
+                )
+                offset = GooglyEyesTracker.pupilOffset(
+                    from: screenCenter,
+                    toward: state.mouseLocation,
+                    maximumDistance: maximumPupilTravel
+                )
+            } else {
+                offset = .zero
+            }
+
+            let pupilRect = NSRect(
+                x: center.x + offset.width - pupilDiameter / 2,
+                y: center.y + offset.height - pupilDiameter / 2,
+                width: pupilDiameter,
+                height: pupilDiameter
+            )
+            let pupilCenter = CGPoint(x: pupilRect.midX, y: pupilRect.midY)
+            if colorMode == .heatVision {
+                drawHeatVisionBeam(from: pupilCenter, gazeOffset: offset, in: rect, facing: facing, scale: scale)
+            }
+
+            accentColor.withAlphaComponent(0.88).setFill()
+            NSBezierPath(ovalIn: pupilRect).fill()
+
+            let catchlightRect = NSRect(
+                x: pupilRect.minX + 1.2 * scale,
+                y: pupilRect.maxY - 2.2 * scale,
+                width: 1.2 * scale,
+                height: 1.2 * scale
+            )
+            NSColor.white.withAlphaComponent(0.82).setFill()
+            NSBezierPath(ovalIn: catchlightRect).fill()
+        }
+    }
+
+    static func heatVisionBeamEnd(
+        from start: CGPoint,
+        gazeOffset: CGSize = .zero,
+        in rect: NSRect,
+        facing: StatusBarCharacterFacing,
+        scale: CGFloat
+    ) -> CGPoint {
+        let travel = rect.width * 0.9 + 7 * scale
+        let gazeDistance = hypot(gazeOffset.width, gazeOffset.height)
+        if gazeDistance > 0.01 {
+            return CGPoint(
+                x: start.x + gazeOffset.width / gazeDistance * travel,
+                y: start.y + gazeOffset.height / gazeDistance * travel
+            )
+        }
+
+        let verticalDrift = (start.y - rect.midY) * 0.08
+        switch facing {
+        case .right:
+            return CGPoint(x: start.x + travel, y: start.y + verticalDrift)
+        case .left:
+            return CGPoint(x: start.x - travel, y: start.y + verticalDrift)
+        }
+    }
+
+    private static func drawHeatVisionBeam(
+        from start: CGPoint,
+        gazeOffset: CGSize,
+        in rect: NSRect,
+        facing: StatusBarCharacterFacing,
+        scale: CGFloat
+    ) {
+        let end = heatVisionBeamEnd(from: start, gazeOffset: gazeOffset, in: rect, facing: facing, scale: scale)
+
+        func strokeBeam(color: NSColor, lineWidth: CGFloat) {
+            let path = NSBezierPath()
+            path.move(to: start)
+            path.line(to: end)
+            path.lineCapStyle = .round
+            path.lineWidth = lineWidth
+            color.setStroke()
+            path.stroke()
+        }
+
+        if let context = NSGraphicsContext.current {
+            context.cgContext.saveGState()
+            context.cgContext.setShadow(
+                offset: .zero,
+                blur: 3.6 * scale,
+                color: NSColor.systemRed.withAlphaComponent(0.55).cgColor
+            )
+            strokeBeam(color: NSColor.systemRed.withAlphaComponent(0.32), lineWidth: 4.8 * scale)
+            context.cgContext.restoreGState()
+        }
+
+        strokeBeam(color: NSColor.systemRed.withAlphaComponent(0.75), lineWidth: 2.4 * scale)
+        strokeBeam(color: NSColor(calibratedRed: 1, green: 0.9, blue: 0.54, alpha: 0.9), lineWidth: 0.85 * scale)
+    }
+
+    private static func googlyEyesAccentColor(
+        colorMode: CatColorMode,
+        settings: StatusBarSettings,
+        frameIndex: Int
+    ) -> NSColor {
+        if colorMode == .solid, settings.catColor == PersistedColor.white {
+            return NSColor.black
+        }
+        return colorMode.color(at: Date().timeIntervalSince1970, frameIndex: frameIndex, baseColor: settings.catColor)
+    }
+
+    private static func characterAsset(
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore?
+    ) -> CharacterAsset {
+        CharacterAsset.resolve(
+            id: settings.catCharacter,
+            customCharacters: customCharacterStore?.characters ?? []
+        )
+    }
+
+    private static func characterImage(
+        for character: CharacterAsset,
+        frameIndex: Int,
+        customCharacterStore: CustomCharacterStore?
+    ) -> NSImage? {
+        switch character.source {
+        case .builtIn(let runCatCharacter):
+            let resourcePath = "RunCat/\(runCatCharacter.id)"
+            if let url = Bundle.main.url(forResource: "frame_\(frameIndex)", withExtension: "png", subdirectory: resourcePath) {
+                return NSImage(contentsOf: url)
+            }
+            if let resPath = Bundle.main.resourcePath {
+                return NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(runCatCharacter.id)/frame_\(frameIndex).png"))
+            }
+            return nil
+        case .custom(let customCharacter):
+            guard let customCharacterStore else { return nil }
+            let url = customCharacterStore.frameURL(for: customCharacter, frameIndex: frameIndex)
+            if let image = NSImage(contentsOf: url) {
+                return image
+            }
+            let fallbackURL = customCharacterStore.frameURL(for: customCharacter, frameIndex: 0)
+            return NSImage(contentsOf: fallbackURL)
+        }
+    }
+
+    private static func characterExtraWidth(
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore?,
+        catFrameIndex: Int?
+    ) -> CGFloat {
+        guard catFrameIndex != nil, settings.showsCat else { return 0 }
+        let character = characterAsset(settings: settings, customCharacterStore: customCharacterStore)
+        return characterSize(for: character, settings: settings).width + characterSpacing(settings: settings)
+    }
+
+    private static func characterSize(for character: CharacterAsset, settings: StatusBarSettings) -> CGSize {
+        let scale = settings.clampedCatScale
+        let rawWidth = CGFloat(character.frameWidth) * scale
+        let rawHeight = CGFloat(character.frameHeight) * scale
+        guard character.isCustom else {
+            return CGSize(width: rawWidth, height: 18 * scale)
+        }
+
+        let maxHeight = 18 * scale
+        let fitScale = rawHeight > maxHeight ? maxHeight / max(rawHeight, 1) : 1
+        return CGSize(
+            width: max(rawWidth * fitScale, 1),
+            height: max(rawHeight * fitScale, 1)
+        )
+    }
+
+    private static func characterSpacing(settings: StatusBarSettings) -> CGFloat {
+        max(2, 3 * settings.clampedCatScale)
+    }
+
+    static func shouldMirrorCharacter(settings: StatusBarSettings, frameIndex: Int) -> Bool {
+        let baseMirror = settings.catFacing == .left
+        let swingMirror = settings.catHeadSwing && frameIndex % 2 == 1
+        return baseMirror != swingMirror
+    }
+
+    static func width(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore? = nil
+    ) -> CGFloat {
+        layout(snapshot: snapshot, settings: settings, customCharacterStore: customCharacterStore).width
     }
 
     static func stableMinimumWidth(settings: StatusBarSettings) -> CGFloat {
@@ -974,7 +1396,12 @@ enum StatusBarDisplayRenderer {
         settings.showsArrows ? "\(prefix) \(value)" : value
     }
 
-    private static func layout(snapshot: NetworkSnapshot, settings: StatusBarSettings, catFrameIndex: Int? = nil) -> Layout {
+    private static func layout(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        customCharacterStore: CustomCharacterStore?,
+        catFrameIndex: Int? = nil
+    ) -> Layout {
         let font = NSFont.monospacedDigitSystemFont(
             ofSize: settings.clampedFontSize,
             weight: settings.fontWeight
@@ -990,10 +1417,11 @@ enum StatusBarDisplayRenderer {
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
             .max() ?? measuredWidth
 
-        // Add cat width if shown
-        let catChar = RunCatCharacter.byId(settings.catCharacter)
-        let catExtraWidth: CGFloat = (catFrameIndex != nil && settings.showsCat) ? CGFloat(catChar.frameWidth) + 3 : 0
-
+        let catExtraWidth = characterExtraWidth(
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex
+        )
         let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth
 

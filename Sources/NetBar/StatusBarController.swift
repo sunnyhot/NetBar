@@ -3,31 +3,110 @@ import Combine
 import SwiftUI
 
 @MainActor
+final class GooglyEyesClickMonitor {
+    typealias MonitorInstaller = (@escaping () -> Void) -> Any?
+
+    private static let mouseClickEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+
+    private let addGlobalMonitor: MonitorInstaller
+    private let addLocalMonitor: MonitorInstaller
+    private let removeMonitor: (Any) -> Void
+    private var monitorTokens: [Any] = []
+    private var onClick: (() -> Void)?
+    private var isActive = false
+
+    init(
+        addGlobalMonitor: MonitorInstaller? = nil,
+        addLocalMonitor: MonitorInstaller? = nil,
+        removeMonitor: @escaping (Any) -> Void = { NSEvent.removeMonitor($0) }
+    ) {
+        self.addGlobalMonitor = addGlobalMonitor ?? { handler in
+            NSEvent.addGlobalMonitorForEvents(matching: Self.mouseClickEvents) { _ in
+                Task { @MainActor in
+                    handler()
+                }
+            }
+        }
+        self.addLocalMonitor = addLocalMonitor ?? { handler in
+            NSEvent.addLocalMonitorForEvents(matching: Self.mouseClickEvents) { event in
+                Task { @MainActor in
+                    handler()
+                }
+                return event
+            }
+        }
+        self.removeMonitor = removeMonitor
+    }
+
+    deinit {
+        monitorTokens.forEach(removeMonitor)
+    }
+
+    func setActive(_ active: Bool, onClick: @escaping () -> Void = {}) {
+        if active {
+            self.onClick = onClick
+            guard !isActive else { return }
+            isActive = true
+            installMonitors()
+        } else {
+            guard isActive else { return }
+            isActive = false
+            self.onClick = nil
+            removeMonitors()
+        }
+    }
+
+    private func installMonitors() {
+        if let globalMonitor = addGlobalMonitor({ [weak self] in self?.handleClick() }) {
+            monitorTokens.append(globalMonitor)
+        }
+        if let localMonitor = addLocalMonitor({ [weak self] in self?.handleClick() }) {
+            monitorTokens.append(localMonitor)
+        }
+    }
+
+    private func removeMonitors() {
+        monitorTokens.forEach(removeMonitor)
+        monitorTokens.removeAll()
+    }
+
+    private func handleClick() {
+        onClick?()
+    }
+}
+
+@MainActor
 final class StatusBarController {
     private let monitor: NetworkMonitor
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
+    private let customCharacterStore: CustomCharacterStore
     private let openPreferences: () -> Void
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
     private let detailsWindowController: DetailsWindowController
-    private let popover: NSPopover
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
-    private var currentCatCharacter: RunCatCharacter = RunCatCharacter.defaultCat
+    private var currentCatCharacter: CharacterAsset = CharacterAsset(builtIn: .defaultCat)
+    private var googlyEyesTimer: Timer?
+    private var googlyEyesState: GooglyEyesRenderState?
+    private var blinkResetTask: Task<Void, Never>?
+    private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
 
     init(
         monitor: NetworkMonitor,
         settings: StatusBarSettings,
         appPreferences: AppPreferences,
+        customCharacterStore: CustomCharacterStore,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
         self.monitor = monitor
         self.settings = settings
         self.appPreferences = appPreferences
+        self.customCharacterStore = customCharacterStore
         self.openPreferences = openPreferences
         self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -37,27 +116,15 @@ final class StatusBarController {
             openPreferences: openPreferences
         )
 
-        let popover = NSPopover()
-        popover.behavior = .transient
-        popover.contentSize = NSSize(width: 260, height: 120)
-        self.popover = popover
-
-        // Set content after self is fully initialized so the closure can capture self
-        popover.contentViewController = NSHostingController(
-            rootView: StatusBarPopoverContentView(
-                monitor: monitor,
-                appPreferences: appPreferences,
-                openMainWindow: { [weak self] in
-                    self?.openMainWindowFromPopover()
-                },
-                openPreferences: openPreferences
-            )
-        )
-
         configureStatusItem()
         configureObservers()
         monitor.start()
         updateStatusItem()
+    }
+
+    deinit {
+        googlyEyesTimer?.invalidate()
+        blinkResetTask?.cancel()
     }
 
     private func configureStatusItem() {
@@ -86,11 +153,34 @@ final class StatusBarController {
         }
         .store(in: &cancellables)
 
+        customCharacterStore.objectWillChange.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.setupCatAnimation()
+                self?.updateStatusItem()
+            }
+        }
+        .store(in: &cancellables)
+
+        appPreferences.$appearanceMode.sink { [weak self] _ in
+            DispatchQueue.main.async {
+                self?.lastRenderSignature = nil
+                self?.updateStatusItem()
+            }
+        }
+        .store(in: &cancellables)
+
         setupCatAnimation()
     }
 
     private func setupCatAnimation() {
-        let character = RunCatCharacter.byId(settings.catCharacter)
+        let validCharacterID = customCharacterStore.validCharacterID(for: settings.catCharacter)
+        if validCharacterID != settings.catCharacter {
+            settings.catCharacter = validCharacterID
+        }
+        let character = CharacterAsset.resolve(
+            id: validCharacterID,
+            customCharacters: customCharacterStore.characters
+        )
         
         if settings.showsCat {
             if catAnimation == nil {
@@ -103,7 +193,7 @@ final class StatusBarController {
                     }
                 )
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
-                    self?.currentCatCharacter = newCharacter
+                    self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
                 currentCatCharacter = character
@@ -119,7 +209,7 @@ final class StatusBarController {
                     }
                 )
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
-                    self?.currentCatCharacter = newCharacter
+                    self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
                 currentCatCharacter = character
@@ -130,18 +220,25 @@ final class StatusBarController {
             // Configure rotation
             let poolIds = settings.catRotationPool.split(separator: ",").map(String.init)
             let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
-            catAnimation?.configureRotation(enabled: settings.catRotationEnabled, intervalMinutes: settings.catRotationIntervalMinutes, pool: pool)
+            catAnimation?.configureRotation(
+                enabled: settings.catRotationEnabled && !character.isCustom,
+                intervalMinutes: settings.catRotationIntervalMinutes,
+                pool: pool
+            )
             catAnimation?.setActive(true)
+            configureGooglyEyesTracking()
         } else {
             catAnimation?.setActive(false)
             catAnimation = nil
             currentCatFrameIndex = nil
+            configureGooglyEyesTracking()
         }
     }
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
         let appearanceName = button.effectiveAppearance.name.rawValue
+        let activeGooglyEyesState = activeGooglyEyesRenderState()
 
         // Update cat animation speed based on network speed
         if settings.showsCat {
@@ -157,7 +254,9 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             appearanceName: appearanceName,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            googlyEyesState: activeGooglyEyesState
         )
         guard signature != lastRenderSignature else { return }
 
@@ -169,7 +268,9 @@ final class StatusBarController {
             snapshot: monitor.snapshot,
             settings: settings,
             scale: scale,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            googlyEyesState: activeGooglyEyesState
         )
         button.attributedTitle = NSAttributedString(string: "")
         button.title = ""
@@ -185,28 +286,12 @@ final class StatusBarController {
     }
 
     @objc private func toggleDetailsWindow(_ sender: AnyObject?) {
+        triggerGooglyEyesBlink()
         if NSApplication.shared.currentEvent?.type == .rightMouseUp {
             showStatusMenu()
             return
         }
-        togglePopover()
-    }
-
-    private func togglePopover() {
-        if popover.isShown {
-            popover.performClose(nil)
-        } else {
-            guard let button = statusItem.button else { return }
-            let edge: NSRectEdge = appPreferences.popoverPosition == .left ? .maxX : .minX
-            popover.show(relativeTo: button.bounds, of: button, preferredEdge: edge)
-        }
-    }
-
-    private func openMainWindowFromPopover() {
-        if popover.isShown {
-            popover.performClose(nil)
-        }
-        detailsWindowController.show(anchor: statusItem.button)
+        detailsWindowController.toggle(anchor: statusItem.button)
     }
 
     private func showStatusMenu() {
@@ -258,5 +343,83 @@ final class StatusBarController {
 
     private func text(_ simplifiedChinese: String, _ english: String) -> String {
         appPreferences.text(simplifiedChinese, english)
+    }
+
+    private var isGooglyEyesActive: Bool {
+        settings.showsCat && CharacterAsset.resolve(
+            id: customCharacterStore.validCharacterID(for: settings.catCharacter),
+            customCharacters: customCharacterStore.characters
+        ).isGooglyEyes
+    }
+
+    private func configureGooglyEyesTracking() {
+        guard isGooglyEyesActive else {
+            googlyEyesTimer?.invalidate()
+            googlyEyesTimer = nil
+            googlyEyesState = nil
+            blinkResetTask?.cancel()
+            blinkResetTask = nil
+            googlyEyesClickMonitor.setActive(false)
+            return
+        }
+
+        refreshGooglyEyesState()
+        googlyEyesClickMonitor.setActive(true) { [weak self] in
+            self?.triggerGooglyEyesBlink()
+        }
+        guard googlyEyesTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshGooglyEyesState()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        googlyEyesTimer = timer
+    }
+
+    private func refreshGooglyEyesState() {
+        guard isGooglyEyesActive else { return }
+        let isBlinking = googlyEyesState?.isBlinking == true
+        guard let nextState = makeGooglyEyesState(isBlinking: isBlinking) else { return }
+        guard nextState != googlyEyesState else { return }
+        googlyEyesState = nextState
+        updateStatusItem()
+    }
+
+    private func activeGooglyEyesRenderState() -> GooglyEyesRenderState? {
+        guard isGooglyEyesActive else { return nil }
+        if googlyEyesState == nil {
+            googlyEyesState = makeGooglyEyesState(isBlinking: false)
+        }
+        return googlyEyesState
+    }
+
+    private func makeGooglyEyesState(isBlinking: Bool) -> GooglyEyesRenderState? {
+        guard
+            let button = statusItem.button,
+            let statusItemFrame = button.window?.convertToScreen(button.frame)
+        else {
+            return nil
+        }
+
+        return GooglyEyesRenderState(
+            mouseLocation: NSEvent.mouseLocation,
+            statusItemFrame: statusItemFrame,
+            isBlinking: isBlinking
+        )
+    }
+
+    private func triggerGooglyEyesBlink() {
+        guard isGooglyEyesActive else { return }
+        blinkResetTask?.cancel()
+        googlyEyesState = makeGooglyEyesState(isBlinking: true)
+        updateStatusItem()
+
+        blinkResetTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .milliseconds(160))
+            guard let self, self.isGooglyEyesActive else { return }
+            self.googlyEyesState = self.makeGooglyEyesState(isBlinking: false)
+            self.updateStatusItem()
+        }
     }
 }

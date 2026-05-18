@@ -9,6 +9,7 @@ final class NetworkMonitor: ObservableObject {
 
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
+    private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
@@ -24,10 +25,12 @@ final class NetworkMonitor: ObservableObject {
 
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
-        appTrafficReader: ApplicationTrafficReading = NettopApplicationTrafficReader()
+        appTrafficReader: ApplicationTrafficReading = NettopApplicationTrafficReader(),
+        now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
         self.appTrafficReader = appTrafficReader
+        self.now = now
     }
 
     func start() {
@@ -56,13 +59,14 @@ final class NetworkMonitor: ObservableObject {
     }
 
     func refresh() {
-        let now = Date()
+        let now = now()
         let stats = reader.readInterfaces()
         let currentByName = Dictionary(uniqueKeysWithValues: stats.map { ($0.name, $0) })
 
         guard let previousDate = previousSampleDate else {
             previousStats = currentByName
             previousSampleDate = now
+            let externalStats = Self.externalTrafficStats(from: stats)
             snapshot = NetworkSnapshot(
                 timestamp: now,
                 interfaces: stats.map {
@@ -81,8 +85,8 @@ final class NetworkMonitor: ObservableObject {
                 },
                 downloadBytesPerSecond: 0,
                 uploadBytesPerSecond: 0,
-                totalReceivedBytes: stats.reduce(0) { $0 + $1.receivedBytes },
-                totalSentBytes: stats.reduce(0) { $0 + $1.sentBytes },
+                totalReceivedBytes: externalStats.reduce(0) { $0 + $1.receivedBytes },
+                totalSentBytes: externalStats.reduce(0) { $0 + $1.sentBytes },
                 sampleCount: 1
             )
             return
@@ -108,8 +112,10 @@ final class NetworkMonitor: ObservableObject {
             )
         }
 
-        let totalDownload = rates.reduce(0) { $0 + $1.downloadBytesPerSecond }
-        let totalUpload = rates.reduce(0) { $0 + $1.uploadBytesPerSecond }
+        let externalRates = Self.externalTrafficRates(from: rates)
+        let externalStats = Self.externalTrafficStats(from: stats)
+        let totalDownload = externalRates.reduce(0) { $0 + $1.downloadBytesPerSecond }
+        let totalUpload = externalRates.reduce(0) { $0 + $1.uploadBytesPerSecond }
 
         snapshot = NetworkSnapshot(
             timestamp: now,
@@ -126,8 +132,8 @@ final class NetworkMonitor: ObservableObject {
             },
             downloadBytesPerSecond: totalDownload,
             uploadBytesPerSecond: totalUpload,
-            totalReceivedBytes: stats.reduce(0) { $0 + $1.receivedBytes },
-            totalSentBytes: stats.reduce(0) { $0 + $1.sentBytes },
+            totalReceivedBytes: externalStats.reduce(0) { $0 + $1.receivedBytes },
+            totalSentBytes: externalStats.reduce(0) { $0 + $1.sentBytes },
             sampleCount: snapshot.sampleCount + 1
         )
 
@@ -273,6 +279,14 @@ final class NetworkMonitor: ObservableObject {
     private static func positiveDelta(_ current: UInt64, _ previous: UInt64?) -> UInt64 {
         guard let previous else { return 0 }
         return current >= previous ? current - previous : 0
+    }
+
+    private static func externalTrafficStats(from stats: [InterfaceStats]) -> [InterfaceStats] {
+        stats.filter { NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name) }
+    }
+
+    private static func externalTrafficRates(from rates: [InterfaceRate]) -> [InterfaceRate] {
+        rates.filter { NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name) }
     }
 }
 

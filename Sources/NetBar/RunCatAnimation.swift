@@ -22,6 +22,8 @@ struct RunCatCharacter: Equatable, Identifiable {
     }
 
     var resourceDir: String { id }
+    var isGooglyEyes: Bool { id == Self.googlyEyesID }
+    var supportsColorControls: Bool { isTemplate || isGooglyEyes }
 
     var displayName: String {
         // Use Chinese name by default; can be switched based on locale
@@ -33,13 +35,13 @@ struct RunCatCharacter: Equatable, Identifiable {
         RunCatCharacter(id: "cat", nameZh: "猫咪 α", nameEn: "Cat α", nameJa: "ネコ α",
                         frameCount: 5, frameWidth: 28, isTemplate: true, category: .default),
         RunCatCharacter(id: "cat_b", nameZh: "猫咪 β", nameEn: "Cat β", nameJa: "ネコ β",
-                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .default),
+                        frameCount: 5, frameWidth: 32, isTemplate: true, category: .default),
         RunCatCharacter(id: "cat_c", nameZh: "猫咪 γ", nameEn: "Cat γ", nameJa: "ネコ γ",
-                        frameCount: 4, frameWidth: 34, isTemplate: true, category: .default),
+                        frameCount: 5, frameWidth: 42, isTemplate: true, category: .default),
         RunCatCharacter(id: "cat_tail", nameZh: "猫尾巴", nameEn: "Cat Tail", nameJa: "猫のしっぽ",
-                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .default),
+                        frameCount: 8, frameWidth: 56, isTemplate: true, category: .default),
         RunCatCharacter(id: "mock_nyan_cat", nameZh: "彩虹猫", nameEn: "Mock Nyan Cat", nameJa: "Nyan Cat もどき",
-                        frameCount: 4, frameWidth: 30, isTemplate: false, category: .default),
+                        frameCount: 5, frameWidth: 44, isTemplate: false, category: .default),
         RunCatCharacter(id: "gaming-cat", nameZh: "游戏猫", nameEn: "Gaming Cat", nameJa: "ゲーミングキャット",
                         frameCount: 10, frameWidth: 34, isTemplate: false, category: .default),
         RunCatCharacter(id: "party-parrot", nameZh: "派对鹦鹉", nameEn: "Party Parrot", nameJa: "パーティーオウム",
@@ -47,62 +49,134 @@ struct RunCatCharacter: Equatable, Identifiable {
 
         // Animal runners
         RunCatCharacter(id: "cheetah", nameZh: "猎豹", nameEn: "Cheetah", nameJa: "チーター",
-                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .animal),
+                        frameCount: 5, frameWidth: 41, isTemplate: true, category: .animal),
         RunCatCharacter(id: "dog", nameZh: "小狗", nameEn: "Dog", nameJa: "イヌ",
-                        frameCount: 4, frameWidth: 30, isTemplate: true, category: .animal),
+                        frameCount: 5, frameWidth: 33, isTemplate: true, category: .animal),
         RunCatCharacter(id: "puppy", nameZh: "幼犬", nameEn: "Puppy", nameJa: "子犬",
-                        frameCount: 4, frameWidth: 29, isTemplate: true, category: .animal),
+                        frameCount: 5, frameWidth: 31, isTemplate: true, category: .animal),
         RunCatCharacter(id: "rabbit", nameZh: "兔子", nameEn: "Rabbit", nameJa: "ウサギ",
-                        frameCount: 4, frameWidth: 17, isTemplate: true, category: .animal),
+                        frameCount: 5, frameWidth: 22, isTemplate: true, category: .animal),
         RunCatCharacter(id: "frog", nameZh: "青蛙", nameEn: "Frog", nameJa: "カエル",
-                        frameCount: 4, frameWidth: 14, isTemplate: true, category: .animal),
+                        frameCount: 5, frameWidth: 25, isTemplate: true, category: .animal),
 
         // Inanimate runners
         RunCatCharacter(id: "cogwheel", nameZh: "齿轮", nameEn: "Cogwheel", nameJa: "歯車",
-                        frameCount: 4, frameWidth: 19, isTemplate: true, category: .inanimate),
+                        frameCount: 5, frameWidth: 19, isTemplate: true, category: .inanimate),
         RunCatCharacter(id: "bonfire", nameZh: "篝火", nameEn: "Bonfire", nameJa: "焚き火",
-                        frameCount: 4, frameWidth: 14, isTemplate: true, category: .inanimate),
+                        frameCount: 5, frameWidth: 14, isTemplate: true, category: .inanimate),
         RunCatCharacter(id: "drop", nameZh: "水滴", nameEn: "Drop", nameJa: "水滴",
-                        frameCount: 4, frameWidth: 8, isTemplate: true, category: .inanimate),
+                        frameCount: 5, frameWidth: 22, isTemplate: true, category: .inanimate),
         RunCatCharacter(id: "rocket", nameZh: "火箭", nameEn: "Rocket", nameJa: "ロケット",
-                        frameCount: 4, frameWidth: 16, isTemplate: true, category: .inanimate),
+                        frameCount: 5, frameWidth: 18, isTemplate: true, category: .inanimate),
         RunCatCharacter(id: "pendulum", nameZh: "钟摆", nameEn: "Pendulum", nameJa: "振り子",
-                        frameCount: 4, frameWidth: 12, isTemplate: true, category: .inanimate),
+                        frameCount: 8, frameWidth: 12, isTemplate: true, category: .inanimate),
 
         // Seasonal runners
         RunCatCharacter(id: "reindeer", nameZh: "驯鹿与雪橇", nameEn: "Reindeer & Sleigh", nameJa: "トナカイとソリ",
-                        frameCount: 2, frameWidth: 30, isTemplate: false, category: .seasonal),
+                        frameCount: 5, frameWidth: 58, isTemplate: false, category: .seasonal),
         RunCatCharacter(id: "snowman", nameZh: "雪人", nameEn: "Snowman", nameJa: "雪だるま",
-                        frameCount: 2, frameWidth: 21, isTemplate: true, category: .seasonal),
+                        frameCount: 5, frameWidth: 26, isTemplate: true, category: .seasonal),
         RunCatCharacter(id: "wind_chime", nameZh: "风铃", nameEn: "Wind Chime", nameJa: "風鈴",
-                        frameCount: 4, frameWidth: 8, isTemplate: false, category: .seasonal),
+                        frameCount: 8, frameWidth: 13, isTemplate: false, category: .seasonal),
         RunCatCharacter(id: "sparkler", nameZh: "线香烟花", nameEn: "Sparkler", nameJa: "線香花火",
-                        frameCount: 2, frameWidth: 17, isTemplate: false, category: .seasonal),
+                        frameCount: 5, frameWidth: 22, isTemplate: false, category: .seasonal),
 
         // Special color runners
+        RunCatCharacter(id: googlyEyesID, nameZh: "追踪眼睛", nameEn: "Googly Eyes", nameJa: "Googly Eyes",
+                        frameCount: 2, frameWidth: 36, isTemplate: false, category: .special),
         RunCatCharacter(id: "golden_cat", nameZh: "黄金猫", nameEn: "Golden Cat", nameJa: "黄金のネコ",
-                        frameCount: 4, frameWidth: 26, isTemplate: false, category: .special),
+                        frameCount: 10, frameWidth: 45, isTemplate: false, category: .special),
         RunCatCharacter(id: "metal_cluster_cat", nameZh: "金属集群猫", nameEn: "Metal Cluster Cat", nameJa: "メタルクラスタ キャット",
-                        frameCount: 5, frameWidth: 26, isTemplate: false, category: .special),
+                        frameCount: 10, frameWidth: 149, isTemplate: false, category: .special),
         RunCatCharacter(id: "flash_cat", nameZh: "闪光猫", nameEn: "Flash Cat", nameJa: "赤い閃光猫",
-                        frameCount: 4, frameWidth: 30, isTemplate: false, category: .special),
+                        frameCount: 5, frameWidth: 42, isTemplate: false, category: .special),
         RunCatCharacter(id: "maneki_neko", nameZh: "招财猫", nameEn: "Maneki Neko", nameJa: "招き猫",
-                        frameCount: 4, frameWidth: 13, isTemplate: true, category: .special),
+                        frameCount: 15, frameWidth: 14, isTemplate: true, category: .special),
         RunCatCharacter(id: "sushi", nameZh: "寿司", nameEn: "Sushi", nameJa: "お寿司",
-                        frameCount: 4, frameWidth: 30, isTemplate: false, category: .special),
+                        frameCount: 16, frameWidth: 58, isTemplate: false, category: .special),
     ]
 
     static func byId(_ id: String) -> RunCatCharacter {
         allCharacters.first { $0.id == id } ?? allCharacters[0]
     }
 
+    private static let googlyEyesID = "googly_eyes"
     static let defaultCat = allCharacters[0]
+}
+
+enum GooglyEyesTracker {
+    static func screenCenter(forLocalCenter localCenter: CGPoint, statusItemFrame: CGRect) -> CGPoint {
+        CGPoint(
+            x: statusItemFrame.minX + localCenter.x,
+            y: statusItemFrame.minY + localCenter.y
+        )
+    }
+
+    static func pupilOffset(
+        from eyeCenter: CGPoint,
+        toward mouseLocation: CGPoint,
+        maximumDistance: CGFloat
+    ) -> CGSize {
+        let deltaX = mouseLocation.x - eyeCenter.x
+        let deltaY = mouseLocation.y - eyeCenter.y
+        let distance = hypot(deltaX, deltaY)
+        guard distance > 0, maximumDistance > 0 else { return .zero }
+
+        let scale = min(distance, maximumDistance) / distance
+        return CGSize(width: deltaX * scale, height: deltaY * scale)
+    }
+}
+
+struct CharacterPreviewFrameTimeline: Equatable {
+    private(set) var characterID: String?
+    private(set) var frameIndex = 0
+
+    func frameIndex(for character: CharacterAsset) -> Int {
+        guard characterID == character.id else { return 0 }
+        return frameIndex % max(character.frameCount, 1)
+    }
+
+    mutating func displayedFrame(for character: CharacterAsset) -> Int {
+        sync(to: character)
+        return frameIndex(for: character)
+    }
+
+    mutating func advance(for character: CharacterAsset) {
+        sync(to: character)
+        frameIndex = (frameIndex + 1) % max(character.frameCount, 1)
+    }
+
+    mutating func reset() {
+        characterID = nil
+        frameIndex = 0
+    }
+
+    private mutating func sync(to character: CharacterAsset) {
+        guard characterID != character.id else { return }
+        characterID = character.id
+        frameIndex = 0
+    }
 }
 
 // MARK: - RunCat Animation Controller
 
 final class RunCatAnimation {
-    private(set) var character: RunCatCharacter
+    struct AnimatedCharacter: Equatable {
+        let id: String
+        let frameCount: Int
+
+        init(asset: CharacterAsset) {
+            id = asset.id
+            frameCount = asset.frameCount
+        }
+
+        init(character: RunCatCharacter) {
+            id = character.id
+            frameCount = character.frameCount
+        }
+    }
+
+    private(set) var character: AnimatedCharacter
     private var speedMultiplier: Double
     private let onFrameChange: (Int) -> Void
     var onCharacterChange: ((RunCatCharacter) -> Void)?
@@ -120,8 +194,8 @@ final class RunCatAnimation {
     // Base interval: seconds between frames at 1x speed, ~2 FPS idle
     private var baseInterval: TimeInterval = 0.5
 
-    init(character: RunCatCharacter, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
-        self.character = character
+    init(character: CharacterAsset, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
+        self.character = AnimatedCharacter(asset: character)
         self.speedMultiplier = speedMultiplier
         self.onFrameChange = onFrameChange
     }
@@ -196,8 +270,12 @@ final class RunCatAnimation {
     }
 
     private func advanceFrame() {
-        currentFrame = (currentFrame + 1) % character.frameCount
+        currentFrame = (currentFrame + 1) % max(character.frameCount, 1)
         onFrameChange(currentFrame)
+    }
+
+    func advanceFrameForTesting() {
+        advanceFrame()
     }
 
     // MARK: - Character Rotation
@@ -229,7 +307,7 @@ final class RunCatAnimation {
         // Pick a random character different from current
         let candidates = pool.filter { $0.id != character.id }
         guard let next = candidates.randomElement() else { return }
-        character = next
+        character = AnimatedCharacter(character: next)
         currentFrame = 0
         onCharacterChange?(next)
     }
