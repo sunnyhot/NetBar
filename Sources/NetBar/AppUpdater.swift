@@ -605,6 +605,38 @@ private final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate
         guard !hasCompleted else { return }
         hasCompleted = true
 
+        // Validate HTTP status code before accepting the download
+        if let httpResponse = downloadTask.response as? HTTPURLResponse,
+           !(200..<300).contains(httpResponse.statusCode) {
+            completion(.failure(UpdateError.httpStatus(httpResponse.statusCode)))
+            session.finishTasksAndInvalidate()
+            return
+        }
+
+        // Validate that downloaded file is actually a ZIP (check magic bytes: PK\x03\x04)
+        do {
+            let handle = try FileHandle(forReadingFrom: location)
+            let magic = handle.readData(ofLength: 4)
+            handle.closeFile()
+            let zipMagic: [UInt8] = [0x50, 0x4B, 0x03, 0x04]
+            guard magic.count >= 4 else {
+                completion(.failure(UpdateError.unzipFailed))
+                session.finishTasksAndInvalidate()
+                return
+            }
+            let bytes = [UInt8](magic)
+            guard bytes[0] == zipMagic[0] && bytes[1] == zipMagic[1] &&
+                  bytes[2] == zipMagic[2] && bytes[3] == zipMagic[3] else {
+                completion(.failure(UpdateError.unzipFailed))
+                session.finishTasksAndInvalidate()
+                return
+            }
+        } catch {
+            completion(.failure(UpdateError.unzipFailed))
+            session.finishTasksAndInvalidate()
+            return
+        }
+
         do {
             let dest = FileManager.default.temporaryDirectory
                 .appendingPathComponent("NetBar-\(UUID().uuidString)")
