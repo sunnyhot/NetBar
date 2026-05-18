@@ -87,6 +87,7 @@ final class StatusBarController {
     private let detailsWindowController: DetailsWindowController
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
+    private var lastColorTimeBucket: Int?  // Tracked separately for color pipeline decoupling
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
     private var currentCatCharacter: CharacterAsset = CharacterAsset(builtIn: .defaultCat)
@@ -164,6 +165,7 @@ final class StatusBarController {
         appPreferences.$appearanceMode.sink { [weak self] _ in
             DispatchQueue.main.async {
                 self?.lastRenderSignature = nil
+                self?.lastColorTimeBucket = nil
                 self?.updateStatusItem()
             }
         }
@@ -250,6 +252,9 @@ final class StatusBarController {
             }
         }
 
+        // Color pipeline: compute time bucket independently from position tracking
+        let currentColorBucket = StatusBarDisplayRenderer.colorTimeBucket(forMode: settings.catColorMode)
+
         let signature = StatusBarDisplayRenderer.signature(
             snapshot: monitor.snapshot,
             settings: settings,
@@ -258,7 +263,10 @@ final class StatusBarController {
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
             googlyEyesState: activeGooglyEyesState
         )
-        guard signature != lastRenderSignature else { return }
+        guard signature != lastRenderSignature else {
+            lastColorTimeBucket = currentColorBucket
+            return
+        }
 
         let presentation = signature.presentation
         statusItem.length = presentation.width
@@ -279,6 +287,7 @@ final class StatusBarController {
         button.image = image
 
         lastRenderSignature = signature
+        lastColorTimeBucket = currentColorBucket
     }
 
     func showDetailsWindow(anchorToMenuBar: Bool = false) {

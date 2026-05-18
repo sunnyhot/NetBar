@@ -836,7 +836,7 @@ struct StatusBarRenderSignature: Equatable {
     let catFacing: StatusBarCharacterFacing
     let catColor: PersistedColor
     let catColorMode: String
-    let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~50ms buckets
+    let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~250ms buckets
     let catHeadSwing: Bool
     let customCharacterRevision: Int
     let googlyEyesState: GooglyEyesRenderState?
@@ -893,6 +893,17 @@ enum StatusBarDisplayRenderer {
         }
     }
 
+    // MARK: - Color Pipeline
+
+    /// Quantized time bucket for dynamic color modes. Updates at 4 Hz (250ms intervals)
+    /// instead of being coupled to the position/animation frame rate.
+    static func colorTimeBucket(forMode mode: String) -> Int {
+        let colorMode = CatColorMode(rawValue: mode) ?? .solid
+        return colorMode.isDynamic ? Int(Date().timeIntervalSince1970 * 4) : 0
+    }
+
+    // MARK: - Presentation
+
     static func presentation(
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
@@ -948,10 +959,7 @@ enum StatusBarDisplayRenderer {
             catFacing: settings.catFacing,
             catColor: settings.catColor,
             catColorMode: settings.catColorMode,
-            catColorTimeBucket: {
-                let mode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
-                return mode.isDynamic ? Int(Date().timeIntervalSince1970 * 20) : 0
-            }(),
+            catColorTimeBucket: Self.colorTimeBucket(forMode: settings.catColorMode),
             catHeadSwing: settings.catHeadSwing,
             customCharacterRevision: customCharacterStore?.revision ?? 0,
             googlyEyesState: googlyEyesState
