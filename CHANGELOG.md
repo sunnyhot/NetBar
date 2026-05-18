@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.30.0 (2026-05-19)
+
+### Performance — Comprehensive Optimization Round
+
+- **[LUC-99] Async network refresh + primary interface cache** — Moved `getifaddrs()` + `SCDynamicStore` reads off main thread to `Task.detached`; cached primary interface name to avoid redundant system calls every second
+- **[LUC-100] Persistent nettop process** — Replaced per-sample `fork+exec` of `/usr/bin/nettop` (every 5 seconds) with a single persistent process, eliminating ~720 process spawns per hour
+- **[LUC-101] Formatters cache + ring buffer** — Cached `NumberFormatter` instances; replaced `Array.removeFirst()` O(n) with O(1) ring buffer for 90-second network history
+- **[LUC-103] Async custom character image processing** — Offloaded image resize/color processing to background queue with persistent disk cache
+- **[LUC-95] NSCache for character/tint images** — Added in-memory image cache for animation frame reads and tint bitmap operations, eliminating repeated disk I/O and per-frame bitmap creation at 24 FPS
+- **[LUC-97] Dynamic color pipeline decoupling** — Reduced dynamic color update rate from 20 Hz to 4 Hz; decoupled color and position pipelines to prevent redundant full re-renders
+
+## v0.29.4 (2026-05-18)
+
 ## v0.29.4 (2026-05-18)
 
 ### Performance
