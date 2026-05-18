@@ -4,6 +4,16 @@ import XCTest
 
 @MainActor
 final class PreferencesAndPresentationTests: XCTestCase {
+    private var isolatedDefaultSuiteNames: Set<String> = []
+
+    override func tearDown() {
+        for suiteName in isolatedDefaultSuiteNames {
+            UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
+        }
+        isolatedDefaultSuiteNames.removeAll()
+        super.tearDown()
+    }
+
     func testStatusBarAlwaysUsesRetinaImage() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = false
@@ -250,6 +260,60 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(character.isGooglyEyes)
         XCTAssertTrue(character.supportsColorControls)
         XCTAssertEqual(character.frameWidth, 36)
+    }
+
+    func testDuplicateGooglyCatRunnerIsRemovedFromBuiltInCharacterList() {
+        XCTAssertFalse(RunCatCharacter.allCharacters.contains { $0.id == "googly_cat" })
+        XCTAssertFalse(RunCatCharacter.allCharacters.contains { $0.nameZh == "咕咕眼猫" })
+        XCTAssertEqual(RunCatCharacter.byId("googly_cat").id, RunCatCharacter.defaultCat.id)
+    }
+
+    func testBuiltInRunnerMetadataMatchesOfficialAnimatedFrames() {
+        let expected: [String: (frameCount: Int, frameWidth: Int)] = [
+            "cat_b": (5, 32),
+            "cat_c": (5, 42),
+            "cat_tail": (8, 56),
+            "mock_nyan_cat": (5, 44),
+            "cheetah": (5, 41),
+            "dog": (5, 33),
+            "puppy": (5, 31),
+            "rabbit": (5, 22),
+            "frog": (5, 25),
+            "cogwheel": (5, 19),
+            "bonfire": (5, 14),
+            "drop": (5, 22),
+            "rocket": (5, 18),
+            "pendulum": (8, 12),
+            "reindeer": (5, 58),
+            "snowman": (5, 26),
+            "wind_chime": (8, 13),
+            "sparkler": (5, 22),
+            "golden_cat": (10, 45),
+            "metal_cluster_cat": (10, 149),
+            "flash_cat": (5, 42),
+            "maneki_neko": (15, 14),
+            "sushi": (16, 58)
+        ]
+
+        for (id, metadata) in expected {
+            let character = RunCatCharacter.byId(id)
+            XCTAssertEqual(character.frameCount, metadata.frameCount, id)
+            XCTAssertEqual(character.frameWidth, metadata.frameWidth, id)
+        }
+    }
+
+    func testOfficialRunnerResourcesContainRoleDefiningAnimationFrames() throws {
+        for character in RunCatCharacter.allCharacters where !character.isGooglyEyes {
+            let urls = try runnerFrameURLs(for: character)
+            XCTAssertEqual(urls.count, character.frameCount, character.id)
+
+            let uniqueFrames = Set(try urls.map { try Data(contentsOf: $0) })
+            XCTAssertGreaterThanOrEqual(uniqueFrames.count, min(character.frameCount, 5), character.id)
+
+            let firstFrame = try Data(contentsOf: urls[0])
+            let bitmap = try XCTUnwrap(NSBitmapImageRep(data: firstFrame), character.id)
+            XCTAssertLessThanOrEqual(bitmap.pixelsWide, character.frameWidth * 2, character.id)
+        }
     }
 
     func testGooglyEyesCharacterUsesSelectedSolidColor() {
@@ -1076,8 +1140,339 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertNotNil(preferences.loginItemErrorMessage)
     }
 
+    func testPetStateDefaultsAreCalmAndEnabledRemindersAreConservative() {
+        let settings = PetSettings.default
+        let state = PetState.default(now: Date(timeIntervalSince1970: 10))
+
+        XCTAssertFalse(settings.isEnabled)
+        XCTAssertFalse(settings.isQuietModeEnabled)
+        XCTAssertEqual(settings.personality, .healing)
+        XCTAssertEqual(settings.highTrafficThresholdBytesPerSecond, 10_000_000)
+        XCTAssertTrue(settings.enabledReminderIDs.contains(PetReminderKind.drinkWater.rawValue))
+        XCTAssertTrue(settings.enabledReminderIDs.contains(PetReminderKind.restEyes.rawValue))
+        XCTAssertTrue(settings.enabledReminderIDs.contains(PetReminderKind.highTraffic.rawValue))
+        XCTAssertTrue(settings.enabledSkillIDs.contains(PetSkillID.networkScout.rawValue))
+        XCTAssertTrue(settings.enabledSkillIDs.contains(PetSkillID.focusGuard.rawValue))
+        XCTAssertTrue(settings.enabledSkillIDs.contains(PetSkillID.luckyFlash.rawValue))
+        XCTAssertEqual(state.mood, .happy)
+        XCTAssertEqual(state.energy, 80)
+        XCTAssertEqual(state.affection, 0)
+        XCTAssertNil(state.activeSkillID)
+        XCTAssertNil(state.lastInteractionAt)
+        XCTAssertEqual(state.createdAt, Date(timeIntervalSince1970: 10))
+        XCTAssertEqual(state.lastUpdatedAt, Date(timeIntervalSince1970: 10))
+    }
+
+    func testPetReminderRecordUsesStringKeysForUserDefaultsEncoding() {
+        var state = PetState.default(now: Date(timeIntervalSince1970: 10))
+        state.recordReminder(.highTraffic, at: Date(timeIntervalSince1970: 20))
+
+        XCTAssertEqual(
+            state.lastReminderAtByKind[PetReminderKind.highTraffic.rawValue],
+            Date(timeIntervalSince1970: 20)
+        )
+        XCTAssertEqual(state.lastReminderDate(for: .highTraffic), Date(timeIntervalSince1970: 20))
+    }
+
+    func testPetSkillMetadataIsLocalizedAndEnabledByDefault() {
+        let scout = PetSkill.builtIn(.networkScout)
+        let focus = PetSkill.builtIn(.focusGuard)
+        let flash = PetSkill.builtIn(.luckyFlash)
+
+        XCTAssertEqual(scout.title(language: .simplifiedChinese), "网络侦察")
+        XCTAssertEqual(focus.title(language: .english), "Focus Guard")
+        XCTAssertEqual(flash.animationHint, .sparkle)
+        XCTAssertTrue(PetSkillID.defaultEnabled.contains(PetSkillID.networkScout.rawValue))
+        XCTAssertTrue(PetSkillID.defaultEnabled.contains(PetSkillID.focusGuard.rawValue))
+        XCTAssertTrue(PetSkillID.defaultEnabled.contains(PetSkillID.luckyFlash.rawValue))
+    }
+
+    func testPetControllerPersistsSettingsAndInteractionState() {
+        let defaults = isolatedDefaults()
+        let now = Date(timeIntervalSince1970: 100)
+        let controller = PetController(defaults: defaults, now: { now })
+
+        controller.updateSettings { settings in
+            settings.isEnabled = true
+            settings.personality = .playful
+        }
+        controller.interact(.pet)
+
+        let reloaded = PetController(defaults: defaults, now: { now })
+        XCTAssertTrue(reloaded.settings.isEnabled)
+        XCTAssertEqual(reloaded.settings.personality, .playful)
+        XCTAssertEqual(reloaded.state.affection, 1)
+        XCTAssertEqual(reloaded.state.mood, .happy)
+    }
+
+    func testPetControllerMapsNetworkSpeedToMoodAndHighTrafficReminder() {
+        let defaults = isolatedDefaults()
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let controller = PetController(defaults: defaults, now: { currentDate })
+        controller.updateSettings { settings in
+            settings.isEnabled = true
+            settings.highTrafficThresholdBytesPerSecond = 1_000
+        }
+
+        controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: .empty)
+
+        XCTAssertEqual(controller.state.mood, .excited)
+        XCTAssertEqual(controller.latestCue?.kind, .reminder)
+        XCTAssertTrue(controller.latestCue?.message.contains(ByteFormat.speed(2_500)) == true)
+
+        currentDate = currentDate.addingTimeInterval(60)
+        controller.observe(snapshot: sampleSnapshot(download: 2_500, upload: 500), appTraffic: .empty)
+
+        XCTAssertEqual(controller.state.lastReminderAtByKind.count, 1)
+    }
+
+    func testPetControllerHighTrafficReminderMentionsTopTrafficApplication() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings { settings in
+            settings.isEnabled = true
+            settings.highTrafficThresholdBytesPerSecond = 1_000
+        }
+        let appTraffic = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 100),
+            applications: [
+                app("Quiet", processNames: ["Quiet"], download: 200, upload: 100, total: 300),
+                app("Arc", processNames: ["Arc"], download: 2_500, upload: 500, total: 3_000)
+            ],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil
+        )
+
+        controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: appTraffic)
+
+        XCTAssertEqual(controller.latestCue?.kind, .reminder)
+        XCTAssertTrue(controller.latestCue?.message.contains("Arc") == true)
+    }
+
+    func testPetControllerMapsLowNetworkSpeedToSleepyMood() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings { $0.isEnabled = true }
+
+        controller.observe(snapshot: sampleSnapshot(download: 40, upload: 20), appTraffic: .empty)
+
+        XCTAssertEqual(controller.state.mood, .sleepy)
+        XCTAssertNil(controller.latestCue)
+    }
+
+    func testPetControllerHighTrafficReminderCooldownKeepsReminderDateAndCueCreationTime() {
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let controller = PetController(defaults: isolatedDefaults(), now: { currentDate })
+        controller.updateSettings { settings in
+            settings.isEnabled = true
+            settings.highTrafficThresholdBytesPerSecond = 1_000
+        }
+
+        controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: .empty)
+        let firstReminderDate = controller.state.lastReminderDate(for: .highTraffic)
+        let firstCueCreatedAt = controller.latestCue?.createdAt
+
+        currentDate = currentDate.addingTimeInterval(15 * 60 - 1)
+        controller.observe(snapshot: sampleSnapshot(download: 3_000, upload: 500), appTraffic: .empty)
+
+        XCTAssertEqual(controller.state.lastReminderDate(for: .highTraffic), firstReminderDate)
+        XCTAssertEqual(controller.latestCue?.createdAt, firstCueCreatedAt)
+    }
+
+    func testPetControllerQuietModeSuppressesReminderCue() {
+        let defaults = isolatedDefaults()
+        let controller = PetController(defaults: defaults, now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings { settings in
+            settings.isEnabled = true
+            settings.isQuietModeEnabled = true
+            settings.highTrafficThresholdBytesPerSecond = 1_000
+        }
+
+        controller.observe(snapshot: sampleSnapshot(download: 3_000, upload: 0), appTraffic: .empty)
+
+        XCTAssertNil(controller.latestCue)
+        XCTAssertEqual(controller.state.mood, .excited)
+    }
+
+    func testPetControllerTickEmitsDrinkWaterAndTwentiethRestEyesReminder() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings { $0.isEnabled = true }
+
+        controller.tick()
+
+        XCTAssertEqual(controller.latestCue?.kind, .reminder)
+        XCTAssertEqual(controller.latestCue?.animationHint, .happyHop)
+        XCTAssertEqual(controller.state.lastReminderDate(for: .drinkWater), Date(timeIntervalSince1970: 100))
+        XCTAssertNil(controller.state.lastReminderDate(for: .restEyes))
+
+        for _ in 2...20 {
+            controller.tick()
+        }
+
+        XCTAssertEqual(controller.latestCue?.kind, .reminder)
+        XCTAssertEqual(controller.state.lastReminderDate(for: .restEyes), Date(timeIntervalSince1970: 100))
+    }
+
+    func testPetMoodAndSkillsProvidePanelCopy() {
+        XCTAssertEqual(PetMood.focused.title(language: .simplifiedChinese), "专注")
+        XCTAssertEqual(PetPersonality.playful.title(language: .english), "Playful")
+        XCTAssertEqual(PetReminderKind.restEyes.title(language: .simplifiedChinese), "休息眼睛")
+        XCTAssertEqual(PetSkill.allBuiltIns.count, 3)
+    }
+
+    func testPetNetworkScoutSkillReportsTopTrafficApplication() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
+        controller.updateSettings { $0.isEnabled = true }
+        let appTraffic = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                app("Quiet", processNames: ["Quiet"], download: 100, upload: 100, total: 200),
+                app("Arc", processNames: ["Arc"], download: 4_000, upload: 1_000, total: 5_000)
+            ],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil
+        )
+
+        let cue = controller.triggerSkill(
+            .networkScout,
+            snapshot: sampleSnapshot(download: 4_000, upload: 1_000),
+            appTraffic: appTraffic
+        )
+
+        XCTAssertEqual(cue?.kind, .skill)
+        XCTAssertTrue(cue?.message.contains("Arc") == true)
+    }
+
+    func testPetNetworkScoutSkillFallsBackToSnapshotTotalSpeedWhenApplicationsAreEmpty() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
+        controller.updateSettings { $0.isEnabled = true }
+
+        let cue = controller.triggerSkill(
+            .networkScout,
+            snapshot: sampleSnapshot(download: 4_000, upload: 1_000),
+            appTraffic: .empty
+        )
+
+        XCTAssertEqual(cue?.kind, .skill)
+        XCTAssertTrue(cue?.message.contains(ByteFormat.speed(5_000)) == true)
+    }
+
+    func testPetFocusGuardSetsFocusedMoodAndActiveSkill() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
+        controller.updateSettings { $0.isEnabled = true }
+
+        _ = controller.triggerSkill(.focusGuard, snapshot: sampleSnapshot(download: 0, upload: 0), appTraffic: .empty)
+
+        XCTAssertEqual(controller.state.mood, .focused)
+        XCTAssertEqual(controller.state.activeSkillID, PetSkillID.focusGuard.rawValue)
+    }
+
+    func testPetFocusGuardExpiresAfterTwentyFiveMinutesOnTick() {
+        var currentDate = Date(timeIntervalSince1970: 10)
+        let controller = PetController(defaults: isolatedDefaults(), now: { currentDate })
+        controller.updateSettings { $0.isEnabled = true }
+
+        _ = controller.triggerSkill(.focusGuard, snapshot: sampleSnapshot(download: 0, upload: 0), appTraffic: .empty)
+
+        XCTAssertEqual(controller.state.activeSkillStartedAt, Date(timeIntervalSince1970: 10))
+        XCTAssertEqual(controller.state.activeSkillEndsAt, Date(timeIntervalSince1970: 10 + 25 * 60))
+
+        currentDate = Date(timeIntervalSince1970: 10 + 25 * 60 + 1)
+        controller.tick()
+
+        XCTAssertNil(controller.state.activeSkillID)
+        XCTAssertNil(controller.state.activeSkillStartedAt)
+        XCTAssertNil(controller.state.activeSkillEndsAt)
+        XCTAssertNotEqual(controller.state.mood, .focused)
+    }
+
+    func testPetLuckyFlashSkillEmitsSparkleAndHappyMood() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
+        controller.updateSettings { $0.isEnabled = true }
+        controller.interact(.encourage)
+
+        let cue = controller.triggerSkill(.luckyFlash, snapshot: sampleSnapshot(download: 0, upload: 0), appTraffic: .empty)
+
+        XCTAssertEqual(cue?.kind, .skill)
+        XCTAssertEqual(cue?.animationHint, .sparkle)
+        XCTAssertEqual(controller.state.mood, .happy)
+    }
+
+    func testPetSkillCooldownSuppressesRepeatedTriggerAndAllowsAfterCooldown() {
+        var currentDate = Date(timeIntervalSince1970: 10)
+        let controller = PetController(defaults: isolatedDefaults(), now: { currentDate })
+        controller.updateSettings { $0.isEnabled = true }
+
+        let firstCue = controller.triggerSkill(
+            .luckyFlash,
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty
+        )
+
+        XCTAssertEqual(firstCue?.animationHint, .sparkle)
+        XCTAssertEqual(controller.state.lastSkillTriggeredDate(for: .luckyFlash), Date(timeIntervalSince1970: 10))
+
+        currentDate = Date(timeIntervalSince1970: 14)
+        let suppressedCue = controller.triggerSkill(
+            .luckyFlash,
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty
+        )
+
+        XCTAssertNil(suppressedCue)
+        XCTAssertEqual(controller.latestCue?.createdAt, firstCue?.createdAt)
+        XCTAssertEqual(controller.state.lastSkillTriggeredDate(for: .luckyFlash), Date(timeIntervalSince1970: 10))
+
+        currentDate = Date(timeIntervalSince1970: 15)
+        let cooledDownCue = controller.triggerSkill(
+            .luckyFlash,
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty
+        )
+
+        XCTAssertEqual(cooledDownCue?.kind, .skill)
+        XCTAssertEqual(controller.state.lastSkillTriggeredDate(for: .luckyFlash), Date(timeIntervalSince1970: 15))
+    }
+
+    func testPetSettingsCanToggleReminderAndSkillIDs() {
+        var settings = PetSettings.default
+        settings.enabledReminderIDs.remove(PetReminderKind.drinkWater.rawValue)
+        settings.enabledSkillIDs.remove(PetSkillID.luckyFlash.rawValue)
+
+        XCTAssertFalse(settings.isReminderEnabled(.drinkWater))
+        XCTAssertFalse(settings.isSkillEnabled(.luckyFlash))
+
+        settings.enabledReminderIDs.insert(PetReminderKind.drinkWater.rawValue)
+        settings.enabledSkillIDs.insert(PetSkillID.luckyFlash.rawValue)
+
+        XCTAssertTrue(settings.isReminderEnabled(.drinkWater))
+        XCTAssertTrue(settings.isSkillEnabled(.luckyFlash))
+    }
+
+    private func runnerFrameURLs(for character: RunCatCharacter) throws -> [URL] {
+        let sourceFile = URL(fileURLWithPath: #filePath)
+        let repositoryRoot = sourceFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        let directory = repositoryRoot
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("RunCat")
+            .appendingPathComponent(character.id)
+        let urls = try FileManager.default.contentsOfDirectory(
+            at: directory,
+            includingPropertiesForKeys: nil
+        )
+        return urls
+            .filter { $0.pathExtension.lowercased() == "png" && $0.lastPathComponent.hasPrefix("frame_") }
+            .sorted {
+                $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
+            }
+    }
+
     private func isolatedDefaults() -> UserDefaults {
         let suiteName = "NetBarTests.\(UUID().uuidString)"
+        isolatedDefaultSuiteNames.insert(suiteName)
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
