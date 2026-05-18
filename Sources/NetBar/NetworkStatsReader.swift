@@ -57,15 +57,28 @@ final class SystemNetworkStatsReader: NetworkStatsReading {
         }
     }
 
+    private static var cachedPrimaryInterface: (name: String?, fetchedAt: Date)?
+    private static let primaryInterfaceCacheTTL: TimeInterval = 30
+
     private static func primaryInterfaceName() -> String? {
-        guard
-            let store = SCDynamicStoreCreate(nil, "NetBar" as CFString, nil, nil),
-            let value = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
-            let primary = value["PrimaryInterface"] as? String
-        else {
-            return nil
+        let now = Date()
+        if let cached = cachedPrimaryInterface, now.timeIntervalSince(cached.fetchedAt) < primaryInterfaceCacheTTL {
+            return cached.name
         }
-        return primary
+
+        let name: String? = {
+            guard
+                let store = SCDynamicStoreCreate(nil, "NetBar" as CFString, nil, nil),
+                let value = SCDynamicStoreCopyValue(store, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
+                let primary = value["PrimaryInterface"] as? String
+            else {
+                return nil
+            }
+            return primary
+        }()
+
+        cachedPrimaryInterface = (name: name, fetchedAt: now)
+        return name
     }
 
     private static func displayName(for interfaceName: String) -> String {

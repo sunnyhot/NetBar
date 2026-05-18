@@ -15,6 +15,7 @@ final class NetworkMonitor: ObservableObject {
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
     private var previousApplicationSampleDate: Date?
     private var isReadingApplicationTraffic = false
+    private var isRefreshing = false
     private var timer: Timer?
     private var applicationTimer: Timer?
     private var history: [RatePoint] = []
@@ -59,11 +60,39 @@ final class NetworkMonitor: ObservableObject {
     }
 
     func refresh() {
+        guard !isRefreshing else { return }
+        isRefreshing = true
+
         let now = now()
-        let stats = reader.readInterfaces()
+        let capturedPreviousStats = previousStats
+        let capturedPreviousSampleDate = previousSampleDate
+        let reader = self.reader
+
+        Task { [weak self] in
+            let stats = await Task.detached(priority: .utility) { [reader] in
+                reader.readInterfaces()
+            }.value
+
+            guard let self else { return }
+            self.applyRefresh(
+                stats,
+                now: now,
+                previousStats: capturedPreviousStats,
+                previousSampleDate: capturedPreviousSampleDate
+            )
+            self.isRefreshing = false
+        }
+    }
+
+    private func applyRefresh(
+        _ stats: [InterfaceStats],
+        now: Date,
+        previousStats capturedPreviousStats: [String: InterfaceStats],
+        previousSampleDate capturedPreviousSampleDate: Date?
+    ) {
         let currentByName = Dictionary(uniqueKeysWithValues: stats.map { ($0.name, $0) })
 
-        guard let previousDate = previousSampleDate else {
+        guard let previousDate = capturedPreviousSampleDate else {
             previousStats = currentByName
             previousSampleDate = now
             let externalStats = Self.externalTrafficStats(from: stats)
@@ -94,7 +123,7 @@ final class NetworkMonitor: ObservableObject {
 
         let interval = max(now.timeIntervalSince(previousDate), 0.2)
         let rates = stats.map { current -> InterfaceRate in
-            let previous = previousStats[current.name]
+            let previous = capturedPreviousStats[current.name]
             let receivedDelta = Self.positiveDelta(current.receivedBytes, previous?.receivedBytes)
             let sentDelta = Self.positiveDelta(current.sentBytes, previous?.sentBytes)
 
