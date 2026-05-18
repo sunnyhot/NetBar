@@ -258,7 +258,7 @@ private struct MenuBarPreferencesView: View {
     @State private var previewFrameTimeline = CharacterPreviewFrameTimeline()
     @State private var characterPickerFrameTick = 0
 
-    private static let previewFrameInterval: TimeInterval = 1.0 / 8.0
+    private static let previewFrameInterval: TimeInterval = 1.0 / 3.0
 
     private func applyCatColor(_ color: Color) {
         let newColor = PersistedColor(color: color)
@@ -1079,6 +1079,10 @@ private struct StatusBarPreview: View {
     @ObservedObject var customCharacterStore: CustomCharacterStore
     let catFrameIndex: Int?
 
+    @State private var cachedImage: NSImage?
+    @State private var cachedPresentation: StatusBarPresentation?
+    @State private var lastRenderedFrameIndex: Int?
+
     private let previewSnapshot = NetworkSnapshot(
         timestamp: Date(timeIntervalSince1970: 0),
         interfaces: [],
@@ -1096,7 +1100,7 @@ private struct StatusBarPreview: View {
 
             HStack {
                 Spacer()
-                let presentation = StatusBarDisplayRenderer.presentation(
+                let presentation = cachedPresentation ?? StatusBarDisplayRenderer.presentation(
                     snapshot: previewSnapshot,
                     settings: settings,
                     customCharacterStore: customCharacterStore,
@@ -1111,7 +1115,7 @@ private struct StatusBarPreview: View {
                             height: max(NSStatusBar.system.thickness, 24)
                         )
                 } else {
-                    Image(nsImage: StatusBarDisplayRenderer.image(
+                    Image(nsImage: cachedImage ?? StatusBarDisplayRenderer.image(
                         snapshot: previewSnapshot,
                         settings: settings,
                         customCharacterStore: customCharacterStore,
@@ -1133,6 +1137,40 @@ private struct StatusBarPreview: View {
                             .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
                     )
             )
+        }
+        .onChange(of: catFrameIndex) { newIndex in
+            guard newIndex != lastRenderedFrameIndex else { return }
+            lastRenderedFrameIndex = newIndex
+            let newPresentation = StatusBarDisplayRenderer.presentation(
+                snapshot: previewSnapshot,
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: newIndex
+            )
+            cachedPresentation = newPresentation
+            if newPresentation.kind != .nativeTitle {
+                cachedImage = StatusBarDisplayRenderer.image(
+                    snapshot: previewSnapshot,
+                    settings: settings,
+                    customCharacterStore: customCharacterStore,
+                    catFrameIndex: newIndex
+                )
+            }
+        }
+        .onAppear {
+            cachedPresentation = StatusBarDisplayRenderer.presentation(
+                snapshot: previewSnapshot,
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex
+            )
+            cachedImage = StatusBarDisplayRenderer.image(
+                snapshot: previewSnapshot,
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex
+            )
+            lastRenderedFrameIndex = catFrameIndex
         }
     }
 
@@ -1178,6 +1216,8 @@ private struct CharacterPickerPreviewIcon: View {
     let character: RunCatCharacter
     let frameIndex: Int
 
+    private static let imageCache = NSCache<NSString, NSImage>()
+
     var body: some View {
         Group {
             if let image = Self.image(for: character, frameIndex: frameIndex) {
@@ -1200,16 +1240,31 @@ private struct CharacterPickerPreviewIcon: View {
 
     private static func image(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
         let safeFrameIndex = frameIndex % max(character.frameCount, 1)
+        let cacheKey = "\(character.id)_\(safeFrameIndex)" as NSString
+
+        if let cached = imageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let loadedImage = Self.loadFromDisk(character: character, frameIndex: safeFrameIndex)
+
+        if let image = loadedImage {
+            imageCache.setObject(image, forKey: cacheKey)
+        }
+        return loadedImage
+    }
+
+    private static func loadFromDisk(character: RunCatCharacter, frameIndex: Int) -> NSImage? {
         let resourcePath = "RunCat/\(character.id)"
         if let url = Bundle.main.url(
-            forResource: "frame_\(safeFrameIndex)",
+            forResource: "frame_\(frameIndex)",
             withExtension: "png",
             subdirectory: resourcePath
         ) {
             return NSImage(contentsOf: url)
         }
         if let resourcePath = Bundle.main.resourcePath {
-            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(safeFrameIndex).png"))
+            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(frameIndex).png"))
         }
         return nil
     }
