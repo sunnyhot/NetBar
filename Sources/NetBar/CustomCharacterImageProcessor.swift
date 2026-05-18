@@ -1,4 +1,5 @@
 import AppKit
+import CommonCrypto
 import Foundation
 import ImageIO
 
@@ -19,8 +20,18 @@ enum CustomCharacterImageProcessorError: LocalizedError {
     }
 }
 
+struct GIFExtractionProgress: Sendable {
+    let current: Int
+    let total: Int
+}
+
 enum CustomCharacterImageProcessor {
     static let generatedStaticFrameCount = 8
+
+    private static let cacheDirectory: URL = {
+        let tmp = FileManager.default.temporaryDirectory
+        return tmp.appendingPathComponent("NetBar_ProcessedFramesCache", isDirectory: true)
+    }()
 
     static func sortedFrameURLs(_ urls: [URL]) -> [URL] {
         urls.sorted {
@@ -32,38 +43,64 @@ enum CustomCharacterImageProcessor {
         from image: NSImage,
         motionStyle: CustomCharacterMotionStyle,
         pixelation: CustomCharacterPixelationScale
-    ) throws -> [NSImage] {
-        let source = try normalizedImage(from: image)
-        let baseSize = source.size
-        let canvasPadding = canvasPadding(for: motionStyle)
-        let canvasSize = NSSize(
-            width: max(baseSize.width + canvasPadding.width, 1),
-            height: max(baseSize.height + canvasPadding.height, 1)
-        )
+    ) async throws -> [NSImage] {
+        try await withThrowingTaskGroup(of: NSImage.self) { group in
+            let source = try normalizedImage(from: image)
+            let baseSize = source.size
+            let canvasPadding = canvasPadding(for: motionStyle)
+            let canvasSize = NSSize(
+                width: max(baseSize.width + canvasPadding.width, 1),
+                height: max(baseSize.height + canvasPadding.height, 1)
+            )
 
-        let frames = (0..<generatedStaticFrameCount).map { index in
-            frame(from: source, canvasSize: canvasSize, motionStyle: motionStyle, index: index)
+            let rawFrames = (0..<generatedStaticFrameCount).map { index in
+                frame(from: source, canvasSize: canvasSize, motionStyle: motionStyle, index: index)
+            }
+            for frameImage in rawFrames {
+                group.addTask {
+                    try await self.pixelatedAsync(frameImage, scale: pixelation)
+                }
+            }
+            var results: [NSImage] = []
+            results.reserveCapacity(rawFrames.count)
+            for try await image in group {
+                results.append(image)
+            }
+            return results
         }
-        return try frames.map { try pixelated($0, scale: pixelation) }
     }
 
     static func processedFrameSequence(
         from urls: [URL],
         pixelation: CustomCharacterPixelationScale
-    ) throws -> [NSImage] {
+    ) async throws -> [NSImage] {
         let frames = try sortedFrameURLs(urls).compactMap { url -> NSImage? in
             guard let image = NSImage(contentsOf: url) else { return nil }
             return try normalizedImage(from: image)
         }
         guard !frames.isEmpty else { throw CustomCharacterImageProcessorError.emptyFrameSet }
-        return try normalizeFrameSizes(frames).map { try pixelated($0, scale: pixelation) }
+        let normalized = try normalizeFrameSizes(frames)
+        return try await withThrowingTaskGroup(of: NSImage.self) { group in
+            for frame in normalized {
+                group.addTask {
+                    try await self.pixelatedAsync(frame, scale: pixelation)
+                }
+            }
+            var results: [NSImage] = []
+            results.reserveCapacity(normalized.count)
+            for try await image in group {
+                results.append(image)
+            }
+            return results
+        }
     }
 
     static func processedGIFFrames(
         from url: URL,
         pixelation: CustomCharacterPixelationScale,
-        maxFrames: Int = 60
-    ) throws -> [NSImage] {
+        maxFrames: Int = 60,
+        onProgress: ((GIFExtractionProgress) -> Void)? = nil
+    ) async throws -> [NSImage] {
         guard let source = CGImageSourceCreateWithURL(url as CFURL, nil) else {
             throw CustomCharacterImageProcessorError.unreadableImage(url)
         }
@@ -78,13 +115,60 @@ enum CustomCharacterImageProcessor {
             indexes = (0..<cappedCount).map { Int((Double($0) / Double(cappedCount)) * Double(count)) }
         }
 
-        let frames = indexes.compactMap { index -> NSImage? in
-            guard let cgImage = CGImageSourceCreateImageAtIndex(source, index, nil) else { return nil }
+        var rawFrames: [NSImage] = []
+        rawFrames.reserveCapacity(indexes.count)
+        for (i, index) in indexes.enumerated() {
+            guard let cgImage = CGImageSourceCreateImageAtIndex(source, index, nil) else { continue }
             let size = NSSize(width: cgImage.width, height: cgImage.height)
-            return NSImage(cgImage: cgImage, size: size)
+            rawFrames.append(NSImage(cgImage: cgImage, size: size))
+            onProgress?(GIFExtractionProgress(current: i + 1, total: indexes.count))
         }
-        guard !frames.isEmpty else { throw CustomCharacterImageProcessorError.emptyFrameSet }
-        return try normalizeFrameSizes(frames).map { try pixelated($0, scale: pixelation) }
+        guard !rawFrames.isEmpty else { throw CustomCharacterImageProcessorError.emptyFrameSet }
+        let normalized = try normalizeFrameSizes(rawFrames)
+        return try await withThrowingTaskGroup(of: NSImage.self) { group in
+            for frame in normalized {
+                group.addTask {
+                    try await self.pixelatedAsync(frame, scale: pixelation)
+                }
+            }
+            var results: [NSImage] = []
+            results.reserveCapacity(normalized.count)
+            for try await image in group {
+                results.append(image)
+            }
+            return results
+        }
+    }
+
+    // MARK: - Persistent Cache
+
+    static func cacheKey(data: Data, pixelation: CustomCharacterPixelationScale) -> String {
+        var hasher = HashContext()
+        hasher.update(data: data)
+        hasher.update(data: withUnsafeBytes(of: pixelation.rawValue) { Data($0) })
+        return hasher.finalize()
+    }
+
+    static func cachedFrames(for key: String) -> [NSImage]? {
+        let dir = cacheDirectory.appendingPathComponent(key, isDirectory: true)
+        let fm = FileManager.default
+        guard let files = try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: nil),
+              !files.isEmpty else { return nil }
+        return files.sorted { $0.lastPathComponent < $1.lastPathComponent }.compactMap { NSImage(contentsOf: $0) }
+    }
+
+    static func storeFramesInCache(_ frames: [NSImage], key: String) {
+        let dir = cacheDirectory.appendingPathComponent(key, isDirectory: true)
+        let fm = FileManager.default
+        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+        for (i, frame) in frames.enumerated() {
+            guard let data = try? pngData(for: frame) else { continue }
+            try? data.write(to: dir.appendingPathComponent("frame_\(i).png"))
+        }
+    }
+
+    static func clearCache() {
+        try? FileManager.default.removeItem(at: cacheDirectory)
     }
 
     static func pixelated(_ image: NSImage, scale: CustomCharacterPixelationScale) throws -> NSImage {
@@ -403,5 +487,35 @@ enum CustomCharacterImageProcessor {
             blue: blue / count,
             alpha: alpha / count
         )
+    }
+
+    private static func pixelatedAsync(_ image: NSImage, scale: CustomCharacterPixelationScale) async throws -> NSImage {
+        try await Task.detached(priority: .utility) {
+            try pixelated(image, scale: scale)
+        }.value
+    }
+}
+
+private struct HashContext {
+    private var context: CC_SHA256_CTX
+
+    init() {
+        context = CC_SHA256_CTX()
+        CC_SHA256_Init(&context)
+    }
+
+    mutating func update(data: Data) {
+        data.withUnsafeBytes { ptr in
+            if let baseAddress = ptr.baseAddress {
+                CC_SHA256_Update(&context, baseAddress, CC_LONG(data.count))
+            }
+        }
+    }
+
+    func finalize() -> String {
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        var localContext = context
+        CC_SHA256_Final(&digest, &localContext)
+        return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

@@ -18,9 +18,16 @@ enum CustomCharacterStoreError: LocalizedError {
     }
 }
 
+enum CharacterProcessingState: Equatable, Sendable {
+    case ready
+    case loading
+    case error(String)
+}
+
 @MainActor
 final class CustomCharacterStore: ObservableObject {
     @Published private(set) var characters: [CustomCharacter] = []
+    @Published private(set) var processingStates: [String: CharacterProcessingState] = [:]
     private(set) var revision = 0
 
     private let rootDirectory: URL
@@ -73,11 +80,11 @@ final class CustomCharacterStore: ObservableObject {
         displayName: String,
         motionStyle: CustomCharacterMotionStyle = .bounceBreathe,
         pixelationScale: CustomCharacterPixelationScale = .off
-    ) throws -> CustomCharacter {
+    ) async throws -> CustomCharacter {
         switch selection.sourceKind {
         case .staticImage:
             guard let url = selection.urls.first else { throw CustomCharacterStoreError.unsupportedImportSelection }
-            return try importStaticImage(
+            return try await importStaticImage(
                 from: url,
                 displayName: displayName,
                 motionStyle: motionStyle,
@@ -85,9 +92,9 @@ final class CustomCharacterStore: ObservableObject {
             )
         case .gif:
             guard let url = selection.urls.first else { throw CustomCharacterStoreError.unsupportedImportSelection }
-            return try importGIF(from: url, displayName: displayName, pixelationScale: pixelationScale)
+            return try await importGIF(from: url, displayName: displayName, pixelationScale: pixelationScale)
         case .frameSequence:
-            return try importFrameSequence(from: selection.urls, displayName: displayName, pixelationScale: pixelationScale)
+            return try await importFrameSequence(from: selection.urls, displayName: displayName, pixelationScale: pixelationScale)
         }
     }
 
@@ -96,21 +103,29 @@ final class CustomCharacterStore: ObservableObject {
         displayName: String,
         motionStyle: CustomCharacterMotionStyle,
         pixelationScale: CustomCharacterPixelationScale
-    ) throws -> CustomCharacter {
+    ) async throws -> CustomCharacter {
         guard let sourceImage = NSImage(contentsOf: sourceURL) else {
             throw CustomCharacterImageProcessorError.unreadableImage(sourceURL)
         }
 
         let id = makeID()
+        processingStates[id] = .loading
         let directory = rootDirectory.appendingPathComponent(id, isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         try copyReplacing(sourceURL, to: originalURL(in: directory, extension: sourceURL.pathExtension))
 
-        let frames = try CustomCharacterImageProcessor.processedStaticFrames(
-            from: sourceImage,
-            motionStyle: motionStyle,
-            pixelation: pixelationScale
-        )
+        let cacheKey = cacheKeyForStaticImage(sourceURL: sourceURL, motionStyle: motionStyle, pixelation: pixelationScale)
+        let frames: [NSImage]
+        if let cached = CustomCharacterImageProcessor.cachedFrames(for: cacheKey) {
+            frames = cached
+        } else {
+            frames = try await CustomCharacterImageProcessor.processedStaticFrames(
+                from: sourceImage,
+                motionStyle: motionStyle,
+                pixelation: pixelationScale
+            )
+            CustomCharacterImageProcessor.storeFramesInCache(frames, key: cacheKey)
+        }
         let dimensions = try CustomCharacterImageProcessor.writePNGFrames(frames, to: directory)
         let date = now()
         let character = CustomCharacter(
@@ -127,6 +142,7 @@ final class CustomCharacterStore: ObservableObject {
         )
         characters.append(character)
         try saveManifest()
+        processingStates[id] = .ready
         return character
     }
 
@@ -134,13 +150,21 @@ final class CustomCharacterStore: ObservableObject {
         from sourceURL: URL,
         displayName: String,
         pixelationScale: CustomCharacterPixelationScale
-    ) throws -> CustomCharacter {
+    ) async throws -> CustomCharacter {
         let id = makeID()
+        processingStates[id] = .loading
         let directory = rootDirectory.appendingPathComponent(id, isDirectory: true)
         try fileManager.createDirectory(at: directory, withIntermediateDirectories: true)
         try copyReplacing(sourceURL, to: originalURL(in: directory, extension: "gif"))
 
-        let frames = try CustomCharacterImageProcessor.processedGIFFrames(from: sourceURL, pixelation: pixelationScale)
+        let cacheKey = cacheKeyForGIF(sourceURL: sourceURL, pixelation: pixelationScale)
+        let frames: [NSImage]
+        if let cached = CustomCharacterImageProcessor.cachedFrames(for: cacheKey) {
+            frames = cached
+        } else {
+            frames = try await CustomCharacterImageProcessor.processedGIFFrames(from: sourceURL, pixelation: pixelationScale)
+            CustomCharacterImageProcessor.storeFramesInCache(frames, key: cacheKey)
+        }
         let dimensions = try CustomCharacterImageProcessor.writePNGFrames(frames, to: directory)
         let date = now()
         let character = CustomCharacter(
@@ -157,6 +181,7 @@ final class CustomCharacterStore: ObservableObject {
         )
         characters.append(character)
         try saveManifest()
+        processingStates[id] = .ready
         return character
     }
 
@@ -164,10 +189,10 @@ final class CustomCharacterStore: ObservableObject {
         from sourceURLs: [URL],
         displayName: String,
         pixelationScale: CustomCharacterPixelationScale
-    ) throws -> CustomCharacter {
+    ) async throws -> CustomCharacter {
         let sortedURLs = CustomCharacterImageProcessor.sortedFrameURLs(sourceURLs)
-        let frames = try CustomCharacterImageProcessor.processedFrameSequence(from: sortedURLs, pixelation: pixelationScale)
         let id = makeID()
+        processingStates[id] = .loading
         let directory = rootDirectory.appendingPathComponent(id, isDirectory: true)
         let originalsDirectory = directory.appendingPathComponent("originals", isDirectory: true)
         try fileManager.createDirectory(at: originalsDirectory, withIntermediateDirectories: true)
@@ -175,6 +200,15 @@ final class CustomCharacterStore: ObservableObject {
         for (index, url) in sortedURLs.enumerated() {
             let ext = url.pathExtension.isEmpty ? "png" : url.pathExtension
             try copyReplacing(url, to: originalsDirectory.appendingPathComponent("frame_\(index).\(ext)"))
+        }
+
+        let cacheKey = cacheKeyForFrameSequence(sourceURLs: sortedURLs, pixelation: pixelationScale)
+        let frames: [NSImage]
+        if let cached = CustomCharacterImageProcessor.cachedFrames(for: cacheKey) {
+            frames = cached
+        } else {
+            frames = try await CustomCharacterImageProcessor.processedFrameSequence(from: sortedURLs, pixelation: pixelationScale)
+            CustomCharacterImageProcessor.storeFramesInCache(frames, key: cacheKey)
         }
 
         let dimensions = try CustomCharacterImageProcessor.writePNGFrames(frames, to: directory)
@@ -193,6 +227,7 @@ final class CustomCharacterStore: ObservableObject {
         )
         characters.append(character)
         try saveManifest()
+        processingStates[id] = .ready
         return character
     }
 
@@ -223,32 +258,36 @@ final class CustomCharacterStore: ObservableObject {
         id: String,
         motionStyle: CustomCharacterMotionStyle,
         pixelationScale: CustomCharacterPixelationScale
-    ) throws {
+    ) async throws {
         guard let index = characters.firstIndex(where: { $0.id == id }) else {
             throw CustomCharacterStoreError.missingCharacter(id)
         }
         var character = characters[index]
+        processingStates[id] = .loading
         character.motionStyle = motionStyle
         character.pixelationScale = pixelationScale
-        try regenerateFrames(for: &character)
+        try await regenerateFrames(for: &character)
         character.updatedAt = now()
         characters[index] = character
         try saveManifest()
+        processingStates[id] = .ready
     }
 
-    func updatePixelation(id: String, pixelationScale: CustomCharacterPixelationScale) throws {
+    func updatePixelation(id: String, pixelationScale: CustomCharacterPixelationScale) async throws {
         guard let index = characters.firstIndex(where: { $0.id == id }) else {
             throw CustomCharacterStoreError.missingCharacter(id)
         }
         var character = characters[index]
+        processingStates[id] = .loading
         character.pixelationScale = pixelationScale
-        try regenerateFrames(for: &character)
+        try await regenerateFrames(for: &character)
         character.updatedAt = now()
         characters[index] = character
         try saveManifest()
+        processingStates[id] = .ready
     }
 
-    private func regenerateFrames(for character: inout CustomCharacter) throws {
+    private func regenerateFrames(for character: inout CustomCharacter) async throws {
         let directory = characterDirectory(for: character)
         let frames: [NSImage]
         switch character.sourceKind {
@@ -257,18 +296,18 @@ final class CustomCharacterStore: ObservableObject {
             guard let image = NSImage(contentsOf: original) else {
                 throw CustomCharacterImageProcessorError.unreadableImage(original)
             }
-            frames = try CustomCharacterImageProcessor.processedStaticFrames(
+            frames = try await CustomCharacterImageProcessor.processedStaticFrames(
                 from: image,
                 motionStyle: character.motionStyle ?? .bounceBreathe,
                 pixelation: character.pixelationScale
             )
         case .gif:
             let original = try originalSourceURL(in: directory, id: character.id)
-            frames = try CustomCharacterImageProcessor.processedGIFFrames(from: original, pixelation: character.pixelationScale)
+            frames = try await CustomCharacterImageProcessor.processedGIFFrames(from: original, pixelation: character.pixelationScale)
         case .frameSequence:
             let originals = directory.appendingPathComponent("originals", isDirectory: true)
             let urls = (try? fileManager.contentsOfDirectory(at: originals, includingPropertiesForKeys: nil)) ?? []
-            frames = try CustomCharacterImageProcessor.processedFrameSequence(from: urls, pixelation: character.pixelationScale)
+            frames = try await CustomCharacterImageProcessor.processedFrameSequence(from: urls, pixelation: character.pixelationScale)
         }
 
         let dimensions = try CustomCharacterImageProcessor.writePNGFrames(frames, to: directory)
@@ -337,5 +376,30 @@ final class CustomCharacterStore: ObservableObject {
 
     private struct Manifest: Codable {
         var characters: [CustomCharacter]
+    }
+
+    private func cacheKeyForStaticImage(
+        sourceURL: URL,
+        motionStyle: CustomCharacterMotionStyle,
+        pixelation: CustomCharacterPixelationScale
+    ) -> String {
+        let data = (try? Data(contentsOf: sourceURL)) ?? Data()
+        return CustomCharacterImageProcessor.cacheKey(
+            data: data + motionStyle.rawValue.data(using: .utf8)!,
+            pixelation: pixelation
+        )
+    }
+
+    private func cacheKeyForGIF(sourceURL: URL, pixelation: CustomCharacterPixelationScale) -> String {
+        let data = (try? Data(contentsOf: sourceURL)) ?? Data()
+        return CustomCharacterImageProcessor.cacheKey(data: data, pixelation: pixelation)
+    }
+
+    private func cacheKeyForFrameSequence(sourceURLs: [URL], pixelation: CustomCharacterPixelationScale) -> String {
+        var combined = Data()
+        for url in sourceURLs {
+            combined.append((try? Data(contentsOf: url)) ?? Data())
+        }
+        return CustomCharacterImageProcessor.cacheKey(data: combined, pixelation: pixelation)
     }
 }

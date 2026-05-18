@@ -678,11 +678,11 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(asset.frameCount, RunCatCharacter.defaultCat.frameCount)
     }
 
-    func testStaticImageProcessorCreatesEightDistinctFramesForEachMotionStyle() throws {
+    func testStaticImageProcessorCreatesEightDistinctFramesForEachMotionStyle() async throws {
         let image = makeTestImage(size: NSSize(width: 18, height: 18), color: .systemRed)
 
         for style in CustomCharacterMotionStyle.allCases {
-            let frames = try CustomCharacterImageProcessor.processedStaticFrames(
+            let frames = try await CustomCharacterImageProcessor.processedStaticFrames(
                 from: image,
                 motionStyle: style,
                 pixelation: .off
@@ -695,10 +695,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
         }
     }
 
-    func testMaterializeMotionFadesImportedStaticImageIntoView() throws {
+    func testMaterializeMotionFadesImportedStaticImageIntoView() async throws {
         let image = makeTestImage(size: NSSize(width: 18, height: 18), color: .systemRed)
 
-        let frames = try CustomCharacterImageProcessor.processedStaticFrames(
+        let frames = try await CustomCharacterImageProcessor.processedStaticFrames(
             from: image,
             motionStyle: .materialize,
             pixelation: .off
@@ -731,14 +731,14 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(sorted.map(\.lastPathComponent), ["frame_1.png", "frame_2.png", "frame_10.png"])
     }
 
-    func testFrameSequenceProcessorAspectFitsFramesWithoutStretching() throws {
+    func testFrameSequenceProcessorAspectFitsFramesWithoutStretching() async throws {
         let directory = try temporaryDirectory()
         let square = directory.appendingPathComponent("frame_1.png")
         let tall = directory.appendingPathComponent("frame_2.png")
         try writeTestImage(size: NSSize(width: 20, height: 20), color: .systemBlue, to: square)
         try writeTestImage(size: NSSize(width: 10, height: 20), color: .systemRed, to: tall)
 
-        let frames = try CustomCharacterImageProcessor.processedFrameSequence(
+        let frames = try await CustomCharacterImageProcessor.processedFrameSequence(
             from: [square, tall],
             pixelation: .off
         )
@@ -752,13 +752,13 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertLessThan(redBounds.width, 14)
     }
 
-    func testCustomCharacterStorePersistsReloadsRenamesAndDeletesCharacter() throws {
+    func testCustomCharacterStorePersistsReloadsRenamesAndDeletesCharacter() async throws {
         let root = try temporaryDirectory()
         let source = root.appendingPathComponent("source.png")
         try writeTestImage(color: .systemRed, to: source)
         let store = CustomCharacterStore(rootDirectory: root)
 
-        let imported = try store.importStaticImage(
+        let imported = try await store.importStaticImage(
             from: source,
             displayName: "Blob",
             motionStyle: .bounceBreathe,
@@ -779,12 +779,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(FileManager.default.fileExists(atPath: root.appendingPathComponent(imported.id).path))
     }
 
-    func testCustomCharacterStoreRegeneratesStaticFramesWhenMotionChanges() throws {
+    func testCustomCharacterStoreRegeneratesStaticFramesWhenMotionChanges() async throws {
         let root = try temporaryDirectory()
         let source = root.appendingPathComponent("source.png")
         try writeTestImage(color: .systemPurple, to: source)
         let store = CustomCharacterStore(rootDirectory: root)
-        let imported = try store.importStaticImage(
+        let imported = try await store.importStaticImage(
             from: source,
             displayName: "Pulse",
             motionStyle: .bounceBreathe,
@@ -792,7 +792,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
         let originalFrame = try Data(contentsOf: store.frameURL(for: imported, frameIndex: 0))
 
-        try store.updateStaticCharacter(
+        try await store.updateStaticCharacter(
             id: imported.id,
             motionStyle: .pixelJitterFlicker,
             pixelationScale: .four
@@ -814,12 +814,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(store.characters.isEmpty)
     }
 
-    func testCustomCharacterWidthContributesToAutomaticStatusBarWidth() throws {
+    func testCustomCharacterWidthContributesToAutomaticStatusBarWidth() async throws {
         let root = try temporaryDirectory()
         let source = root.appendingPathComponent("wide.png")
         try writeTestImage(size: NSSize(width: 44, height: 18), color: .systemRed, to: source)
         let store = CustomCharacterStore(rootDirectory: root)
-        let imported = try store.importStaticImage(
+        let imported = try await store.importStaticImage(
             from: source,
             displayName: "Wide",
             motionStyle: .bounceBreathe,
@@ -847,20 +847,20 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertGreaterThan(width, builtInWidth)
     }
 
-    func testTallUploadedCharacterKeepsAspectRatioWhenMenuBarHeightIsClamped() throws {
+    func testTallUploadedCharacterKeepsAspectRatioWhenMenuBarHeightIsClamped() async throws {
         let root = try temporaryDirectory()
         let squareSource = root.appendingPathComponent("square.png")
         let tallSource = root.appendingPathComponent("tall.png")
         try writeTestImage(size: NSSize(width: 18, height: 18), color: .systemBlue, to: squareSource)
         try writeTestImage(size: NSSize(width: 18, height: 36), color: .systemRed, to: tallSource)
         let store = CustomCharacterStore(rootDirectory: root)
-        let square = try store.importStaticImage(
+        let square = try await store.importStaticImage(
             from: squareSource,
             displayName: "Square",
             motionStyle: .bounceBreathe,
             pixelationScale: .off
         )
-        let tall = try store.importStaticImage(
+        let tall = try await store.importStaticImage(
             from: tallSource,
             displayName: "Tall",
             motionStyle: .bounceBreathe,
@@ -888,12 +888,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertLessThan(tallWidth, squareWidth - 5)
     }
 
-    func testCustomCharacterRendererDrawsImportedFramePixels() throws {
+    func testCustomCharacterRendererDrawsImportedFramePixels() async throws {
         let root = try temporaryDirectory()
         let source = root.appendingPathComponent("red.png")
         try writeTestImage(color: .systemRed, to: source)
         let store = CustomCharacterStore(rootDirectory: root)
-        let imported = try store.importStaticImage(
+        let imported = try await store.importStaticImage(
             from: source,
             displayName: "Red",
             motionStyle: .bounceBreathe,
@@ -974,12 +974,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(CustomCharacterImportSelection.classify([frameB, frameA])?.urls, [frameA, frameB])
     }
 
-    func testDeletingSelectedCustomCharacterFallsBackToDefaultCat() throws {
+    func testDeletingSelectedCustomCharacterFallsBackToDefaultCat() async throws {
         let root = try temporaryDirectory()
         let source = root.appendingPathComponent("source.png")
         try writeTestImage(color: .systemRed, to: source)
         let store = CustomCharacterStore(rootDirectory: root)
-        let imported = try store.importStaticImage(
+        let imported = try await store.importStaticImage(
             from: source,
             displayName: "Delete Me",
             motionStyle: .bounceBreathe,

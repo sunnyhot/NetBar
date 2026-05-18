@@ -314,19 +314,21 @@ private struct MenuBarPreferencesView: View {
             return
         }
 
-        do {
-            let defaultName = selection.urls.first?.deletingPathExtension().lastPathComponent ?? appPreferences.text("自定义角色", "Custom Character")
-            let character = try customCharacterStore.importSelection(
-                selection,
-                displayName: defaultName,
-                motionStyle: .bounceBreathe,
-                pixelationScale: .off
-            )
-            settings.catCharacter = character.id
-            settings.showsCat = true
-            settings.usesSystemTextColor = false
-        } catch {
-            showImportError(error)
+        let defaultName = selection.urls.first?.deletingPathExtension().lastPathComponent ?? appPreferences.text("自定义角色", "Custom Character")
+        Task {
+            do {
+                let character = try await customCharacterStore.importSelection(
+                    selection,
+                    displayName: defaultName,
+                    motionStyle: .bounceBreathe,
+                    pixelationScale: .off
+                )
+                settings.catCharacter = character.id
+                settings.showsCat = true
+                settings.usesSystemTextColor = false
+            } catch {
+                showImportError(error)
+            }
         }
     }
 
@@ -337,31 +339,35 @@ private struct MenuBarPreferencesView: View {
 
     private func updateSelectedCustomMotion(_ motionStyle: CustomCharacterMotionStyle) {
         guard let selectedCustomCharacter else { return }
-        do {
-            try customCharacterStore.updateStaticCharacter(
-                id: selectedCustomCharacter.id,
-                motionStyle: motionStyle,
-                pixelationScale: selectedCustomCharacter.pixelationScale
-            )
-        } catch {
-            showImportError(error)
+        Task {
+            do {
+                try await customCharacterStore.updateStaticCharacter(
+                    id: selectedCustomCharacter.id,
+                    motionStyle: motionStyle,
+                    pixelationScale: selectedCustomCharacter.pixelationScale
+                )
+            } catch {
+                showImportError(error)
+            }
         }
     }
 
     private func updateSelectedCustomPixelation(_ pixelationScale: CustomCharacterPixelationScale) {
         guard let selectedCustomCharacter else { return }
-        do {
-            if selectedCustomCharacter.sourceKind == .staticImage {
-                try customCharacterStore.updateStaticCharacter(
-                    id: selectedCustomCharacter.id,
-                    motionStyle: selectedCustomCharacter.motionStyle ?? .bounceBreathe,
-                    pixelationScale: pixelationScale
-                )
-            } else {
-                try customCharacterStore.updatePixelation(id: selectedCustomCharacter.id, pixelationScale: pixelationScale)
+        Task {
+            do {
+                if selectedCustomCharacter.sourceKind == .staticImage {
+                    try await customCharacterStore.updateStaticCharacter(
+                        id: selectedCustomCharacter.id,
+                        motionStyle: selectedCustomCharacter.motionStyle ?? .bounceBreathe,
+                        pixelationScale: pixelationScale
+                    )
+                } else {
+                    try await customCharacterStore.updatePixelation(id: selectedCustomCharacter.id, pixelationScale: pixelationScale)
+                }
+            } catch {
+                showImportError(error)
             }
-        } catch {
-            showImportError(error)
         }
     }
 
