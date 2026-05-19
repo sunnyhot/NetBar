@@ -15,6 +15,9 @@ final class PetController: ObservableObject {
     private let settingsKey = "pet.settings"
     private let stateKey = "pet.state"
     private var tickCount = 0
+    private var isStateDirty = false
+    private var dirtySaveTimer: Timer?
+    private static let dirtySaveInterval: TimeInterval = 30.0
 
     init(
         defaults: UserDefaults = .standard,
@@ -137,7 +140,7 @@ final class PetController: ObservableObject {
                 animationHint: .sparkle
             )
         }
-        markStateUpdatedAndSave(at: date)
+        markStateUpdatedAndSaveImmediately(at: date)
     }
 
     @discardableResult
@@ -190,7 +193,7 @@ final class PetController: ObservableObject {
             )
         }
         state.recordSkillTrigger(skillID, at: date)
-        markStateUpdatedAndSave(at: date)
+        markStateUpdatedAndSaveImmediately(at: date)
         return latestCue
     }
 
@@ -269,6 +272,32 @@ final class PetController: ObservableObject {
 
     private func markStateUpdatedAndSave(at date: Date) {
         state.markUpdated(at: date)
+        isStateDirty = true
+        scheduleDirtySave()
+    }
+
+    private func markStateUpdatedAndSaveImmediately(at date: Date) {
+        state.markUpdated(at: date)
+        isStateDirty = false
+        dirtySaveTimer?.invalidate()
+        dirtySaveTimer = nil
+        saveState()
+    }
+
+    private func scheduleDirtySave() {
+        guard dirtySaveTimer == nil else { return }
+        let timer = Timer.scheduledTimer(withTimeInterval: Self.dirtySaveInterval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.flushDirtyState()
+            }
+        }
+        dirtySaveTimer = timer
+    }
+
+    private func flushDirtyState() {
+        dirtySaveTimer = nil
+        guard isStateDirty else { return }
+        isStateDirty = false
         saveState()
     }
 
@@ -288,5 +317,9 @@ final class PetController: ObservableObject {
     private static func encode<T: Encodable>(_ value: T, key: String, defaults: UserDefaults) {
         guard let data = try? JSONEncoder().encode(value) else { return }
         defaults.set(data, forKey: key)
+    }
+
+    deinit {
+        dirtySaveTimer?.invalidate()
     }
 }
