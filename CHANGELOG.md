@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.30.3 (2026-05-19)
+
+### Performance — Long-running Energy Optimization
+
+Fixes high energy consumption and device overheating during extended use.
+
+- **[LUC-108] StreamingNettopReader incremental parsing** — Replaced full-string O(n) parse with incremental line-by-line parsing, eliminating CPU/memory growth over time
+- **[LUC-109] Render throttling + FPS cap** — Capped status bar rendering at 10fps; added render coalescing to merge rapid state changes into single draw calls
+- **[LUC-110] Rendered image cache** — Added LRU cache (12 entries) for rendered status bar images, reusing bitmap output for repeated animation frames
+- **[LUC-112] Gradient tint cache** — Added caching for `tintImageGradient()` results, avoiding repeated NSBitmapImageRep + gradient + alpha mask creation per frame
+- **[LUC-113] Combine deduplication + debounce** — Added `removeDuplicates()` on snapshot stream; debounced settings/custom character changes at 100ms to suppress redundant re-renders
+- **[LUC-114] GooglyEyes throttle 30fps→15fps** — Reduced GooglyEyes timer from 30fps to 15fps; added automatic pause when app moves to background
+
 ## v0.30.2 (2026-05-19)
 
 ### Bug Fixes
