@@ -206,6 +206,9 @@ final class RunCatAnimation {
     private var isStatic = false
     private static let idleThreshold: TimeInterval = 30.0
 
+    // Screen lock state
+    private var wasActiveBeforeScreenLock = false
+
     init(character: CharacterAsset, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
         self.character = AnimatedCharacter(asset: character)
         self.speedMultiplier = speedMultiplier
@@ -239,6 +242,24 @@ final class RunCatAnimation {
         if isActive {
             scheduleTimer()
         }
+    }
+
+    func pauseForScreenLock() {
+        wasActiveBeforeScreenLock = isActive
+        if isActive {
+            timer?.invalidate()
+            timer = nil
+            rotationTimer?.invalidate()
+            rotationTimer = nil
+        }
+    }
+
+    func resumeFromScreenLock() {
+        if wasActiveBeforeScreenLock {
+            isActive = false
+            setActive(true)
+        }
+        wasActiveBeforeScreenLock = false
     }
 
     func updateNetworkSpeed(totalBytesPerSecond: UInt64) {
