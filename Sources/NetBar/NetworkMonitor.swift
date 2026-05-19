@@ -22,6 +22,7 @@ final class NetworkMonitor: ObservableObject {
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
     private let historyCapacity = 90
+    private var activityLevel: NetworkActivityLevel = .idle
 
     var recentHistory: [RatePoint] {
         guard !historyBuffer.isEmpty else { return [] }
@@ -55,11 +56,7 @@ final class NetworkMonitor: ObservableObject {
         streamingReader?.start()
         refresh()
         refreshApplicationTraffic()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refresh()
-            }
-        }
+        scheduleNextSample()
         applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
@@ -194,6 +191,8 @@ final class NetworkMonitor: ObservableObject {
             historyBuffer[historyWriteIndex % historyCapacity] = point
         }
         historyWriteIndex += 1
+
+        updateActivityLevel(totalBytesPerSecond: totalDownload + totalUpload)
 
         previousStats = currentByName
         previousSampleDate = now
@@ -330,6 +329,45 @@ final class NetworkMonitor: ObservableObject {
         return current >= previous ? current - previous : 0
     }
 
+    private func scheduleNextSample() {
+        timer?.invalidate()
+        let interval: TimeInterval = {
+            let base = activityLevel.baseInterval
+            return ProcessInfo.processInfo.isLowPowerModeEnabled ? base * 2 : base
+        }()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh()
+                self?.scheduleNextSample()
+            }
+        }
+    }
+
+    private func updateActivityLevel(totalBytesPerSecond: Double) {
+        let kbPerSecond = totalBytesPerSecond / 1024
+        let mbPerSecond = kbPerSecond / 1024
+
+        let newLevel: NetworkActivityLevel
+        if mbPerSecond > 1.0 {
+            newLevel = .high
+        } else if kbPerSecond > 100.0 {
+            newLevel = .moderate
+        } else {
+            // Hysteresis between idle and low
+            let thresholdUp: Double = 10.0    // KB/s for idle→low
+            let thresholdDown: Double = 5.0   // KB/s for low→idle
+            switch activityLevel {
+            case .idle:
+                newLevel = kbPerSecond > thresholdUp ? .low : .idle
+            case .low:
+                newLevel = kbPerSecond < thresholdDown ? .idle : .low
+            case .moderate, .high:
+                newLevel = kbPerSecond > thresholdUp ? .low : .idle
+            }
+        }
+        activityLevel = newLevel
+    }
+
     private static func externalTrafficStats(from stats: [InterfaceStats]) -> [InterfaceStats] {
         stats.filter { NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name) }
     }
@@ -344,4 +382,19 @@ struct RatePoint: Identifiable, Equatable {
     let timestamp: Date
     let downloadBytesPerSecond: Double
     let uploadBytesPerSecond: Double
+}
+
+enum NetworkActivityLevel {
+    case idle      // 0 B/s
+    case low       // < 100 KB/s
+    case moderate  // 100 KB/s - 1 MB/s
+    case high      // > 1 MB/s
+
+    var baseInterval: TimeInterval {
+        switch self {
+        case .idle: return 3.0
+        case .low: return 2.0
+        case .moderate, .high: return 1.0
+        }
+    }
 }
