@@ -178,6 +178,18 @@ final class StatusBarController {
         }
         .store(in: &cancellables)
 
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.pauseGooglyEyesTimer()
+            }
+        }
+        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.resumeGooglyEyesTimer()
+            }
+        }
+
         setupCatAnimation()
     }
 
@@ -394,6 +406,22 @@ final class StatusBarController {
             id: customCharacterStore.validCharacterID(for: settings.catCharacter),
             customCharacters: customCharacterStore.characters
         ).isGooglyEyes
+    }
+
+    private func pauseGooglyEyesTimer() {
+        googlyEyesTimer?.invalidate()
+        googlyEyesTimer = nil
+    }
+
+    private func resumeGooglyEyesTimer() {
+        guard isGooglyEyesActive, googlyEyesTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshGooglyEyesState()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        googlyEyesTimer = timer
     }
 
     private func configureGooglyEyesTracking() {
