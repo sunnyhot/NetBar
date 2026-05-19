@@ -1,6 +1,23 @@
 # Changelog
 
-## v0.30.3 (2026-05-19)
+## v0.32.0 (2026-05-19)
+
+### Battery Optimization — Adaptive Power Management
+
+Comprehensive battery optimization: adaptive sampling, animation frame rate scaling, system state awareness, and on-demand nettop.
+
+- **[LUC-121] Adaptive sampling interval** — NetworkMonitor dynamically adjusts sampling frequency: idle → 3s, low traffic → 2s, high traffic → 1s; power-save mode doubles all intervals
+- **[LUC-123] Adaptive animation frame rate** — RunCat animation scales FPS based on network activity: idle → static/0.5fps, active → full FPS; GooglyEyes mouse dedup + distance-based frequency switching
+- **[LUC-126] System state awareness** — Low Power Mode detection + screen lock monitoring; auto-pauses animation and reduces sampling when screen is locked or battery is low
+- **[LUC-128] Render coalesce optimization** — StatusBarController render coalesce strategy improved to reduce unnecessary redraws
+- **[LUC-129] nettop on-demand sampling** — Application traffic sampling pauses/resumes on demand; nettop process stops when not needed
+- **[LUC-131] nettop visibility integration** — nettop process auto-starts when traffic detail window opens and stops when it closes, via `isApplicationTrafficVisible` property
+- **[LUC-133] GooglyEyes smart refresh** — Mouse position dedup (< 1pt threshold) + distance-based frequency scaling (near → 15fps, far → 3fps)
+- **[LUC-134] PetController write reduction** — Dirty flag + batch save reduces UserDefaults write frequency for pet state
+
+Expected improvement: ~70% CPU wake reduction during idle; zero extra power consumption when screen locked or low power mode.
+
+## v0.31.0 (2026-05-19)
 
 ### Performance — Long-running Energy Optimization
 
