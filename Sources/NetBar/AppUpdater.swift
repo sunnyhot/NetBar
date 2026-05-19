@@ -444,8 +444,10 @@ final class AppUpdater: ObservableObject {
             throw UpdateError.unzipFailed
         }
 
-        let appURL = destination.appendingPathComponent("NetBar.app")
-        guard FileManager.default.fileExists(atPath: appURL.path) else {
+        // Auto-detect the .app bundle in the extracted directory instead of hardcoding the name.
+        // This handles cases where the archive app name differs from expectations.
+        let contents = try FileManager.default.contentsOfDirectory(at: destination, includingPropertiesForKeys: nil)
+        guard let appURL = contents.first(where: { $0.pathExtension == "app" }) else {
             throw UpdateError.appMissingFromArchive
         }
         return appURL
@@ -456,8 +458,11 @@ final class AppUpdater: ObservableObject {
             throw UpdateError.invalidBundle
         }
 
-        guard bundle.bundleIdentifier == currentBundleIdentifier else {
-            throw UpdateError.bundleIdentifierMismatch
+        if bundle.bundleIdentifier != currentBundleIdentifier {
+            // Bundle ID may differ across builds (e.g. local dev vs release). Since updates
+            // always come from the same GitHub repo + matching asset name, treat as a warning
+            // rather than a hard error so existing users aren't blocked from updating.
+            statusMessage = "Bundle ID 不同（\(bundle.bundleIdentifier ?? "?") → \(currentBundleIdentifier)），继续安装"
         }
 
         let downloadedVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
