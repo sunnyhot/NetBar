@@ -75,6 +75,11 @@ final class GooglyEyesClickMonitor {
     }
 }
 
+private struct DisplaySpeeds: Equatable {
+    let download: Double
+    let upload: Double
+}
+
 @MainActor
 final class StatusBarController {
     private let monitor: NetworkMonitor
@@ -99,6 +104,7 @@ final class StatusBarController {
     private var needsRender = false
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
+    private var renderCoalesceInterval: TimeInterval = 1.0 / 15.0
 
     init(
         monitor: NetworkMonitor,
@@ -147,8 +153,19 @@ final class StatusBarController {
 
     private func configureObservers() {
         monitor.$snapshot
+            .map { snapshot in
+                DisplaySpeeds(download: snapshot.downloadBytesPerSecond, upload: snapshot.uploadBytesPerSecond)
+            }
             .removeDuplicates()
-            .sink { [weak self] _ in
+            .sink { [weak self] speeds in
+                let total = speeds.download + speeds.upload
+                if total < 100 {
+                    self?.renderCoalesceInterval = 1.0
+                } else if total < 10_000 {
+                    self?.renderCoalesceInterval = 1.0 / 5.0
+                } else {
+                    self?.renderCoalesceInterval = 1.0 / 15.0
+                }
                 self?.requestRender()
             }
             .store(in: &cancellables)
@@ -259,7 +276,7 @@ final class StatusBarController {
     private func requestRender() {
         needsRender = true
         guard renderCoalesceTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: renderCoalesceInterval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.flushRender()
             }
