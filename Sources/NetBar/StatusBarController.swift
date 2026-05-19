@@ -146,26 +146,28 @@ final class StatusBarController {
     }
 
     private func configureObservers() {
-        monitor.$snapshot.sink { [weak self] _ in
-            self?.requestRender()
-        }
-        .store(in: &cancellables)
+        monitor.$snapshot
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.requestRender()
+            }
+            .store(in: &cancellables)
 
-        settings.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async {
+        settings.objectWillChange
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
                 self?.setupCatAnimation()
                 self?.requestRender()
             }
-        }
-        .store(in: &cancellables)
+            .store(in: &cancellables)
 
-        customCharacterStore.objectWillChange.sink { [weak self] _ in
-            DispatchQueue.main.async {
+        customCharacterStore.objectWillChange
+            .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
                 self?.setupCatAnimation()
                 self?.requestRender()
             }
-        }
-        .store(in: &cancellables)
+            .store(in: &cancellables)
 
         appPreferences.$appearanceMode.sink { [weak self] _ in
             DispatchQueue.main.async {
