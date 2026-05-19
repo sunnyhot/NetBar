@@ -134,6 +134,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     }
 
     func show(anchor: NSStatusBarButton? = nil) {
+        monitor.isApplicationTrafficVisible = true
         monitor.refresh()
 
         let floatingPanel = makePanelIfNeeded()
@@ -245,6 +246,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         guard let panel, panel.isVisible else { return }
         cancelAutoDismissTimer()
         outsideClickMonitor.setActive(false)
+        monitor.isApplicationTrafficVisible = false
         panel.orderOut(nil)
         onWindowClosed?()
     }

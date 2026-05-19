@@ -7,6 +7,19 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var isRunning = false
 
+    /// Controls whether the nettop process is active. Set to true when the
+    /// traffic detail window is visible; false to stop nettop and save CPU.
+    var isApplicationTrafficVisible: Bool = false {
+        didSet {
+            guard oldValue != isApplicationTrafficVisible else { return }
+            if isApplicationTrafficVisible {
+                resumeApplicationTrafficSampling()
+            } else {
+                pauseApplicationTrafficSampling()
+            }
+        }
+    }
+
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
     private let streamingReader: StreamingNettopReader?
