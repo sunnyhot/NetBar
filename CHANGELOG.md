@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.30.2 (2026-05-19)
+
+### Bug Fixes
+
+- **[LUC-105] Fix startup crash in Dictionary.merge** — Updated `NetworkMonitor` to use `uniquingKeysWith` to handle duplicate keys safely without throwing assertion failures.
+- **[LUC-106] Optimize ApplicationTrafficReader.parse()** — Added deduplication using `id` in `StreamingNettopReader` to ensure robust dictionary initialization.
+
+## v0.30.1 (2026-05-18)
+
+### Bug Fixes
+
+- **[LUC-104] Fix auto-update download validation** — Fixed validation to properly skip older builds from GitHub releases.
+
 ## v0.30.0 (2026-05-19)
 
 ### Performance — Comprehensive Optimization Round

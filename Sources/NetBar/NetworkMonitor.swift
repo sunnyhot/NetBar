@@ -107,7 +107,7 @@ final class NetworkMonitor: ObservableObject {
         previousStats capturedPreviousStats: [String: InterfaceStats],
         previousSampleDate capturedPreviousSampleDate: Date?
     ) {
-        let currentByName = Dictionary(uniqueKeysWithValues: stats.map { ($0.name, $0) })
+        let currentByName = Dictionary(stats.map { ($0.name, $0) }, uniquingKeysWith: { $1 })
 
         guard let previousDate = capturedPreviousSampleDate else {
             previousStats = currentByName
@@ -229,7 +229,7 @@ final class NetworkMonitor: ObservableObject {
             return
         }
 
-        let currentByID = Dictionary(uniqueKeysWithValues: result.stats.map { ($0.id, $0) })
+        let currentByID = Dictionary(result.stats.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         guard let previousDate = previousApplicationSampleDate else {
             previousApplicationStats = currentByID
             previousApplicationSampleDate = sampledAt

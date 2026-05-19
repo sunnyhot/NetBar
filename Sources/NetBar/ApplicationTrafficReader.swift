@@ -125,9 +125,12 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     }
 
     private static func parse(_ output: String) -> [ApplicationTrafficStats] {
-        output
-            .split(whereSeparator: \.isNewline)
-            .compactMap { NettopApplicationTrafficReader.parseLinePublic(String($0)) }
+        var seen: [String: ApplicationTrafficStats] = [:]
+        for line in output.split(whereSeparator: \.isNewline) {
+            guard let stat = NettopApplicationTrafficReader.parseLinePublic(String(line)) else { continue }
+            seen[stat.id] = stat
+        }
+        return Array(seen.values)
     }
 
     deinit {
