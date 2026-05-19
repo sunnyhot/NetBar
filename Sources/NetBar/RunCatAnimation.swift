@@ -158,6 +158,15 @@ struct CharacterPreviewFrameTimeline: Equatable {
     }
 }
 
+// MARK: - Activity Level
+
+enum ActivityLevel: Equatable {
+    case idle       // < 100 B/s
+    case low        // 100 B/s – 1 KB/s
+    case moderate   // 1 KB/s – 100 KB/s
+    case high       // > 100 KB/s
+}
+
 // MARK: - RunCat Animation Controller
 
 final class RunCatAnimation {
@@ -191,8 +200,11 @@ final class RunCatAnimation {
     var rotationIntervalMinutes: Double = 5.0
     var rotationPool: [RunCatCharacter] = []  // empty = all characters
 
-    // Base interval: seconds between frames at 1x speed, ~2 FPS idle
-    private var baseInterval: TimeInterval = 0.5
+    // Adaptive frame rate state
+    private(set) var activityLevel: ActivityLevel = .idle
+    private var idleStartDate: Date?
+    private var isStatic = false
+    private static let idleThreshold: TimeInterval = 30.0
 
     init(character: CharacterAsset, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
         self.character = AnimatedCharacter(asset: character)
@@ -210,6 +222,7 @@ final class RunCatAnimation {
     func setActive(_ active: Bool) {
         if active && !isActive {
             isActive = true
+            idleStartDate = activityLevel == .idle ? Date() : nil
             scheduleTimer()
             scheduleRotationTimer()
         } else if !active && isActive {
@@ -229,37 +242,83 @@ final class RunCatAnimation {
     }
 
     func updateNetworkSpeed(totalBytesPerSecond: UInt64) {
-        // Map network speed to animation FPS
-        // 0 B/s → ~2 FPS (idle)
-        // 1 KB/s → ~4 FPS
-        // 100 KB/s → ~8 FPS
-        // 1 MB/s → ~16 FPS
-        // 100 MB/s+ → ~24 FPS
         let bps = Double(totalBytesPerSecond)
-        let fps: Double
+        let newLevel: ActivityLevel
         if bps < 100 {
-            fps = 1.0
+            newLevel = .idle
         } else if bps < 1_000 {
-            fps = 2.0
-        } else if bps < 10_000 {
-            fps = 4.0
+            newLevel = .low
         } else if bps < 100_000 {
-            fps = 6.0
-        } else if bps < 1_000_000 {
-            fps = 8.0
+            newLevel = .moderate
         } else {
-            fps = 10.0
+            newLevel = .high
         }
 
-        baseInterval = 1.0 / fps
-        if isActive {
+        let wasIdle = activityLevel == .idle
+        activityLevel = newLevel
+
+        if newLevel == .idle {
+            if !wasIdle {
+                idleStartDate = Date()
+            }
+        } else {
+            idleStartDate = nil
+        }
+
+        // Resume from static when traffic returns
+        if isStatic && newLevel != .idle {
+            isStatic = false
+            if isActive {
+                scheduleTimer()
+            }
+            return
+        }
+
+        // Re-schedule timer when activity level changes
+        if isActive && !isStatic {
             scheduleTimer()
         }
     }
 
+    func checkIdleTimeout() {
+        guard isActive, !isStatic, activityLevel == .idle else { return }
+        if let idleStart = idleStartDate, Date().timeIntervalSince(idleStart) >= Self.idleThreshold {
+            enterStaticMode()
+        }
+    }
+
+    private func enterStaticMode() {
+        isStatic = true
+        timer?.invalidate()
+        timer = nil
+    }
+
+    var isGooglyEyes: Bool {
+        character.id == "googly_eyes"
+    }
+
+    private func targetInterval() -> TimeInterval {
+        let baseInterval: TimeInterval
+        switch activityLevel {
+        case .idle:
+            if isGooglyEyes {
+                baseInterval = 1.0 / 5.0  // 5 FPS for GooglyEyes idle
+            } else {
+                baseInterval = 2.0  // 0.5 FPS
+            }
+        case .low:
+            baseInterval = 1.0  // 1 FPS
+        case .moderate:
+            baseInterval = 0.5  // 2 FPS
+        case .high:
+            baseInterval = 1.0 / 10.0  // 10 FPS
+        }
+        return max(baseInterval / speedMultiplier, 1.0 / 15.0)
+    }
+
     private func scheduleTimer() {
         timer?.invalidate()
-        let interval = max(baseInterval / speedMultiplier, 1.0 / 15.0) // Cap at 15 FPS
+        let interval = targetInterval()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.advanceFrame()
         }
@@ -268,6 +327,7 @@ final class RunCatAnimation {
     private func advanceFrame() {
         currentFrame = (currentFrame + 1) % max(character.frameCount, 1)
         onFrameChange(currentFrame)
+        checkIdleTimeout()
     }
 
     func advanceFrameForTesting() {

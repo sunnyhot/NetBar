@@ -285,6 +285,7 @@ final class StatusBarController {
             catAnimation?.updateNetworkSpeed(
                 totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
             )
+            rescheduleGooglyEyesIfNeeded()
             if currentCatFrameIndex == nil {
                 currentCatFrameIndex = 0
             }
@@ -408,6 +409,26 @@ final class StatusBarController {
         ).isGooglyEyes
     }
 
+    private func googlyEyesTargetFPS() -> Double {
+        let level = catAnimation?.activityLevel ?? .idle
+        switch level {
+        case .idle: return 5.0
+        default: return 15.0
+        }
+    }
+
+    private func rescheduleGooglyEyesIfNeeded() {
+        guard isGooglyEyesActive, googlyEyesTimer != nil else { return }
+        let fps = googlyEyesTargetFPS()
+        let currentInterval = googlyEyesTimer?.timeInterval ?? 0
+        let targetInterval = 1.0 / fps
+        if !currentInterval.isEqual(to: targetInterval) {
+            googlyEyesTimer?.invalidate()
+            googlyEyesTimer = nil
+            resumeGooglyEyesTimer()
+        }
+    }
+
     private func pauseGooglyEyesTimer() {
         googlyEyesTimer?.invalidate()
         googlyEyesTimer = nil
@@ -415,7 +436,8 @@ final class StatusBarController {
 
     private func resumeGooglyEyesTimer() {
         guard isGooglyEyesActive, googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+        let fps = googlyEyesTargetFPS()
+        let timer = Timer(timeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
@@ -440,7 +462,8 @@ final class StatusBarController {
             self?.triggerGooglyEyesBlink()
         }
         guard googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+        let fps = googlyEyesTargetFPS()
+        let timer = Timer(timeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
