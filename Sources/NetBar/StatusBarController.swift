@@ -97,6 +97,9 @@ final class StatusBarController {
     private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
     private var renderCoalesceTimer: Timer?
     private var needsRender = false
+    private var renderCoalesceInterval: TimeInterval = 1.0 / 15.0
+    private var lastRenderTime: Date = .distantPast
+    private var isScreenLocked = false
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
 
@@ -148,8 +151,17 @@ final class StatusBarController {
     private func configureObservers() {
         monitor.$snapshot
             .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.requestRender()
+            .sink { [weak self] snapshot in
+                guard let self else { return }
+                let total = snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond
+                if total < 100 {
+                    self.renderCoalesceInterval = 1.0
+                } else if total < 10_000 {
+                    self.renderCoalesceInterval = 1.0 / 5.0
+                } else {
+                    self.renderCoalesceInterval = 1.0 / 15.0
+                }
+                self.requestRender()
             }
             .store(in: &cancellables)
 
@@ -257,9 +269,11 @@ final class StatusBarController {
     }
 
     private func requestRender() {
+        guard !isScreenLocked else { return }
         needsRender = true
         guard renderCoalesceTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: false) { [weak self] _ in
+        let interval = renderCoalesceInterval
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.flushRender()
             }
@@ -277,6 +291,20 @@ final class StatusBarController {
 
     private func updateStatusItem() {
         guard let button = statusItem.button else { return }
+
+        // Frame rate limiting
+        let now = Date()
+        let minimumInterval = renderCoalesceInterval * 0.8
+        if now.timeIntervalSince(lastRenderTime) < minimumInterval {
+            if settings.showsCat {
+                catAnimation?.updateNetworkSpeed(
+                    totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
+                )
+            }
+            return
+        }
+        lastRenderTime = now
+
         let appearanceName = button.effectiveAppearance.name.rawValue
         let activeGooglyEyesState = activeGooglyEyesRenderState()
 
