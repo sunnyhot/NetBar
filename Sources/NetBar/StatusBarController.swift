@@ -146,8 +146,11 @@ final class StatusBarController {
     }
 
     private func configureObservers() {
+        // Only compare display-relevant fields (speeds). NetworkSnapshot includes
+        // timestamp which changes every second, making the default removeDuplicates
+        // ineffective. The status bar layout only uses download/upload speed.
         monitor.$snapshot
-            .removeDuplicates()
+            .removeDuplicates(by: { $0.downloadBytesPerSecond == $1.downloadBytesPerSecond && $0.uploadBytesPerSecond == $1.uploadBytesPerSecond })
             .sink { [weak self] _ in
                 self?.requestRender()
             }
@@ -259,7 +262,10 @@ final class StatusBarController {
     private func requestRender() {
         needsRender = true
         guard renderCoalesceTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: false) { [weak self] _ in
+        // Dynamic coalesce: idle (< 100 B/s) → 500ms, active → 67ms (1/15s).
+        let totalSpeed = monitor.snapshot.downloadBytesPerSecond + monitor.snapshot.uploadBytesPerSecond
+        let interval: TimeInterval = totalSpeed < 100 ? 0.5 : 1.0 / 15.0
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.flushRender()
             }
