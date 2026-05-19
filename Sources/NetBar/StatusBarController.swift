@@ -99,6 +99,9 @@ final class StatusBarController {
     private var needsRender = false
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
+    private var lastSpeedText: (down: String, up: String) = ("", "")
+    private static let idleCoalesceInterval: TimeInterval = 0.5
+    private static let activeCoalesceInterval: TimeInterval = 1.0 / 15.0
 
     init(
         monitor: NetworkMonitor,
@@ -148,8 +151,13 @@ final class StatusBarController {
     private func configureObservers() {
         monitor.$snapshot
             .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.requestRender()
+            .sink { [weak self] snapshot in
+                guard let self else { return }
+                let downText = ByteFormat.speed(snapshot.downloadBytesPerSecond)
+                let upText = ByteFormat.speed(snapshot.uploadBytesPerSecond)
+                guard downText != self.lastSpeedText.down || upText != self.lastSpeedText.up else { return }
+                self.lastSpeedText = (down: downText, up: upText)
+                self.requestRender()
             }
             .store(in: &cancellables)
 
@@ -256,10 +264,23 @@ final class StatusBarController {
         }
     }
 
+    private var isNetworkIdle: Bool {
+        let totalSpeed = monitor.snapshot.downloadBytesPerSecond + monitor.snapshot.uploadBytesPerSecond
+        return totalSpeed < 100
+    }
+
     private func requestRender() {
         needsRender = true
         guard renderCoalesceTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: false) { [weak self] _ in
+        let interval: TimeInterval
+        if isGooglyEyesActive {
+            interval = Self.activeCoalesceInterval
+        } else if isNetworkIdle {
+            interval = Self.idleCoalesceInterval
+        } else {
+            interval = Self.activeCoalesceInterval
+        }
+        let timer = Timer(timeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.flushRender()
             }
