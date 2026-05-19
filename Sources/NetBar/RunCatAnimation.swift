@@ -160,6 +160,7 @@ struct CharacterPreviewFrameTimeline: Equatable {
 
 // MARK: - RunCat Animation Controller
 
+@MainActor
 final class RunCatAnimation {
     struct AnimatedCharacter: Equatable {
         let id: String
@@ -185,6 +186,7 @@ final class RunCatAnimation {
     private var rotationTimer: Timer?
     private var currentFrame: Int = 0
     private var isActive = false
+    private weak var powerStateManager: PowerStateManager?
 
     // Rotation settings
     var rotationEnabled: Bool = false
@@ -193,10 +195,12 @@ final class RunCatAnimation {
 
     // Base interval: seconds between frames at 1x speed, ~2 FPS idle
     private var baseInterval: TimeInterval = 0.5
+    private var powerStateObserver: Any?
 
-    init(character: CharacterAsset, speedMultiplier: Double = 1.0, onFrameChange: @escaping (Int) -> Void) {
+    init(character: CharacterAsset, speedMultiplier: Double = 1.0, powerStateManager: PowerStateManager? = nil, onFrameChange: @escaping (Int) -> Void) {
         self.character = AnimatedCharacter(asset: character)
         self.speedMultiplier = speedMultiplier
+        self.powerStateManager = powerStateManager
         self.onFrameChange = onFrameChange
     }
 
@@ -210,7 +214,9 @@ final class RunCatAnimation {
     func setActive(_ active: Bool) {
         if active && !isActive {
             isActive = true
-            scheduleTimer()
+            observePowerState()
+            let state = currentPowerState()
+            scheduleTimer(isScreenLocked: state.isScreenLocked, fpsMultiplier: state.fpsMultiplier)
             scheduleRotationTimer()
         } else if !active && isActive {
             isActive = false
@@ -218,13 +224,15 @@ final class RunCatAnimation {
             timer = nil
             rotationTimer?.invalidate()
             rotationTimer = nil
+            powerStateObserver = nil
         }
     }
 
     func setSpeedMultiplier(_ multiplier: Double) {
         speedMultiplier = multiplier
         if isActive {
-            scheduleTimer()
+            let state = currentPowerState()
+            scheduleTimer(isScreenLocked: state.isScreenLocked, fpsMultiplier: state.fpsMultiplier)
         }
     }
 
@@ -253,15 +261,57 @@ final class RunCatAnimation {
 
         baseInterval = 1.0 / fps
         if isActive {
-            scheduleTimer()
+            let state = currentPowerState()
+            scheduleTimer(isScreenLocked: state.isScreenLocked, fpsMultiplier: state.fpsMultiplier)
         }
     }
 
-    private func scheduleTimer() {
+    private func scheduleTimer(isScreenLocked: Bool = false, fpsMultiplier: Double = 1.0) {
         timer?.invalidate()
-        let interval = max(baseInterval / speedMultiplier, 1.0 / 15.0) // Cap at 15 FPS
+        timer = nil
+
+        // Screen locked: stop animation entirely
+        if isScreenLocked { return }
+        guard fpsMultiplier > 0 else { return }
+
+        let effectiveInterval = baseInterval / (speedMultiplier * fpsMultiplier)
+        let interval = max(effectiveInterval, 1.0 / 15.0) // Cap at 15 FPS
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.advanceFrame()
+        }
+    }
+
+    private func currentPowerState() -> (isScreenLocked: Bool, fpsMultiplier: Double) {
+        guard let mgr = powerStateManager else {
+            return (false, 1.0)
+        }
+        return (mgr.isScreenLocked, mgr.animationFPSMultiplier())
+    }
+
+    private func observePowerState() {
+        guard powerStateManager != nil else { return }
+        let nc = NotificationCenter.default
+        powerStateObserver = nil
+        nc.addObserver(forName: PowerStateManager.powerModeChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isActive else { return }
+                let state = self.currentPowerState()
+                self.scheduleTimer(isScreenLocked: state.isScreenLocked, fpsMultiplier: state.fpsMultiplier)
+            }
+        }
+        nc.addObserver(forName: PowerStateManager.screenLockChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isActive else { return }
+                let state = self.currentPowerState()
+                self.scheduleTimer(isScreenLocked: state.isScreenLocked, fpsMultiplier: state.fpsMultiplier)
+            }
+        }
+        nc.addObserver(forName: PowerStateManager.powerSourceChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                guard let self, self.isActive else { return }
+                let state = self.currentPowerState()
+                self.scheduleTimer(isScreenLocked: state.isScreenLocked, fpsMultiplier: state.fpsMultiplier)
+            }
         }
     }
 

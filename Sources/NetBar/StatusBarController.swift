@@ -81,6 +81,7 @@ final class StatusBarController {
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
     private let customCharacterStore: CustomCharacterStore
+    private let powerStateManager: PowerStateManager?
     private let openPreferences: () -> Void
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
@@ -107,6 +108,7 @@ final class StatusBarController {
         settings: StatusBarSettings,
         appPreferences: AppPreferences,
         customCharacterStore: CustomCharacterStore,
+        powerStateManager: PowerStateManager? = nil,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
@@ -114,6 +116,7 @@ final class StatusBarController {
         self.settings = settings
         self.appPreferences = appPreferences
         self.customCharacterStore = customCharacterStore
+        self.powerStateManager = powerStateManager
         self.openPreferences = openPreferences
         self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -210,6 +213,7 @@ final class StatusBarController {
                 catAnimation = RunCatAnimation(
                     character: character,
                     speedMultiplier: settings.catSpeedMultiplier,
+                    powerStateManager: powerStateManager,
                     onFrameChange: { [weak self] frameIndex in
                         self?.currentCatFrameIndex = frameIndex
                         self?.requestRender()
@@ -226,6 +230,7 @@ final class StatusBarController {
                 catAnimation = RunCatAnimation(
                     character: character,
                     speedMultiplier: settings.catSpeedMultiplier,
+                    powerStateManager: powerStateManager,
                     onFrameChange: { [weak self] frameIndex in
                         self?.currentCatFrameIndex = frameIndex
                         self?.requestRender()

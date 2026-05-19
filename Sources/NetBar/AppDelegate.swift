@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = StatusBarSettings()
     private let appPreferences = AppPreferences()
     private let customCharacterStore = CustomCharacterStore()
+    private let powerStateManager = PowerStateManager()
     private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
@@ -22,10 +23,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyActivationPolicy()
         configurePreferenceObservers()
         statusBarController = StatusBarController(
-            monitor: NetworkMonitor(),
+            monitor: NetworkMonitor(powerStateManager: powerStateManager),
             settings: settings,
             appPreferences: appPreferences,
             customCharacterStore: customCharacterStore,
+            powerStateManager: powerStateManager,
             openPreferences: { [weak self] in
                 self?.showPreferences(nil)
             },

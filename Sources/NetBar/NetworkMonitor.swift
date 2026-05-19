@@ -11,6 +11,7 @@ final class NetworkMonitor: ObservableObject {
     private let appTrafficReader: ApplicationTrafficReading
     private let streamingReader: StreamingNettopReader?
     private let now: () -> Date
+    private let powerStateManager: PowerStateManager?
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
@@ -35,10 +36,12 @@ final class NetworkMonitor: ObservableObject {
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
         appTrafficReader: ApplicationTrafficReading? = nil,
+        powerStateManager: PowerStateManager? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
         self.now = now
+        self.powerStateManager = powerStateManager
         if let appTrafficReader {
             self.appTrafficReader = appTrafficReader
             self.streamingReader = nil
@@ -55,14 +58,45 @@ final class NetworkMonitor: ObservableObject {
         streamingReader?.start()
         refresh()
         refreshApplicationTraffic()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        scheduleTimers()
+        observePowerStateChanges()
+    }
+
+    private func scheduleTimers() {
+        timer?.invalidate()
+        applicationTimer?.invalidate()
+
+        let networkInterval = powerStateManager?.adjustedNetworkInterval(1.0) ?? 1.0
+        let appInterval = powerStateManager?.adjustedAppTrafficInterval(5.0) ?? 5.0
+
+        timer = Timer.scheduledTimer(withTimeInterval: networkInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
             }
         }
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: appInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
+            }
+        }
+    }
+
+    private func observePowerStateChanges() {
+        guard powerStateManager != nil else { return }
+        let nc = NotificationCenter.default
+        nc.addObserver(forName: PowerStateManager.powerModeChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleTimers()
+            }
+        }
+        nc.addObserver(forName: PowerStateManager.screenLockChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleTimers()
+            }
+        }
+        nc.addObserver(forName: PowerStateManager.powerSourceChanged, object: nil, queue: .main) { [weak self] _ in
+            Task { @MainActor in
+                self?.scheduleTimers()
             }
         }
     }
