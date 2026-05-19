@@ -18,7 +18,8 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
 
     private var process: Process?
     private var outputPipe: Pipe?
-    private var latestOutput: String = ""
+    private var latestStats: [String: ApplicationTrafficStats] = [:]
+    private var partialLine: String = ""
     private let lock = NSLock()
     private var isRunning = false
     private var restartAttempts = 0
@@ -46,19 +47,18 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
         process?.terminate()
         process = nil
         outputPipe = nil
+        latestStats.removeAll(keepingCapacity: true)
+        partialLine.removeAll(keepingCapacity: true)
     }
 
     func readApplications() -> ApplicationTrafficReadResult {
         lock.lock()
-        let output = latestOutput
+        let stats = Array(latestStats.values)
         let hasProcess = process != nil
         lock.unlock()
 
-        if hasProcess {
-            let stats = Self.parse(output)
-            if !stats.isEmpty {
-                return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
-            }
+        if hasProcess && !stats.isEmpty {
+            return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
         }
 
         return fallback.readApplications()
@@ -98,13 +98,31 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     private func appendOutput(_ text: String) {
         lock.lock()
         defer { lock.unlock() }
-        latestOutput += text
-        if latestOutput.count > 1_000_000 {
-            if let newlineRange = latestOutput.range(of: "\n", options: .backwards) {
-                latestOutput = String(latestOutput[newlineRange.upperBound...])
-            } else {
-                latestOutput = ""
+
+        let combined = partialLine + text
+        let lines = combined.split(separator: "\n", omittingEmptySubsequences: false)
+
+        // If text doesn't end with newline, last element is incomplete
+        let hasTrailingNewline = text.last == "\n"
+        let completeLineCount = hasTrailingNewline ? lines.count : lines.count - 1
+
+        for i in 0..<completeLineCount {
+            let line = lines[i]
+            guard !line.isEmpty else { continue }
+            if let stat = NettopApplicationTrafficReader.parseLinePublic(String(line)) {
+                latestStats[stat.id] = stat
             }
+        }
+
+        if hasTrailingNewline {
+            partialLine = ""
+        } else {
+            partialLine = String(lines.last ?? "")
+        }
+
+        // Safety cap: partialLine should stay small (a few KB)
+        if partialLine.count > 64_000 {
+            partialLine = ""
         }
     }
 
@@ -114,6 +132,8 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             lock.unlock()
             return
         }
+        latestStats.removeAll(keepingCapacity: true)
+        partialLine.removeAll(keepingCapacity: true)
         lock.unlock()
 
         if restartAttempts < maxRestartAttempts {
@@ -122,15 +142,6 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             launchProcess()
             lock.unlock()
         }
-    }
-
-    private static func parse(_ output: String) -> [ApplicationTrafficStats] {
-        var seen: [String: ApplicationTrafficStats] = [:]
-        for line in output.split(whereSeparator: \.isNewline) {
-            guard let stat = NettopApplicationTrafficReader.parseLinePublic(String(line)) else { continue }
-            seen[stat.id] = stat
-        }
-        return Array(seen.values)
     }
 
     deinit {
