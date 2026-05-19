@@ -81,6 +81,7 @@ final class StatusBarController {
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
     private let customCharacterStore: CustomCharacterStore
+    private let powerObserver: SystemPowerObserver
     private let openPreferences: () -> Void
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
@@ -105,6 +106,7 @@ final class StatusBarController {
         settings: StatusBarSettings,
         appPreferences: AppPreferences,
         customCharacterStore: CustomCharacterStore,
+        powerObserver: SystemPowerObserver,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
@@ -112,6 +114,7 @@ final class StatusBarController {
         self.settings = settings
         self.appPreferences = appPreferences
         self.customCharacterStore = customCharacterStore
+        self.powerObserver = powerObserver
         self.openPreferences = openPreferences
         self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -189,6 +192,26 @@ final class StatusBarController {
                 self?.resumeGooglyEyesTimer()
             }
         }
+
+        powerObserver.$isScreenLocked
+            .removeDuplicates()
+            .sink { [weak self] isLocked in
+                if isLocked {
+                    self?.catAnimation?.pauseForScreenLock()
+                    self?.pauseGooglyEyesTimer()
+                } else {
+                    self?.catAnimation?.resumeFromScreenLock()
+                    self?.configureGooglyEyesTracking()
+                }
+            }
+            .store(in: &cancellables)
+
+        powerObserver.$isLowPowerMode
+            .removeDuplicates()
+            .sink { [weak self] isLowPower in
+                self?.monitor.setPowerSaveMode(isLowPower)
+            }
+            .store(in: &cancellables)
 
         setupCatAnimation()
     }

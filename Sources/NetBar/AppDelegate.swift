@@ -7,6 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = StatusBarSettings()
     private let appPreferences = AppPreferences()
     private let customCharacterStore = CustomCharacterStore()
+    private let powerObserver = SystemPowerObserver()
     private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
@@ -26,6 +27,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             settings: settings,
             appPreferences: appPreferences,
             customCharacterStore: customCharacterStore,
+            powerObserver: powerObserver,
             openPreferences: { [weak self] in
                 self?.showPreferences(nil)
             },

@@ -19,6 +19,7 @@ final class NetworkMonitor: ObservableObject {
     private var isRefreshing = false
     private var timer: Timer?
     private var applicationTimer: Timer?
+    private var powerSaveMode = false
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
     private let historyCapacity = 90
@@ -74,6 +75,31 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer = nil
         streamingReader?.stop()
         isRunning = false
+    }
+
+    func setPowerSaveMode(_ enabled: Bool) {
+        powerSaveMode = enabled
+        rescheduleTimers()
+    }
+
+    private func rescheduleTimers() {
+        guard isRunning else { return }
+        let interval: TimeInterval = powerSaveMode ? 2.0 : 1.0
+        let appInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
+
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refresh()
+            }
+        }
+
+        applicationTimer?.invalidate()
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: appInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshApplicationTraffic()
+            }
+        }
     }
 
     func refresh() {
