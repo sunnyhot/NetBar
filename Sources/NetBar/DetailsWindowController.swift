@@ -128,6 +128,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     }
 
     func show(anchor: NSStatusBarButton? = nil) {
+        monitor.setApplicationTrafficVisible(true)
         monitor.refresh()
 
         let floatingPanel = makePanelIfNeeded()
@@ -240,6 +241,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         cancelAutoDismissTimer()
         outsideClickMonitor.setActive(false)
         panel.orderOut(nil)
+        monitor.setApplicationTrafficVisible(false)
     }
 
     private func handleEscapeKey() {

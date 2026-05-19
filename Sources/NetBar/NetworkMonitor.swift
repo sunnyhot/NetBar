@@ -6,6 +6,7 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var snapshot = NetworkSnapshot.empty
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var isRunning = false
+    @Published private(set) var isApplicationTrafficVisible = false
 
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
@@ -52,18 +53,31 @@ final class NetworkMonitor: ObservableObject {
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        streamingReader?.start()
         refresh()
-        refreshApplicationTraffic()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
             }
         }
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshApplicationTraffic()
+    }
+
+    func setApplicationTrafficVisible(_ visible: Bool) {
+        guard visible != isApplicationTrafficVisible else { return }
+        isApplicationTrafficVisible = visible
+
+        if visible {
+            streamingReader?.start()
+            refreshApplicationTraffic()
+            guard applicationTimer == nil else { return }
+            applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshApplicationTraffic()
+                }
             }
+        } else {
+            applicationTimer?.invalidate()
+            applicationTimer = nil
+            streamingReader?.stop()
         }
     }
 
