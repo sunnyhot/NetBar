@@ -95,6 +95,8 @@ final class StatusBarController {
     private var googlyEyesState: GooglyEyesRenderState?
     private var blinkResetTask: Task<Void, Never>?
     private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
+    private var lastPolledMouseLocation: CGPoint?
+    private var isMouseNearStatusBar: Bool = true
     private var renderCoalesceTimer: Timer?
     private var needsRender = false
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
@@ -415,7 +417,8 @@ final class StatusBarController {
 
     private func resumeGooglyEyesTimer() {
         guard isGooglyEyesActive, googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+        let interval = isMouseNearStatusBar ? 1.0 / 15.0 : 1.0 / 3.0
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
@@ -432,6 +435,7 @@ final class StatusBarController {
             blinkResetTask?.cancel()
             blinkResetTask = nil
             googlyEyesClickMonitor.setActive(false)
+            lastPolledMouseLocation = nil
             return
         }
 
@@ -440,7 +444,8 @@ final class StatusBarController {
             self?.triggerGooglyEyesBlink()
         }
         guard googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+        let interval = isMouseNearStatusBar ? 1.0 / 15.0 : 1.0 / 3.0
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
@@ -451,11 +456,43 @@ final class StatusBarController {
 
     private func refreshGooglyEyesState() {
         guard isGooglyEyesActive else { return }
+
+        let mouseLocation = NSEvent.mouseLocation
+
+        // Skip if mouse moved < 1pt (position dedup)
+        if let last = lastPolledMouseLocation {
+            if hypot(mouseLocation.x - last.x, mouseLocation.y - last.y) < 1.0 { return }
+        }
+        lastPolledMouseLocation = mouseLocation
+
+        // Distance-based frequency switching
+        let wasNearStatusBar = isMouseNearStatusBar
+        if let button = statusItem.button,
+           let frame = button.window?.convertToScreen(button.frame) {
+            isMouseNearStatusBar = abs(mouseLocation.y - frame.midY) < 500
+        }
+        if isMouseNearStatusBar != wasNearStatusBar {
+            updateGooglyEyesTimerInterval()
+        }
+
         let isBlinking = googlyEyesState?.isBlinking == true
         guard let nextState = makeGooglyEyesState(isBlinking: isBlinking) else { return }
         guard nextState != googlyEyesState else { return }
         googlyEyesState = nextState
         requestRender()
+    }
+
+    private func updateGooglyEyesTimerInterval() {
+        guard isGooglyEyesActive else { return }
+        googlyEyesTimer?.invalidate()
+        let interval = isMouseNearStatusBar ? 1.0 / 15.0 : 1.0 / 3.0
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshGooglyEyesState()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        googlyEyesTimer = timer
     }
 
     private func activeGooglyEyesRenderState() -> GooglyEyesRenderState? {
