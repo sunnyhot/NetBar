@@ -857,6 +857,12 @@ enum StatusBarDisplayRenderer {
 
     private static let tintImageCache = NSCache<TintImageCacheKey, NSImage>()
 
+    private static let gradientTintImageCache: NSCache<GradientTintImageCacheKey, NSImage> = {
+        let cache = NSCache<GradientTintImageCacheKey, NSImage>()
+        cache.countLimit = 30
+        return cache
+    }()
+
     private final class CharacterImageCacheKey: NSObject {
         let characterID: String
         let frameIndex: Int
@@ -890,6 +896,38 @@ enum StatusBarDisplayRenderer {
                 && colorRGBA.1 == other.colorRGBA.1
                 && colorRGBA.2 == other.colorRGBA.2
                 && colorRGBA.3 == other.colorRGBA.3
+        }
+    }
+
+    private final class GradientTintImageCacheKey: NSObject {
+        let imagePointer: Int
+        let quantizedStops: [(r: Int, g: Int, b: Int, a: Int, pos: Int)]
+
+        init(image: NSImage, colors: [(color: NSColor, position: CGFloat)]) {
+            self.imagePointer = Int(bitPattern: Unmanaged.passUnretained(image).toOpaque())
+            self.quantizedStops = colors.map { stop in
+                var r: CGFloat = 0, g: CGFloat = 0, b: CGFloat = 0, a: CGFloat = 0
+                stop.color.getRed(&r, green: &g, blue: &b, alpha: &a)
+                return (Int(r * 100), Int(g * 100), Int(b * 100), Int(a * 100), Int(stop.position * 100))
+            }
+        }
+
+        override var hash: Int {
+            var h = imagePointer.hashValue
+            for stop in quantizedStops {
+                h = h ^ stop.r.hashValue ^ stop.g.hashValue ^ stop.b.hashValue ^ stop.a.hashValue ^ stop.pos.hashValue
+            }
+            return h
+        }
+
+        override func isEqual(_ object: Any?) -> Bool {
+            guard let other = object as? GradientTintImageCacheKey else { return false }
+            guard imagePointer == other.imagePointer else { return false }
+            guard quantizedStops.count == other.quantizedStops.count else { return false }
+            for (a, b) in zip(quantizedStops, other.quantizedStops) {
+                guard a.r == b.r, a.g == b.g, a.b == b.b, a.a == b.a, a.pos == b.pos else { return false }
+            }
+            return true
         }
     }
 
@@ -1595,6 +1633,20 @@ enum StatusBarDisplayRenderer {
     /// a multi-colored effect where different parts of the character show different colors.
     private static func tintImageGradient(_ image: NSImage, colors: [(color: NSColor, position: CGFloat)]) -> NSImage? {
         guard colors.count >= 2 else { return nil }
+
+        let cacheKey = GradientTintImageCacheKey(image: image, colors: colors)
+        if let cached = gradientTintImageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let result = _renderGradientTintImage(image, colors: colors)
+        if let result {
+            gradientTintImageCache.setObject(result, forKey: cacheKey)
+        }
+        return result
+    }
+
+    private static func _renderGradientTintImage(_ image: NSImage, colors: [(color: NSColor, position: CGFloat)]) -> NSImage? {
         let size = image.size
         guard let bitmapRep = NSBitmapImageRep(
             bitmapDataPlanes: nil,
