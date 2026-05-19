@@ -17,6 +17,7 @@ final class NetworkMonitor: ObservableObject {
     private var previousApplicationSampleDate: Date?
     private var isReadingApplicationTraffic = false
     private var isRefreshing = false
+    private var shouldSampleApplicationTraffic = false
     private var timer: Timer?
     private var applicationTimer: Timer?
     private var powerSaveMode = false
@@ -54,7 +55,6 @@ final class NetworkMonitor: ObservableObject {
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        streamingReader?.start()
         refresh()
         refreshApplicationTraffic()
         scheduleNextSample()
@@ -65,12 +65,29 @@ final class NetworkMonitor: ObservableObject {
         }
     }
 
-    func stop() {
-        timer?.invalidate()
-        timer = nil
+    func resumeApplicationTrafficSampling() {
+        guard !shouldSampleApplicationTraffic else { return }
+        shouldSampleApplicationTraffic = true
+        streamingReader?.start()
+        refreshApplicationTraffic()
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshApplicationTraffic()
+            }
+        }
+    }
+
+    func pauseApplicationTrafficSampling() {
+        shouldSampleApplicationTraffic = false
         applicationTimer?.invalidate()
         applicationTimer = nil
         streamingReader?.stop()
+    }
+
+    func stop() {
+        timer?.invalidate()
+        timer = nil
+        pauseApplicationTrafficSampling()
         isRunning = false
     }
 
@@ -226,6 +243,7 @@ final class NetworkMonitor: ObservableObject {
 
     func refreshApplicationTraffic() {
         guard !isReadingApplicationTraffic else { return }
+        guard shouldSampleApplicationTraffic else { return }
 
         isReadingApplicationTraffic = true
         appTraffic.isRefreshing = true
