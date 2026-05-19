@@ -36,6 +36,21 @@ struct AvailableUpdate: Equatable {
     var versionText: String {
         release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
     }
+
+    var changelog: String? {
+        guard let body = release.body?.trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty else {
+            return nil
+        }
+        return body
+    }
+
+    var downloadURL: URL {
+        asset.browserDownloadURL
+    }
+
+    var fileSize: Int? {
+        asset.size > 0 ? asset.size : nil
+    }
 }
 
 enum UpdatePromptAction: Equatable {
@@ -166,6 +181,7 @@ final class AppUpdater: ObservableObject {
     @Published private(set) var isChecking = false
     @Published private(set) var isDownloading = false
     @Published private(set) var downloadProgress: Double = 0
+    @Published private(set) var downloadError: Error?
     @Published private(set) var availableUpdate: AvailableUpdate?
     @Published private(set) var isUpdateReadyToInstall = false
     @Published private(set) var statusMessage = "尚未检查更新"
@@ -267,6 +283,7 @@ final class AppUpdater: ObservableObject {
         guard let availableUpdate, !isChecking, !isDownloading else { return }
 
         isDownloading = true
+        downloadError = nil
         downloadProgress = 0
         statusMessage = "正在下载 \(availableUpdate.asset.name)..."
 
@@ -281,6 +298,7 @@ final class AppUpdater: ObservableObject {
         } catch {
             isDownloading = false
             downloadProgress = 0
+            downloadError = error
             statusMessage = "更新失败：\(error.localizedDescription)"
         }
     }
@@ -291,6 +309,7 @@ final class AppUpdater: ObservableObject {
         guard let availableUpdate else { return }
 
         isDownloading = true
+        downloadError = nil
         downloadProgress = 0
         statusMessage = "正在自动下载更新..."
 
@@ -310,6 +329,7 @@ final class AppUpdater: ObservableObject {
         } catch {
             isDownloading = false
             downloadProgress = 0
+            downloadError = error
             statusMessage = "自动下载失败：\(error.localizedDescription)"
         }
     }
@@ -387,17 +407,19 @@ final class AppUpdater: ObservableObject {
     // MARK: - Network
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
-        let request = try GitHubLatestReleaseLookup.request(
-            repository: repository,
-            currentVersion: currentVersion
-        )
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let urlString = "https://api.github.com/repos/\(repository)/releases/latest"
+        guard let url = URL(string: urlString) else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
         try validateHTTPResponse(response)
-        return try GitHubLatestReleaseLookup.release(
-            from: response.url,
-            repository: repository,
-            assetName: assetName
-        )
+
+        return try JSONDecoder().decode(GitHubRelease.self, from: data)
     }
 
     private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
