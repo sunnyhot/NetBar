@@ -97,6 +97,8 @@ final class StatusBarController {
     private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
     private var renderCoalesceTimer: Timer?
     private var needsRender = false
+    private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
+    private static let renderedImageCacheLimit = 12
 
     init(
         monitor: NetworkMonitor,
@@ -293,15 +295,24 @@ final class StatusBarController {
         let presentation = signature.presentation
         statusItem.length = presentation.width
 
-        let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
-        let image = StatusBarDisplayRenderer.image(
-            snapshot: monitor.snapshot,
-            settings: settings,
-            scale: scale,
-            customCharacterStore: customCharacterStore,
-            catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
-            googlyEyesState: activeGooglyEyesState
-        )
+        let image: NSImage
+        if let cached = renderedImageCache.first(where: { $0.signature == signature })?.image {
+            image = cached
+        } else {
+            let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
+            image = StatusBarDisplayRenderer.image(
+                snapshot: monitor.snapshot,
+                settings: settings,
+                scale: scale,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+                googlyEyesState: activeGooglyEyesState
+            )
+            renderedImageCache.append((signature: signature, image: image))
+            if renderedImageCache.count > Self.renderedImageCacheLimit {
+                renderedImageCache.removeFirst()
+            }
+        }
         button.attributedTitle = NSAttributedString(string: "")
         button.title = ""
         button.imagePosition = .imageOnly
