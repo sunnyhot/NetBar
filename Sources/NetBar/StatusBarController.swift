@@ -123,6 +123,7 @@ final class StatusBarController {
 
         configureStatusItem()
         configureObservers()
+        configureDetailsWindowObserver()
         monitor.start()
         updateStatusItem()
     }
@@ -338,7 +339,25 @@ final class StatusBarController {
     }
 
     func showDetailsWindow(anchorToMenuBar: Bool = false) {
+        monitor.resumeApplicationTrafficSampling()
         detailsWindowController.show(anchor: anchorToMenuBar ? statusItem.button : nil)
+    }
+
+    private var applicationTrafficPauseTask: Task<Void, Never>?
+
+    private func configureDetailsWindowObserver() {
+        detailsWindowController.onWindowClosed = { [weak self] in
+            self?.scheduleApplicationTrafficPause()
+        }
+    }
+
+    private func scheduleApplicationTrafficPause() {
+        applicationTrafficPauseTask?.cancel()
+        applicationTrafficPauseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: .seconds(30))
+            guard let self, !self.detailsWindowController.isVisible else { return }
+            self.monitor.pauseApplicationTrafficSampling()
+        }
     }
 
     @objc private func toggleDetailsWindow(_ sender: AnyObject?) {
@@ -347,7 +366,13 @@ final class StatusBarController {
             showStatusMenu()
             return
         }
-        detailsWindowController.toggle(anchor: statusItem.button)
+        if detailsWindowController.isVisible {
+            detailsWindowController.toggle(anchor: statusItem.button)
+        } else {
+            applicationTrafficPauseTask?.cancel()
+            monitor.resumeApplicationTrafficSampling()
+            detailsWindowController.toggle(anchor: statusItem.button)
+        }
     }
 
     private func showStatusMenu() {

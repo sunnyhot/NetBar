@@ -101,6 +101,12 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let defaultWindowSize = NSSize(width: 440, height: 720)
     private let minimumWindowSize = NSSize(width: 440, height: 500)
 
+    var onWindowClosed: (() -> Void)?
+
+    var isVisible: Bool {
+        panel?.isVisible == true
+    }
+
     private var autoDismissTimer: Timer?
     private var resignKeyObserver: Any?
     private var becomeKeyObserver: Any?
@@ -240,6 +246,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         cancelAutoDismissTimer()
         outsideClickMonitor.setActive(false)
         panel.orderOut(nil)
+        onWindowClosed?()
     }
 
     private func handleEscapeKey() {
