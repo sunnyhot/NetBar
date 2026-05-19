@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 import SwiftUI
 
@@ -11,6 +12,7 @@ final class NetworkMonitor: ObservableObject {
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
     private let streamingReader: StreamingNettopReader?
+    let powerStateManager: PowerStateManager?
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
@@ -23,6 +25,7 @@ final class NetworkMonitor: ObservableObject {
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
     private let historyCapacity = 90
+    private var cancellables: Set<AnyCancellable> = []
 
     var recentHistory: [RatePoint] {
         guard !historyBuffer.isEmpty else { return [] }
@@ -36,9 +39,11 @@ final class NetworkMonitor: ObservableObject {
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
         appTrafficReader: ApplicationTrafficReading? = nil,
+        powerStateManager: PowerStateManager? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
+        self.powerStateManager = powerStateManager
         self.now = now
         if let appTrafficReader {
             self.appTrafficReader = appTrafficReader
@@ -54,11 +59,66 @@ final class NetworkMonitor: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         refresh()
-        timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
+        rescheduleInterfaceTimer()
+        observePowerStateChanges()
+    }
+
+    private var interfaceInterval: TimeInterval {
+        powerStateManager?.effectiveInterfaceInterval ?? 1.0
+    }
+
+    private var appTrafficInterval: TimeInterval {
+        powerStateManager?.effectiveAppTrafficInterval ?? 5.0
+    }
+
+    private func rescheduleInterfaceTimer() {
+        timer?.invalidate()
+        timer = Timer.scheduledTimer(withTimeInterval: interfaceInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
             }
         }
+    }
+
+    private func rescheduleAppTrafficTimer() {
+        guard isApplicationTrafficVisible else { return }
+        applicationTimer?.invalidate()
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: appTrafficInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshApplicationTraffic()
+            }
+        }
+    }
+
+    private func observePowerStateChanges() {
+        guard let psm = powerStateManager else { return }
+        psm.$isLowPowerMode
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.rescheduleInterfaceTimer()
+                    self?.rescheduleAppTrafficTimer()
+                }
+            }
+            .store(in: &cancellables)
+        psm.$isScreenLocked
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.rescheduleInterfaceTimer()
+                    self?.rescheduleAppTrafficTimer()
+                }
+            }
+            .store(in: &cancellables)
+        psm.$isOnBattery
+            .dropFirst()
+            .sink { [weak self] _ in
+                Task { @MainActor in
+                    self?.rescheduleInterfaceTimer()
+                    self?.rescheduleAppTrafficTimer()
+                }
+            }
+            .store(in: &cancellables)
     }
 
     func setApplicationTrafficVisible(_ visible: Bool) {
@@ -68,12 +128,7 @@ final class NetworkMonitor: ObservableObject {
         if visible {
             streamingReader?.start()
             refreshApplicationTraffic()
-            guard applicationTimer == nil else { return }
-            applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    self?.refreshApplicationTraffic()
-                }
-            }
+            rescheduleAppTrafficTimer()
         } else {
             applicationTimer?.invalidate()
             applicationTimer = nil
