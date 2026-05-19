@@ -7,6 +7,19 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var isRunning = false
 
+    /// Controls whether the nettop process is active. Set to true when the
+    /// traffic detail window is visible; false to stop nettop and save CPU.
+    var isApplicationTrafficVisible: Bool = false {
+        didSet {
+            guard oldValue != isApplicationTrafficVisible else { return }
+            if isApplicationTrafficVisible {
+                startApplicationTraffic()
+            } else {
+                stopApplicationTraffic()
+            }
+        }
+    }
+
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
     private let streamingReader: StreamingNettopReader?
@@ -22,6 +35,7 @@ final class NetworkMonitor: ObservableObject {
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
     private let historyCapacity = 90
+    private var hasStartedApplicationTraffic = false
 
     var recentHistory: [RatePoint] {
         guard !historyBuffer.isEmpty else { return [] }
@@ -52,28 +66,41 @@ final class NetworkMonitor: ObservableObject {
     func start() {
         guard !isRunning else { return }
         isRunning = true
-        streamingReader?.start()
         refresh()
-        refreshApplicationTraffic()
         timer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()
             }
         }
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshApplicationTraffic()
-            }
+        if isApplicationTrafficVisible {
+            startApplicationTraffic()
         }
     }
 
     func stop() {
         timer?.invalidate()
         timer = nil
+        stopApplicationTraffic()
+        isRunning = false
+    }
+
+    private func startApplicationTraffic() {
+        guard isRunning else { return }
+        streamingReader?.start()
+        refreshApplicationTraffic()
+        guard applicationTimer == nil else { return }
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshApplicationTraffic()
+            }
+        }
+        hasStartedApplicationTraffic = true
+    }
+
+    private func stopApplicationTraffic() {
         applicationTimer?.invalidate()
         applicationTimer = nil
         streamingReader?.stop()
-        isRunning = false
     }
 
     func refresh() {
