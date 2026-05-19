@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import SwiftUI
 
 struct GitHubRelease: Decodable, Equatable {
     let tagName: String
@@ -38,78 +39,159 @@ struct AvailableUpdate: Equatable {
     }
 }
 
-enum UpdatePromptAction: Equatable {
-    case downloadAndInstall
-    case openReleasePage
-    case remindLater
+// MARK: - Update Dialog View
 
-    static func response(forButtonIndex index: Int) -> UpdatePromptAction? {
-        switch index {
-        case 0:
-            return .downloadAndInstall
-        case 1:
-            return .openReleasePage
-        case 2:
-            return .remindLater
-        default:
+struct UpdateDialogView: View {
+    @ObservedObject var updater: AppUpdater
+    let appPreferences: AppPreferences
+    let currentVersion: String
+    let onClose: () -> Void
+
+    private var dialogState: UpdateDialogState {
+        if updater.isDownloading { return .downloading }
+        if updater.isUpdateReadyToInstall { return .readyToInstall }
+        return .ready
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            titleSection
+                .padding(.top, 20)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 12)
+
+            if let body = changelogBody {
+                changelogSection(body)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+            }
+
+            if dialogState == .downloading {
+                progressSection
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 12)
+            }
+
+            if dialogState == .downloading {
+                Text(appPreferences.text("正在下载...", "Downloading..."))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            } else if dialogState == .readyToInstall {
+                Text(appPreferences.text("下载完成，点击安装并重启", "Download complete, click to install and restart"))
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+                    .padding(.horizontal, 20)
+                    .padding(.bottom, 8)
+            }
+
+            Divider()
+                .padding(.bottom, 12)
+
+            buttonSection(dialogState)
+                .padding(.horizontal, 20)
+                .padding(.bottom, 16)
+        }
+        .frame(width: 440)
+    }
+
+    private var changelogBody: String? {
+        guard let body = updater.availableUpdate?.release.body?
+            .trimmingCharacters(in: .whitespacesAndNewlines), !body.isEmpty else {
             return nil
+        }
+        return body
+    }
+
+    private var titleSection: some View {
+        HStack(spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill")
+                .font(.title2)
+                .foregroundColor(.accentColor)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(appPreferences.text(
+                    "发现新版本 \(updater.availableUpdate?.versionText ?? "")",
+                    "New Version Available: \(updater.availableUpdate?.versionText ?? "")"
+                ))
+                .font(.headline)
+                Text(appPreferences.text(
+                    "当前版本：\(currentVersion)",
+                    "Current version: \(currentVersion)"
+                ))
+                .font(.caption)
+                .foregroundColor(.secondary)
+            }
+            Spacer()
         }
     }
 
-    static func response(forModalResponse response: NSApplication.ModalResponse) -> UpdatePromptAction? {
-        switch response {
-        case .alertFirstButtonReturn:
-            return .downloadAndInstall
-        case .alertSecondButtonReturn:
-            return .openReleasePage
-        case .alertThirdButtonReturn:
-            return .remindLater
-        default:
-            return nil
+    private func changelogSection(_ body: String) -> some View {
+        GroupBox {
+            ScrollView {
+                Text(body)
+                    .font(.system(.caption, design: .monospaced))
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+            }
+            .frame(maxHeight: 180)
+        }
+    }
+
+    private var progressSection: some View {
+        VStack(spacing: 4) {
+            ProgressView(value: updater.downloadProgress)
+                .progressViewStyle(.linear)
+            HStack {
+                Text("\(Int(updater.downloadProgress * 100))%")
+                    .font(.caption2)
+                    .foregroundColor(.secondary)
+                Spacer()
+            }
+        }
+    }
+
+    private func buttonSection(_ state: UpdateDialogState) -> some View {
+        HStack {
+            switch state {
+            case .ready:
+                Button(appPreferences.text("取消", "Cancel")) { onClose() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(appPreferences.text("下载更新", "Download Update")) {
+                    Task { @MainActor in
+                        await updater.downloadForDialog()
+                    }
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+
+            case .downloading:
+                Spacer()
+                Button(appPreferences.text("取消", "Cancel")) { onClose() }
+                    .keyboardShortcut(.cancelAction)
+
+            case .readyToInstall:
+                Button(appPreferences.text("稍后", "Later")) { onClose() }
+                    .keyboardShortcut(.cancelAction)
+                Spacer()
+                Button(appPreferences.text("安装并重启", "Install and Restart")) {
+                    try? updater.installPreparedUpdate()
+                }
+                .keyboardShortcut(.defaultAction)
+                .buttonStyle(.borderedProminent)
+            }
         }
     }
 }
 
-struct UpdatePromptContent: Equatable {
-    let messageText: String
-    let informativeText: String
-    let buttonTitles: [String]
-    let releaseNotesText: String?
-
-    static func make(
-        for update: AvailableUpdate,
-        currentVersion: String,
-        automaticCheck: Bool
-    ) -> UpdatePromptContent {
-        let version = update.versionText
-        let releaseName = update.release.name?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let releaseNotes = update.release.body?.trimmingCharacters(in: .whitespacesAndNewlines)
-        let assetLine = update.asset.size > 0
-            ? "安装包：\(update.asset.name)（\(ByteFormat.bytes(UInt64(update.asset.size)))）"
-            : "安装包：\(update.asset.name)"
-
-        var lines = [
-            automaticCheck ? "NetBar 自动检测到可用更新。" : "NetBar 检测到可用更新。",
-            "当前版本：\(currentVersion)",
-            "最新版本：\(version)",
-            assetLine
-        ]
-
-        if let releaseName, !releaseName.isEmpty, releaseName != version {
-            lines.append("版本名称：\(releaseName)")
-        }
-
-        lines.append("你可以立即下载并安装，也可以先打开 Release 页面查看详情。")
-
-        return UpdatePromptContent(
-            messageText: "发现新版本 \(version)",
-            informativeText: lines.joined(separator: "\n"),
-            buttonTitles: ["下载并安装", "查看 Release 页面", "稍后提醒"],
-            releaseNotesText: releaseNotes?.isEmpty == false ? releaseNotes : nil
-        )
-    }
+private enum UpdateDialogState {
+    case ready
+    case downloading
+    case readyToInstall
 }
 
+// MARK: - AppUpdater
 
 @MainActor
 final class AppUpdater: ObservableObject {
@@ -127,16 +209,19 @@ final class AppUpdater: ObservableObject {
     private let assetName: String
     private let currentVersion: String
     private let currentBundleIdentifier: String
+    private let appPreferences: AppPreferences
     private var automaticTimer: Timer?
     private var preparedAppURL: URL?
+    private var updateWindow: NSWindow?
 
-    init(defaults: UserDefaults = .standard, bundle: Bundle = .main) {
+    init(defaults: UserDefaults = .standard, bundle: Bundle = .main, appPreferences: AppPreferences) {
         self.defaults = defaults
         repository = bundle.object(forInfoDictionaryKey: "NBUpdateRepository") as? String ?? "sunnyhot/NetBar"
         assetName = bundle.object(forInfoDictionaryKey: "NBUpdateAssetName") as? String ?? "NetBar.app.zip"
         currentVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
         currentBundleIdentifier = bundle.bundleIdentifier ?? "local.codex.NetBar"
         automaticallyChecksForUpdates = defaults.object(forKey: Keys.automaticallyChecksForUpdates) as? Bool ?? true
+        self.appPreferences = appPreferences
     }
 
     var currentVersionText: String {
@@ -193,7 +278,7 @@ final class AppUpdater: ObservableObject {
             statusMessage = "发现新版本 \(release.tagName)"
             isChecking = false
 
-            showUpdateInfoDialog(automaticCheck: !isManual)
+            showUpdateDialog()
         } catch {
             isChecking = false
             if isManual {
@@ -236,14 +321,12 @@ final class AppUpdater: ObservableObject {
         }
     }
 
-    // MARK: - Auto Download
-
-    private func autoDownloadAndPrepare() async {
+    func downloadForDialog() async {
         guard let availableUpdate else { return }
 
         isDownloading = true
         downloadProgress = 0
-        statusMessage = "正在自动下载更新..."
+        statusMessage = "正在下载更新..."
 
         do {
             let downloadedZip = try await downloadWithProgress(asset: availableUpdate.asset)
@@ -256,83 +339,56 @@ final class AppUpdater: ObservableObject {
             isUpdateReadyToInstall = true
             downloadProgress = 1.0
             statusMessage = "新版本已就绪，点击安装并重启"
-
-            showUpdateReadyAlert()
         } catch {
             isDownloading = false
             downloadProgress = 0
-            statusMessage = "自动下载失败：\(error.localizedDescription)"
+            statusMessage = "下载失败：\(error.localizedDescription)"
         }
     }
 
-    private func showUpdateReadyAlert() {
-        let version = availableUpdate?.versionText ?? ""
-        let alert = NSAlert()
-        alert.messageText = "新版本 \(version) 已下载完成"
-        alert.informativeText = "需要重启 NetBar 以完成安装。"
-        alert.addButton(withTitle: "安装并重启")
-        alert.addButton(withTitle: "稍后提醒")
-        alert.alertStyle = .informational
-
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-
-        if response == .alertFirstButtonReturn {
-            try? installPreparedUpdate()
-        }
-    }
-
-    private func showUpdateInfoDialog(automaticCheck: Bool) {
-        guard let update = availableUpdate else { return }
-        let prompt = UpdatePromptContent.make(
-            for: update,
-            currentVersion: currentVersion,
-            automaticCheck: automaticCheck
-        )
-
-        let alert = NSAlert()
-        alert.messageText = prompt.messageText
-        alert.informativeText = prompt.informativeText
-        alert.alertStyle = .informational
-        prompt.buttonTitles.forEach { alert.addButton(withTitle: $0) }
-
-        if let releaseNotes = prompt.releaseNotesText {
-            let scrollView = NSScrollView(frame: NSRect(x: 0, y: 0, width: 460, height: 220))
-            let textView = NSTextView(frame: NSRect(x: 0, y: 0, width: 460, height: 220))
-            textView.string = releaseNotes
-            textView.isEditable = false
-            textView.isSelectable = true
-            textView.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
-            textView.backgroundColor = .textBackgroundColor
-            textView.textColor = .textColor
-            textView.isAutomaticQuoteSubstitutionEnabled = false
-            textView.isAutomaticDashSubstitutionEnabled = false
-            textView.isAutomaticTextReplacementEnabled = false
-            scrollView.documentView = textView
-            scrollView.hasVerticalScroller = true
-            scrollView.hasHorizontalScroller = false
-            scrollView.autohidesScrollers = true
-            alert.accessoryView = scrollView
-        }
-
-        NSApplication.shared.activate(ignoringOtherApps: true)
-        let response = alert.runModal()
-
-        switch UpdatePromptAction.response(forModalResponse: response) {
-        case .downloadAndInstall:
-            Task { @MainActor in
-                await downloadAndInstall()
-            }
-        case .openReleasePage:
-            NSWorkspace.shared.open(update.release.htmlURL)
-        case .remindLater, nil:
-            break
-        }
-    }
-
-    private func installPreparedUpdate() throws {
+    func installPreparedUpdate() throws {
         guard let preparedAppURL else { return }
         try installAndRelaunch(from: preparedAppURL)
+    }
+
+    // MARK: - Update Dialog
+
+    private func showUpdateDialog() {
+        guard let _ = availableUpdate else { return }
+
+        closeUpdateDialog()
+
+        let view = UpdateDialogView(
+            updater: self,
+            appPreferences: appPreferences,
+            currentVersion: currentVersion,
+            onClose: { [weak self] in
+                self?.closeUpdateDialog()
+            }
+        )
+
+        let hostingController = NSHostingController(rootView: view)
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 480, height: 420),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false
+        )
+        window.isReleasedWhenClosed = false
+        window.contentView = hostingController.view
+        window.center()
+        window.title = appPreferences.text(
+            "发现新版本",
+            "Update Available"
+        )
+        window.makeKeyAndOrderFront(nil)
+        NSApplication.shared.activate(ignoringOtherApps: true)
+        updateWindow = window
+    }
+
+    private func closeUpdateDialog() {
+        updateWindow?.close()
+        updateWindow = nil
     }
 
     // MARK: - Network
@@ -370,24 +426,6 @@ final class AppUpdater: ObservableObject {
             request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
             session.downloadTask(with: request).resume()
         }
-    }
-
-    private func download(asset: GitHubReleaseAsset) async throws -> URL {
-        var request = URLRequest(url: asset.browserDownloadURL)
-        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-
-        let (temporaryURL, response) = try await URLSession.shared.download(for: request)
-        try validateHTTPResponse(response)
-
-        let destination = FileManager.default.temporaryDirectory
-            .appendingPathComponent("NetBar-\(UUID().uuidString)")
-            .appendingPathComponent(asset.name)
-        try FileManager.default.createDirectory(
-            at: destination.deletingLastPathComponent(),
-            withIntermediateDirectories: true
-        )
-        try FileManager.default.moveItem(at: temporaryURL, to: destination)
-        return destination
     }
 
     // MARK: - Install

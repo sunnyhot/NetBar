@@ -1030,34 +1030,31 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
-    func testUpdateLookupUsesGitHubReleaseRedirectInsteadOfRateLimitedAPI() throws {
-        let request = try GitHubLatestReleaseLookup.request(
-            repository: "sunnyhot/NetBar",
-            currentVersion: "0.27.0"
-        )
+    func testGitHubReleaseDecodesFromRESTAPIJSON() throws {
+        let json = """
+        {
+            "tag_name": "v0.21.0",
+            "name": "NetBar 0.21.0",
+            "body": "Bug fixes and improvements",
+            "html_url": "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0",
+            "assets": [
+                {
+                    "name": "NetBar.app.zip",
+                    "size": 2400000,
+                    "browser_download_url": "https://github.com/sunnyhot/NetBar/releases/download/v0.21.0/NetBar.app.zip"
+                }
+            ]
+        }
+        """.data(using: .utf8)!
 
-        XCTAssertEqual(request.url?.absoluteString, "https://github.com/sunnyhot/NetBar/releases/latest")
-        XCTAssertEqual(request.httpMethod, "HEAD")
-        XCTAssertNotEqual(request.url?.host, "api.github.com")
-    }
-
-    func testUpdateLookupBuildsReleaseFromLatestRedirectURL() throws {
-        let release = try GitHubLatestReleaseLookup.release(
-            from: URL(string: "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0")!,
-            repository: "sunnyhot/NetBar",
-            assetName: "NetBar.app.zip"
-        )
-
+        let release = try JSONDecoder().decode(GitHubRelease.self, from: json)
         XCTAssertEqual(release.tagName, "v0.21.0")
-        XCTAssertEqual(release.htmlURL.absoluteString, "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0")
+        XCTAssertEqual(release.name, "NetBar 0.21.0")
+        XCTAssertEqual(release.body, "Bug fixes and improvements")
         XCTAssertEqual(release.assets.first?.name, "NetBar.app.zip")
-        XCTAssertEqual(
-            release.assets.first?.browserDownloadURL.absoluteString,
-            "https://github.com/sunnyhot/NetBar/releases/download/v0.21.0/NetBar.app.zip"
-        )
     }
 
-    func testAutomaticUpdatePromptUsesActionableButtonsInsteadOfAcknowledgementOnly() {
+    func testAvailableUpdateProvidesVersionTextAndReleaseBody() {
         let update = AvailableUpdate(
             release: release(
                 tagName: "v0.22.0",
@@ -1071,26 +1068,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             )
         )
 
-        let prompt = UpdatePromptContent.make(
-            for: update,
-            currentVersion: "0.21.0",
-            automaticCheck: true
-        )
-
-        XCTAssertEqual(prompt.messageText, "发现新版本 0.22.0")
-        XCTAssertTrue(prompt.informativeText.contains("当前版本：0.21.0"))
-        XCTAssertTrue(prompt.informativeText.contains("最新版本：0.22.0"))
-        XCTAssertTrue(prompt.informativeText.contains("NetBar 0.22.0"))
-        XCTAssertEqual(prompt.buttonTitles, ["下载并安装", "查看 Release 页面", "稍后提醒"])
-        XCTAssertFalse(prompt.buttonTitles.contains("知道了"))
-        XCTAssertEqual(prompt.releaseNotesText, "- 新增自动检测更新\n- 优化菜单栏交互")
-    }
-
-    func testUpdatePromptMapsAlertResponsesToActions() {
-        XCTAssertEqual(UpdatePromptAction.response(forButtonIndex: 0), .downloadAndInstall)
-        XCTAssertEqual(UpdatePromptAction.response(forButtonIndex: 1), .openReleasePage)
-        XCTAssertEqual(UpdatePromptAction.response(forButtonIndex: 2), .remindLater)
-        XCTAssertNil(UpdatePromptAction.response(forButtonIndex: 3))
+        XCTAssertEqual(update.versionText, "0.22.0")
+        XCTAssertEqual(update.release.body, "- 新增自动检测更新\n- 优化菜单栏交互")
+        XCTAssertEqual(update.release.name, "NetBar 0.22.0")
     }
 
     func testApplicationListSearchSortAndHideSystemProcesses() {

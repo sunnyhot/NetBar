@@ -7,7 +7,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let settings = StatusBarSettings()
     private let appPreferences = AppPreferences()
     private let customCharacterStore = CustomCharacterStore()
-    private let updater = AppUpdater()
+    private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         appPreferences: appPreferences,
