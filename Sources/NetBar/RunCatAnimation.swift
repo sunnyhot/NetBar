@@ -238,21 +238,17 @@ final class RunCatAnimation {
         let bps = Double(totalBytesPerSecond)
         let fps: Double
         if bps < 100 {
-            fps = 2.0
+            fps = 1.0
         } else if bps < 1_000 {
-            fps = 3.0
+            fps = 2.0
         } else if bps < 10_000 {
-            fps = 5.0
+            fps = 4.0
         } else if bps < 100_000 {
-            fps = 8.0
+            fps = 6.0
         } else if bps < 1_000_000 {
-            fps = 12.0
-        } else if bps < 10_000_000 {
-            fps = 16.0
-        } else if bps < 100_000_000 {
-            fps = 20.0
+            fps = 8.0
         } else {
-            fps = 24.0
+            fps = 10.0
         }
 
         baseInterval = 1.0 / fps
@@ -263,7 +259,7 @@ final class RunCatAnimation {
 
     private func scheduleTimer() {
         timer?.invalidate()
-        let interval = max(baseInterval / speedMultiplier, 1.0 / 30.0) // Cap at 30 FPS
+        let interval = max(baseInterval / speedMultiplier, 1.0 / 15.0) // Cap at 15 FPS
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.advanceFrame()
         }

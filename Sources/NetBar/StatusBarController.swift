@@ -95,6 +95,8 @@ final class StatusBarController {
     private var googlyEyesState: GooglyEyesRenderState?
     private var blinkResetTask: Task<Void, Never>?
     private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
+    private var renderCoalesceTimer: Timer?
+    private var needsRender = false
 
     init(
         monitor: NetworkMonitor,
@@ -125,6 +127,7 @@ final class StatusBarController {
 
     deinit {
         googlyEyesTimer?.invalidate()
+        renderCoalesceTimer?.invalidate()
         blinkResetTask?.cancel()
     }
 
@@ -142,14 +145,14 @@ final class StatusBarController {
 
     private func configureObservers() {
         monitor.$snapshot.sink { [weak self] _ in
-            self?.updateStatusItem()
+            self?.requestRender()
         }
         .store(in: &cancellables)
 
         settings.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 self?.setupCatAnimation()
-                self?.updateStatusItem()
+                self?.requestRender()
             }
         }
         .store(in: &cancellables)
@@ -157,7 +160,7 @@ final class StatusBarController {
         customCharacterStore.objectWillChange.sink { [weak self] _ in
             DispatchQueue.main.async {
                 self?.setupCatAnimation()
-                self?.updateStatusItem()
+                self?.requestRender()
             }
         }
         .store(in: &cancellables)
@@ -166,7 +169,7 @@ final class StatusBarController {
             DispatchQueue.main.async {
                 self?.lastRenderSignature = nil
                 self?.lastColorTimeBucket = nil
-                self?.updateStatusItem()
+                self?.requestRender()
             }
         }
         .store(in: &cancellables)
@@ -191,7 +194,7 @@ final class StatusBarController {
                     speedMultiplier: settings.catSpeedMultiplier,
                     onFrameChange: { [weak self] frameIndex in
                         self?.currentCatFrameIndex = frameIndex
-                        self?.updateStatusItem()
+                        self?.requestRender()
                     }
                 )
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
@@ -207,7 +210,7 @@ final class StatusBarController {
                     speedMultiplier: settings.catSpeedMultiplier,
                     onFrameChange: { [weak self] frameIndex in
                         self?.currentCatFrameIndex = frameIndex
-                        self?.updateStatusItem()
+                        self?.requestRender()
                     }
                 )
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
@@ -235,6 +238,25 @@ final class StatusBarController {
             currentCatFrameIndex = nil
             configureGooglyEyesTracking()
         }
+    }
+
+    private func requestRender() {
+        needsRender = true
+        guard renderCoalesceTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.flushRender()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        renderCoalesceTimer = timer
+    }
+
+    private func flushRender() {
+        renderCoalesceTimer = nil
+        guard needsRender else { return }
+        needsRender = false
+        updateStatusItem()
     }
 
     private func updateStatusItem() {
@@ -377,7 +399,7 @@ final class StatusBarController {
             self?.triggerGooglyEyesBlink()
         }
         guard googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 30.0, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
@@ -392,7 +414,7 @@ final class StatusBarController {
         guard let nextState = makeGooglyEyesState(isBlinking: isBlinking) else { return }
         guard nextState != googlyEyesState else { return }
         googlyEyesState = nextState
-        updateStatusItem()
+        requestRender()
     }
 
     private func activeGooglyEyesRenderState() -> GooglyEyesRenderState? {
@@ -422,13 +444,13 @@ final class StatusBarController {
         guard isGooglyEyesActive else { return }
         blinkResetTask?.cancel()
         googlyEyesState = makeGooglyEyesState(isBlinking: true)
-        updateStatusItem()
+        requestRender()
 
         blinkResetTask = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .milliseconds(160))
             guard let self, self.isGooglyEyesActive else { return }
             self.googlyEyesState = self.makeGooglyEyesState(isBlinking: false)
-            self.updateStatusItem()
+            self.requestRender()
         }
     }
 }
