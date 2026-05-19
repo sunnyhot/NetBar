@@ -110,55 +110,6 @@ struct UpdatePromptContent: Equatable {
     }
 }
 
-enum GitHubLatestReleaseLookup {
-    static func request(repository: String, currentVersion: String) throws -> URLRequest {
-        guard let url = URL(string: "https://github.com/\(repository)/releases/latest") else {
-            throw UpdateError.invalidUpdateURL
-        }
-
-        var request = URLRequest(url: url)
-        request.httpMethod = "HEAD"
-        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-        request.setValue("text/html,application/xhtml+xml", forHTTPHeaderField: "Accept")
-        return request
-    }
-
-    static func release(from responseURL: URL?, repository: String, assetName: String) throws -> GitHubRelease {
-        guard
-            let tagName = tagName(from: responseURL),
-            let htmlURL = URL(string: "https://github.com/\(repository)/releases/tag/\(tagName)"),
-            let assetURL = URL(string: "https://github.com/\(repository)/releases/download/\(tagName)/\(assetName)")
-        else {
-            throw UpdateError.latestReleaseRedirectMissing
-        }
-
-        return GitHubRelease(
-            tagName: tagName,
-            name: nil,
-            body: nil,
-            htmlURL: htmlURL,
-            assets: [
-                GitHubReleaseAsset(
-                    name: assetName,
-                    size: 0,
-                    browserDownloadURL: assetURL
-                )
-            ]
-        )
-    }
-
-    private static func tagName(from responseURL: URL?) -> String? {
-        guard let responseURL else { return nil }
-        let pathComponents = responseURL.pathComponents
-        guard
-            let tagIndex = pathComponents.firstIndex(of: "tag"),
-            pathComponents.indices.contains(pathComponents.index(after: tagIndex))
-        else {
-            return nil
-        }
-        return pathComponents[pathComponents.index(after: tagIndex)]
-    }
-}
 
 @MainActor
 final class AppUpdater: ObservableObject {
@@ -387,17 +338,17 @@ final class AppUpdater: ObservableObject {
     // MARK: - Network
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
-        let request = try GitHubLatestReleaseLookup.request(
-            repository: repository,
-            currentVersion: currentVersion
-        )
-        let (_, response) = try await URLSession.shared.data(for: request)
+        guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        var request = URLRequest(url: url)
+        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+
+        let (data, response) = try await URLSession.shared.data(for: request)
         try validateHTTPResponse(response)
-        return try GitHubLatestReleaseLookup.release(
-            from: response.url,
-            repository: repository,
-            assetName: assetName
-        )
+        return try JSONDecoder().decode(GitHubRelease.self, from: data)
     }
 
     private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
@@ -666,7 +617,7 @@ private final class UpdateDownloadDelegate: NSObject, URLSessionDownloadDelegate
 
 enum UpdateError: LocalizedError {
     case invalidUpdateURL
-    case latestReleaseRedirectMissing
+    case releaseFetchFailed
     case httpStatus(Int)
     case unzipFailed
     case appMissingFromArchive
@@ -679,8 +630,8 @@ enum UpdateError: LocalizedError {
         switch self {
         case .invalidUpdateURL:
             return "更新地址无效"
-        case .latestReleaseRedirectMissing:
-            return "无法解析 GitHub 最新版本地址"
+        case .releaseFetchFailed:
+            return "获取 GitHub 最新版本信息失败"
         case .httpStatus(let status):
             if status == 403 {
                 return "GitHub 请求受限（HTTP 403），稍后会自动重试"
