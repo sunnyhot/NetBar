@@ -127,6 +127,13 @@ enum GooglyEyesTracker {
     }
 }
 
+enum NetworkActivityLevel: Equatable {
+    case idle
+    case low
+    case moderate
+    case high
+}
+
 struct CharacterPreviewFrameTimeline: Equatable {
     private(set) var characterID: String?
     private(set) var frameIndex = 0
@@ -185,6 +192,10 @@ final class RunCatAnimation {
     private var rotationTimer: Timer?
     private var currentFrame: Int = 0
     private var isActive = false
+    private(set) var activityLevel: NetworkActivityLevel = .idle
+    private var idleStartTime: Date?
+    private(set) var isStatic: Bool = false
+    private static let staticModeThreshold: TimeInterval = 30.0
 
     // Rotation settings
     var rotationEnabled: Bool = false
@@ -210,10 +221,14 @@ final class RunCatAnimation {
     func setActive(_ active: Bool) {
         if active && !isActive {
             isActive = true
-            scheduleTimer()
+            if !isStatic {
+                scheduleTimer()
+            }
             scheduleRotationTimer()
         } else if !active && isActive {
             isActive = false
+            isStatic = false
+            idleStartTime = nil
             timer?.invalidate()
             timer = nil
             rotationTimer?.invalidate()
@@ -223,45 +238,81 @@ final class RunCatAnimation {
 
     func setSpeedMultiplier(_ multiplier: Double) {
         speedMultiplier = multiplier
-        if isActive {
+        if isActive && !isStatic {
             scheduleTimer()
         }
     }
 
     func updateNetworkSpeed(totalBytesPerSecond: UInt64) {
-        // Map network speed to animation FPS
-        // 0 B/s → ~2 FPS (idle)
-        // 1 KB/s → ~4 FPS
-        // 100 KB/s → ~8 FPS
-        // 1 MB/s → ~16 FPS
-        // 100 MB/s+ → ~24 FPS
         let bps = Double(totalBytesPerSecond)
+        let newLevel: NetworkActivityLevel
         let fps: Double
+
         if bps < 100 {
-            fps = 1.0
+            newLevel = .idle
+            fps = 0.5
         } else if bps < 1_000 {
-            fps = 2.0
+            newLevel = .low
+            fps = 1.0
         } else if bps < 10_000 {
-            fps = 4.0
+            newLevel = .moderate
+            fps = 2.0
         } else if bps < 100_000 {
+            newLevel = .high
             fps = 6.0
         } else if bps < 1_000_000 {
+            newLevel = .high
             fps = 8.0
         } else {
+            newLevel = .high
             fps = 10.0
         }
 
+        activityLevel = newLevel
+
+        if newLevel == .idle {
+            if idleStartTime == nil {
+                idleStartTime = Date()
+            }
+            if let idleStart = idleStartTime,
+               Date().timeIntervalSince(idleStart) >= Self.staticModeThreshold {
+                if !isStatic {
+                    enterStaticMode()
+                }
+                return
+            }
+        } else {
+            idleStartTime = nil
+            if isStatic {
+                exitStaticMode()
+            }
+        }
+
         baseInterval = 1.0 / fps
-        if isActive {
+        if isActive && !isStatic {
             scheduleTimer()
         }
     }
 
     private func scheduleTimer() {
+        guard !isStatic else { return }
         timer?.invalidate()
         let interval = max(baseInterval / speedMultiplier, 1.0 / 15.0) // Cap at 15 FPS
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.advanceFrame()
+        }
+    }
+
+    private func enterStaticMode() {
+        isStatic = true
+        timer?.invalidate()
+        timer = nil
+    }
+
+    private func exitStaticMode() {
+        isStatic = false
+        if isActive {
+            scheduleTimer()
         }
     }
 

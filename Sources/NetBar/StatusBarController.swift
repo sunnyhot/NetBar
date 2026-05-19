@@ -99,6 +99,7 @@ final class StatusBarController {
     private var needsRender = false
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
+    private var currentGooglyEyesInterval: TimeInterval = 1.0 / 15.0
 
     init(
         monitor: NetworkMonitor,
@@ -285,6 +286,7 @@ final class StatusBarController {
             catAnimation?.updateNetworkSpeed(
                 totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
             )
+            updateGooglyEyesTimerForActivity()
             if currentCatFrameIndex == nil {
                 currentCatFrameIndex = 0
             }
@@ -415,7 +417,9 @@ final class StatusBarController {
 
     private func resumeGooglyEyesTimer() {
         guard isGooglyEyesActive, googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+        let interval = googlyEyesTimerInterval()
+        currentGooglyEyesInterval = interval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
@@ -440,7 +444,9 @@ final class StatusBarController {
             self?.triggerGooglyEyesBlink()
         }
         guard googlyEyesTimer == nil else { return }
-        let timer = Timer(timeInterval: 1.0 / 15.0, repeats: true) { [weak self] _ in
+        let interval = googlyEyesTimerInterval()
+        currentGooglyEyesInterval = interval
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
@@ -456,6 +462,28 @@ final class StatusBarController {
         guard nextState != googlyEyesState else { return }
         googlyEyesState = nextState
         requestRender()
+    }
+
+    private func googlyEyesTimerInterval() -> TimeInterval {
+        if let cat = catAnimation, cat.activityLevel == .idle || cat.isStatic {
+            return 1.0 / 5.0
+        }
+        return 1.0 / 15.0
+    }
+
+    private func updateGooglyEyesTimerForActivity() {
+        guard isGooglyEyesActive, googlyEyesTimer != nil else { return }
+        let newInterval = googlyEyesTimerInterval()
+        guard abs(newInterval - currentGooglyEyesInterval) > 0.001 else { return }
+        currentGooglyEyesInterval = newInterval
+        googlyEyesTimer?.invalidate()
+        let timer = Timer(timeInterval: newInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshGooglyEyesState()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        googlyEyesTimer = timer
     }
 
     private func activeGooglyEyesRenderState() -> GooglyEyesRenderState? {
