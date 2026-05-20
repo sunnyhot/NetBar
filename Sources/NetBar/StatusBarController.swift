@@ -209,12 +209,17 @@ final class StatusBarController {
         powerObserver.$isScreenLocked
             .removeDuplicates()
             .sink { [weak self] isLocked in
+                guard let self else { return }
                 if isLocked {
-                    self?.catAnimation?.pauseForScreenLock()
-                    self?.pauseGooglyEyesTracking()
+                    self.catAnimation?.pauseForScreenLock()
+                    self.pauseGooglyEyesTracking()
+                    self.monitor.stop()
                 } else {
-                    self?.catAnimation?.resumeFromScreenLock()
-                    self?.configureGooglyEyesTracking()
+                    self.monitor.start()
+                    self.catAnimation?.resumeFromScreenLock()
+                    self.configureGooglyEyesTracking()
+                    self.lastRenderSignature = nil
+                    self.requestRender()
                 }
             }
             .store(in: &cancellables)
@@ -319,6 +324,7 @@ final class StatusBarController {
     }
 
     private func updateStatusItem() {
+        guard !powerObserver.isScreenLocked else { return }
         guard let button = statusItem.button else { return }
         let appearanceName = button.effectiveAppearance.name.rawValue
         let activeGooglyEyesState = activeGooglyEyesRenderState()

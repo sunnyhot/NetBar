@@ -245,15 +245,25 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         return (name, Int32(pidText))
     }
 
+    private static let displayNameCache = NSCache<NSNumber, NSString>()
+
     fileprivate static func displayNamePublic(for pid: Int32?, fallback: String) -> String {
+        guard let pid else { return fallback }
+
+        let key = NSNumber(value: pid)
+        if let cached = displayNameCache.object(forKey: key) {
+            return cached as String
+        }
+
         guard
-            let pid,
             let runningApplication = NSRunningApplication(processIdentifier: pid),
             let localizedName = runningApplication.localizedName,
             !localizedName.isEmpty
         else {
             return fallback
         }
+
+        displayNameCache.setObject(localizedName as NSString, forKey: key)
         return localizedName
     }
 }

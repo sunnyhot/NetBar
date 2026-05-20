@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.33.0 (2026-05-20)
+
+### Performance — Cache & Power Optimization
+
+Targeted caching and power-management optimizations to reduce CPU, energy, and IPC overhead.
+
+- **Display name cache** — Cache `NSRunningApplication` display name lookups by PID, eliminating repeated system IPC calls on every 5-second nettop sampling cycle
+- **System process classification cache** — Cache `isLikelySystemProcess()` results by application ID, avoiding repeated string normalization and set lookups on every SwiftUI layout pass
+- **App icon cache** — Cache resolved application icons by PID, preventing repeated disk I/O and IPC from SwiftUI view body evaluations when the popover is visible
+- **Screen lock full stop** — Stop all network monitoring timers and nettop processes when the screen is locked; resume automatically on wake for zero CPU/energy footprint during lock
+
+
 ## v0.32.0 (2026-05-19)
 
 ### Battery Optimization — Adaptive Power Management

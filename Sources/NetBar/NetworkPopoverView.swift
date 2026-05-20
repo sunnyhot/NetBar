@@ -462,14 +462,22 @@ private struct CompactMetric: View {
     }
 }
 
+private let appIconCache = NSCache<NSNumber, NSImage>()
+
 private struct AppBadge: View {
     let title: String
     let pids: [Int32]
 
     private var appIcon: NSImage? {
         for pid in pids {
-            if let app = NSRunningApplication(processIdentifier: pid) {
-                return app.icon
+            let key = NSNumber(value: pid)
+            if let cached = appIconCache.object(forKey: key) {
+                return cached
+            }
+            if let app = NSRunningApplication(processIdentifier: pid),
+               let icon = app.icon {
+                appIconCache.setObject(icon, forKey: key)
+                return icon
             }
         }
         return nil

@@ -51,7 +51,20 @@ enum ApplicationTrafficPresentation {
         }
     }
 
+    private static let systemProcessCache = NSCache<NSString, NSNumber>()
+
     static func isLikelySystemProcess(_ application: ApplicationTrafficRate) -> Bool {
+        let cacheKey = application.id as NSString
+        if let cached = systemProcessCache.object(forKey: cacheKey) {
+            return cached.boolValue
+        }
+
+        let result = _isLikelySystemProcess(application)
+        systemProcessCache.setObject(NSNumber(value: result), forKey: cacheKey)
+        return result
+    }
+
+    private static func _isLikelySystemProcess(_ application: ApplicationTrafficRate) -> Bool {
         let names = ([application.displayName] + application.processNames)
             .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
             .filter { !$0.isEmpty }
