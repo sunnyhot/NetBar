@@ -206,18 +206,6 @@ final class StatusBarController {
         }
         .store(in: &cancellables)
 
-        let nc = NotificationCenter.default
-        nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                self?.pauseGooglyEyesTracking()
-            }
-        }
-        nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
-            Task { @MainActor in
-                self?.resumeGooglyEyesTracking()
-            }
-        }
-
         powerObserver.$isScreenLocked
             .removeDuplicates()
             .sink { [weak self] isLocked in
