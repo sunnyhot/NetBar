@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.33.1 (2026-05-21)
+
+### Bug Fixes — Popover Speed Display & Interaction
+
+Fixes for three user-reported issues with the network speed popover.
+
+- **App-level speed summary row** — Add a summary row in the application traffic list showing aggregated app-level download/upload speeds, so users can compare against the interface-level total in the header
+- **Interface-level explanation text** — Add subtle explanation text below the header speed cards clarifying that the total speed is measured at the interface level and may differ from app-level totals
+- **Auto-dismiss logic fix** — Popover no longer auto-dismisses while the user is actively interacting with it; auto-close timer now only activates after the user leaves the window
+- **Right-aligned speed values** — Fix inconsistent alignment of speed values in the application traffic list using fixed-width trailing alignment
+
+
 ## v0.33.0 (2026-05-20)
 
 ### Performance — Cache & Power Optimization

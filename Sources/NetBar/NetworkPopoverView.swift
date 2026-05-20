@@ -107,6 +107,11 @@ private struct HeaderView: View {
                     symbol: "arrow.up"
                 )
             }
+
+            Text(appPreferences.text("接口级总速度，可能与应用级汇总存在差异", "Interface-level totals; may differ from app-level summary"))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.quaternary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -307,6 +312,34 @@ private struct ApplicationTrafficList: View {
                         .frame(width: 126)
                     }
                     .netBarCard(cornerRadius: 11, padding: 8)
+                }
+
+                if !appTraffic.applications.isEmpty {
+                    let totalDown = appTraffic.applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
+                    let totalUp = appTraffic.applications.reduce(0) { $0 + $1.uploadBytesPerSecond }
+
+                    HStack(spacing: 8) {
+                        Text(preferences.text("应用级汇总", "App-level Total"))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.tertiary)
+
+                        Spacer()
+
+                        HStack(spacing: 8) {
+                            CompactMetric(
+                                symbol: "arrow.down",
+                                value: ByteFormat.speed(totalDown),
+                                tint: .blue
+                            )
+                            CompactMetric(
+                                symbol: "arrow.up",
+                                value: ByteFormat.speed(totalUp),
+                                tint: .orange
+                            )
+                        }
+                    }
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
                 }
 
                 if visibleApplications.isEmpty {
