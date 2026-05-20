@@ -35,6 +35,7 @@ struct NetworkPopoverView: View {
 
                     ApplicationTrafficList(
                         appTraffic: monitor.appTraffic,
+                        snapshot: monitor.snapshot,
                         preferences: appPreferences,
                         searchText: $appSearchText,
                         retry: monitor.refreshApplicationTraffic
@@ -263,6 +264,7 @@ private struct SummaryCell: View {
 
 private struct ApplicationTrafficList: View {
     let appTraffic: ApplicationTrafficState
+    let snapshot: NetworkSnapshot
     @ObservedObject var preferences: AppPreferences
     @Binding var searchText: String
     let retry: () -> Void
@@ -273,6 +275,18 @@ private struct ApplicationTrafficList: View {
             preferences: preferences,
             searchText: searchText
         )
+    }
+
+    private var systemTraffic: (download: Double, upload: Double) {
+        let appDownloadTotal = visibleApplications.reduce(0) { $0 + $1.downloadBytesPerSecond }
+        let appUploadTotal = visibleApplications.reduce(0) { $0 + $1.uploadBytesPerSecond }
+        let systemDownload = max(snapshot.downloadBytesPerSecond - appDownloadTotal, 0)
+        let systemUpload = max(snapshot.uploadBytesPerSecond - appUploadTotal, 0)
+        return (systemDownload, systemUpload)
+    }
+
+    private var shouldShowSystemRow: Bool {
+        !visibleApplications.isEmpty && (systemTraffic.download > 0 || systemTraffic.upload > 0)
     }
 
     var body: some View {
@@ -319,6 +333,14 @@ private struct ApplicationTrafficList: View {
                     VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(application: application)
+                        }
+
+                        if shouldShowSystemRow {
+                            SystemTrafficRow(
+                                download: systemTraffic.download,
+                                upload: systemTraffic.upload,
+                                preferences: preferences
+                            )
                         }
                     }
                 }
@@ -444,6 +466,42 @@ private struct ApplicationTrafficRow: View {
             return "PID \(application.processLabel)"
         }
         return "\(processNames)  PID \(application.processLabel)"
+    }
+}
+
+private struct SystemTrafficRow: View {
+    let download: Double
+    let upload: Double
+    @ObservedObject var preferences: AppPreferences
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(preferences.text("系统/其他", "System/Other"))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+
+            Spacer()
+
+            HStack(spacing: 8) {
+                CompactMetric(
+                    symbol: "arrow.down",
+                    value: ByteFormat.speed(download),
+                    tint: .blue.opacity(0.6)
+                )
+                CompactMetric(
+                    symbol: "arrow.up",
+                    value: ByteFormat.speed(upload),
+                    tint: .orange.opacity(0.6)
+                )
+            }
+        }
+        .netBarCard(cornerRadius: 10, padding: 6)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(Color.primary.opacity(0.04), lineWidth: 0.5)
+        )
+        .opacity(0.75)
     }
 }
 
