@@ -97,12 +97,12 @@ final class StatusBarController {
     private var catAnimation: RunCatAnimation?
     private var currentCatFrameIndex: Int?
     private var currentCatCharacter: CharacterAsset = CharacterAsset(builtIn: .defaultCat)
-    private var googlyEyesTimer: Timer?
+    private var mouseMovedMonitorGlobal: Any?
+    private var mouseMovedMonitorLocal: Any?
     private var googlyEyesState: GooglyEyesRenderState?
     private var blinkResetTask: Task<Void, Never>?
     private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
     private var lastPolledMouseLocation: CGPoint?
-    private var isMouseNearStatusBar: Bool = true
     private var renderCoalesceTimer: Timer?
     private var needsRender = false
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
@@ -140,7 +140,12 @@ final class StatusBarController {
     }
 
     deinit {
-        googlyEyesTimer?.invalidate()
+        if let global = mouseMovedMonitorGlobal {
+            NSEvent.removeMonitor(global)
+        }
+        if let local = mouseMovedMonitorLocal {
+            NSEvent.removeMonitor(local)
+        }
         renderCoalesceTimer?.invalidate()
         blinkResetTask?.cancel()
     }
@@ -204,12 +209,12 @@ final class StatusBarController {
         let nc = NotificationCenter.default
         nc.addObserver(forName: NSApplication.didResignActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.pauseGooglyEyesTimer()
+                self?.pauseGooglyEyesTracking()
             }
         }
         nc.addObserver(forName: NSApplication.didBecomeActiveNotification, object: nil, queue: .main) { [weak self] _ in
             Task { @MainActor in
-                self?.resumeGooglyEyesTimer()
+                self?.resumeGooglyEyesTracking()
             }
         }
 
@@ -218,7 +223,7 @@ final class StatusBarController {
             .sink { [weak self] isLocked in
                 if isLocked {
                     self?.catAnimation?.pauseForScreenLock()
-                    self?.pauseGooglyEyesTimer()
+                    self?.pauseGooglyEyesTracking()
                 } else {
                     self?.catAnimation?.resumeFromScreenLock()
                     self?.configureGooglyEyesTracking()
@@ -299,10 +304,17 @@ final class StatusBarController {
         }
     }
 
+    private var currentRenderCoalesceInterval: TimeInterval {
+        if isGooglyEyesActive {
+            return 1.0 / 15.0
+        }
+        return renderCoalesceInterval
+    }
+
     private func requestRender() {
         needsRender = true
         guard renderCoalesceTimer == nil else { return }
-        let timer = Timer(timeInterval: renderCoalesceInterval, repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: currentRenderCoalesceInterval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.flushRender()
             }
@@ -328,7 +340,6 @@ final class StatusBarController {
             catAnimation?.updateNetworkSpeed(
                 totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
             )
-            rescheduleGooglyEyesIfNeeded()
             if currentCatFrameIndex == nil {
                 currentCatFrameIndex = 0
             }
@@ -476,68 +487,53 @@ final class StatusBarController {
         ).isGooglyEyes
     }
 
-    private func googlyEyesTargetFPS() -> Double {
-        let level = catAnimation?.activityLevel ?? .idle
-        switch level {
-        case .idle: return 5.0
-        default: return 15.0
+    private func pauseGooglyEyesTracking() {
+        if let global = mouseMovedMonitorGlobal {
+            NSEvent.removeMonitor(global)
+            mouseMovedMonitorGlobal = nil
         }
-    }
-
-    private func rescheduleGooglyEyesIfNeeded() {
-        guard isGooglyEyesActive, googlyEyesTimer != nil else { return }
-        let fps = googlyEyesTargetFPS()
-        let currentInterval = googlyEyesTimer?.timeInterval ?? 0
-        let targetInterval = 1.0 / fps
-        if !currentInterval.isEqual(to: targetInterval) {
-            googlyEyesTimer?.invalidate()
-            googlyEyesTimer = nil
-            resumeGooglyEyesTimer()
+        if let local = mouseMovedMonitorLocal {
+            NSEvent.removeMonitor(local)
+            mouseMovedMonitorLocal = nil
         }
+        googlyEyesClickMonitor.setActive(false)
+        lastPolledMouseLocation = nil
     }
 
-    private func pauseGooglyEyesTimer() {
-        googlyEyesTimer?.invalidate()
-        googlyEyesTimer = nil
-    }
-
-    private func resumeGooglyEyesTimer() {
-        guard isGooglyEyesActive, googlyEyesTimer == nil else { return }
-        let fps = googlyEyesTargetFPS()
-        let timer = Timer(timeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
+    private func resumeGooglyEyesTracking() {
+        guard isGooglyEyesActive else { return }
+        
+        googlyEyesClickMonitor.setActive(true) { [weak self] in
+            self?.triggerGooglyEyesBlink()
+        }
+        
+        guard mouseMovedMonitorGlobal == nil else { return }
+        
+        mouseMovedMonitorGlobal = NSEvent.addGlobalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshGooglyEyesState()
             }
         }
-        RunLoop.main.add(timer, forMode: .common)
-        googlyEyesTimer = timer
+        
+        mouseMovedMonitorLocal = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
+            Task { @MainActor in
+                self?.refreshGooglyEyesState()
+            }
+            return event
+        }
     }
 
     private func configureGooglyEyesTracking() {
         guard isGooglyEyesActive else {
-            googlyEyesTimer?.invalidate()
-            googlyEyesTimer = nil
+            pauseGooglyEyesTracking()
             googlyEyesState = nil
             blinkResetTask?.cancel()
             blinkResetTask = nil
-            googlyEyesClickMonitor.setActive(false)
-            lastPolledMouseLocation = nil
             return
         }
 
         refreshGooglyEyesState()
-        googlyEyesClickMonitor.setActive(true) { [weak self] in
-            self?.triggerGooglyEyesBlink()
-        }
-        guard googlyEyesTimer == nil else { return }
-        let fps = googlyEyesTargetFPS()
-        let timer = Timer(timeInterval: 1.0 / fps, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshGooglyEyesState()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        googlyEyesTimer = timer
+        resumeGooglyEyesTracking()
     }
 
     private func refreshGooglyEyesState() {
@@ -551,34 +547,11 @@ final class StatusBarController {
         }
         lastPolledMouseLocation = mouseLocation
 
-        // Distance-based frequency switching
-        let wasNearStatusBar = isMouseNearStatusBar
-        if let button = statusItem.button,
-           let frame = button.window?.convertToScreen(button.frame) {
-            isMouseNearStatusBar = abs(mouseLocation.y - frame.midY) < 500
-        }
-        if isMouseNearStatusBar != wasNearStatusBar {
-            updateGooglyEyesTimerInterval()
-        }
-
         let isBlinking = googlyEyesState?.isBlinking == true
         guard let nextState = makeGooglyEyesState(isBlinking: isBlinking) else { return }
         guard nextState != googlyEyesState else { return }
         googlyEyesState = nextState
         requestRender()
-    }
-
-    private func updateGooglyEyesTimerInterval() {
-        guard isGooglyEyesActive else { return }
-        googlyEyesTimer?.invalidate()
-        let interval = isMouseNearStatusBar ? 1.0 / 15.0 : 1.0 / 3.0
-        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshGooglyEyesState()
-            }
-        }
-        RunLoop.main.add(timer, forMode: .common)
-        googlyEyesTimer = timer
     }
 
     private func activeGooglyEyesRenderState() -> GooglyEyesRenderState? {
