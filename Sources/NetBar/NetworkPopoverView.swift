@@ -459,6 +459,7 @@ private struct CompactMetric: View {
             .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
+            .frame(minWidth: 72, alignment: .trailing)
     }
 }
 

@@ -2,7 +2,7 @@ import AppKit
 import SwiftUI
 
 enum DetailsWindowDismissalPolicy {
-    static let autoDismissInterval: TimeInterval = 10
+    static let autoDismissInterval: TimeInterval = 30
 
     static func shouldDismissClick(panelFrame: NSRect?, clickLocation: CGPoint) -> Bool {
         guard let panelFrame else { return false }
@@ -111,6 +111,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private var resignKeyObserver: Any?
     private var becomeKeyObserver: Any?
     private var escapeMonitor: Any?
+    private var activityMonitor: Any?
     private lazy var outsideClickMonitor = DetailsWindowOutsideClickMonitor { [weak self] in
         self?.panel?.frame
     }
@@ -143,6 +144,14 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         floatingPanel.makeKeyAndOrderFront(nil)
         outsideClickMonitor.setActive(true) { [weak self] in
             self?.closePanel()
+        }
+        activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
+            guard let self, let panel = self.panel, panel.isVisible else { return event }
+            let screenLocation = NSEvent.mouseLocation
+            if panel.frame.contains(screenLocation) {
+                self.scheduleAutoDismiss()
+            }
+            return event
         }
         scheduleAutoDismiss()
     }
@@ -206,7 +215,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
-                self?.scheduleAutoDismiss()
+                self?.cancelAutoDismissTimer()
             }
         }
 
@@ -245,6 +254,10 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private func closePanel() {
         guard let panel, panel.isVisible else { return }
         cancelAutoDismissTimer()
+        if let monitor = activityMonitor {
+            NSEvent.removeMonitor(monitor)
+            activityMonitor = nil
+        }
         outsideClickMonitor.setActive(false)
         monitor.isApplicationTrafficVisible = false
         panel.orderOut(nil)
