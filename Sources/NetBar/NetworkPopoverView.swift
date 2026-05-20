@@ -35,6 +35,8 @@ struct NetworkPopoverView: View {
 
                     ApplicationTrafficList(
                         appTraffic: monitor.appTraffic,
+                        totalDownloadBytesPerSecond: monitor.snapshot.downloadBytesPerSecond,
+                        totalUploadBytesPerSecond: monitor.snapshot.uploadBytesPerSecond,
                         preferences: appPreferences,
                         searchText: $appSearchText,
                         retry: monitor.refreshApplicationTraffic
@@ -263,6 +265,8 @@ private struct SummaryCell: View {
 
 private struct ApplicationTrafficList: View {
     let appTraffic: ApplicationTrafficState
+    let totalDownloadBytesPerSecond: Double
+    let totalUploadBytesPerSecond: Double
     @ObservedObject var preferences: AppPreferences
     @Binding var searchText: String
     let retry: () -> Void
@@ -273,6 +277,25 @@ private struct ApplicationTrafficList: View {
             preferences: preferences,
             searchText: searchText
         )
+    }
+
+    private var appTrafficTotal: (download: Double, upload: Double) {
+        let download = appTraffic.applications.reduce(0.0) { $0 + $1.downloadBytesPerSecond }
+        let upload = appTraffic.applications.reduce(0.0) { $0 + $1.uploadBytesPerSecond }
+        return (download, upload)
+    }
+
+    private var systemTraffic: (download: Double, upload: Double) {
+        let total = appTrafficTotal
+        return (
+            max(0, totalDownloadBytesPerSecond - total.download),
+            max(0, totalUploadBytesPerSecond - total.upload)
+        )
+    }
+
+    private var shouldShowSystemRow: Bool {
+        !appTraffic.applications.isEmpty
+            && (systemTraffic.download > 0.5 || systemTraffic.upload > 0.5)
     }
 
     var body: some View {
@@ -309,7 +332,7 @@ private struct ApplicationTrafficList: View {
                     .netBarCard(cornerRadius: 11, padding: 8)
                 }
 
-                if visibleApplications.isEmpty {
+                if visibleApplications.isEmpty && !shouldShowSystemRow {
                     AppTrafficNotice(
                         symbol: appTraffic.isRefreshing ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
                         title: appTraffic.isRefreshing ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
@@ -319,6 +342,14 @@ private struct ApplicationTrafficList: View {
                     VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(application: application)
+                        }
+
+                        if shouldShowSystemRow {
+                            SystemTrafficRow(
+                                download: systemTraffic.download,
+                                upload: systemTraffic.upload,
+                                preferences: preferences
+                            )
                         }
                     }
                 }
@@ -444,6 +475,50 @@ private struct ApplicationTrafficRow: View {
             return "PID \(application.processLabel)"
         }
         return "\(processNames)  PID \(application.processLabel)"
+    }
+}
+
+private struct SystemTrafficRow: View {
+    let download: Double
+    let upload: Double
+    @ObservedObject var preferences: AppPreferences
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(preferences.text("系", "S"))
+                .font(.system(size: 10, weight: .bold, design: .rounded))
+                .foregroundStyle(.white)
+                .frame(width: 24, height: 24)
+                .background(
+                    LinearGradient(
+                        colors: [.secondary.opacity(0.6), .secondary.opacity(0.35)],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    ),
+                    in: RoundedRectangle(cornerRadius: 6)
+                )
+
+            Text(preferences.text("系统 / 其他", "System / Other"))
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .frame(maxWidth: .infinity, alignment: .leading)
+
+            HStack(spacing: 8) {
+                CompactMetric(
+                    symbol: "arrow.down",
+                    value: ByteFormat.speed(download),
+                    tint: .blue
+                )
+                CompactMetric(
+                    symbol: "arrow.up",
+                    value: ByteFormat.speed(upload),
+                    tint: .orange
+                )
+            }
+        }
+        .netBarCard(cornerRadius: 10, padding: 6)
+        .opacity(0.75)
     }
 }
 
