@@ -9,8 +9,10 @@ final class GooglyEyesClickMonitor {
     private static let mouseClickEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
     static let mouseUpEvents: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp, .otherMouseUp]
 
-    private let addGlobalMonitor: MonitorInstaller
-    private let addLocalMonitor: MonitorInstaller
+    private let addGlobalDownMonitor: MonitorInstaller
+    private let addLocalDownMonitor: MonitorInstaller
+    private let addGlobalUpMonitor: MonitorInstaller
+    private let addLocalUpMonitor: MonitorInstaller
     private let removeMonitor: (Any) -> Void
     private var monitorTokens: [Any] = []
     private var onMouseDown: (() -> Void)?
@@ -18,19 +20,36 @@ final class GooglyEyesClickMonitor {
     private var isActive = false
 
     init(
-        addGlobalMonitor: MonitorInstaller? = nil,
-        addLocalMonitor: MonitorInstaller? = nil,
+        addGlobalDownMonitor: MonitorInstaller? = nil,
+        addLocalDownMonitor: MonitorInstaller? = nil,
+        addGlobalUpMonitor: MonitorInstaller? = nil,
+        addLocalUpMonitor: MonitorInstaller? = nil,
         removeMonitor: @escaping (Any) -> Void = { NSEvent.removeMonitor($0) }
     ) {
-        self.addGlobalMonitor = addGlobalMonitor ?? { handler in
+        self.addGlobalDownMonitor = addGlobalDownMonitor ?? { handler in
             NSEvent.addGlobalMonitorForEvents(matching: Self.mouseClickEvents) { _ in
                 Task { @MainActor in
                     handler()
                 }
             }
         }
-        self.addLocalMonitor = addLocalMonitor ?? { handler in
+        self.addLocalDownMonitor = addLocalDownMonitor ?? { handler in
             NSEvent.addLocalMonitorForEvents(matching: Self.mouseClickEvents) { event in
+                Task { @MainActor in
+                    handler()
+                }
+                return event
+            }
+        }
+        self.addGlobalUpMonitor = addGlobalUpMonitor ?? { handler in
+            NSEvent.addGlobalMonitorForEvents(matching: Self.mouseUpEvents) { _ in
+                Task { @MainActor in
+                    handler()
+                }
+            }
+        }
+        self.addLocalUpMonitor = addLocalUpMonitor ?? { handler in
+            NSEvent.addLocalMonitorForEvents(matching: Self.mouseUpEvents) { event in
                 Task { @MainActor in
                     handler()
                 }
@@ -61,16 +80,16 @@ final class GooglyEyesClickMonitor {
     }
 
     private func installMonitors() {
-        if let globalDown = addGlobalMonitor({ [weak self] in self?.handleMouseDown() }) {
+        if let globalDown = addGlobalDownMonitor({ [weak self] in self?.handleMouseDown() }) {
             monitorTokens.append(globalDown)
         }
-        if let localDown = addLocalMonitor({ [weak self] in self?.handleMouseDown() }) {
+        if let localDown = addLocalDownMonitor({ [weak self] in self?.handleMouseDown() }) {
             monitorTokens.append(localDown)
         }
-        if let globalUp = addGlobalMonitor({ [weak self] in self?.handleMouseUp() }) {
+        if let globalUp = addGlobalUpMonitor({ [weak self] in self?.handleMouseUp() }) {
             monitorTokens.append(globalUp)
         }
-        if let localUp = addLocalMonitor({ [weak self] in self?.handleMouseUp() }) {
+        if let localUp = addLocalUpMonitor({ [weak self] in self?.handleMouseUp() }) {
             monitorTokens.append(localUp)
         }
     }
@@ -421,7 +440,6 @@ final class StatusBarController {
     }
 
     @objc private func toggleDetailsWindow(_ sender: AnyObject?) {
-        triggerGooglyEyesBlink()
         if NSApplication.shared.currentEvent?.type == .rightMouseUp {
             showStatusMenu()
             return

@@ -492,16 +492,26 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testGooglyEyesClickMonitorTriggersBlinkFromGlobalAndLocalClicks() {
-        var globalHandlers: [() -> Void] = []
-        var localHandlers: [() -> Void] = []
+        var globalDownHandlers: [() -> Void] = []
+        var localDownHandlers: [() -> Void] = []
+        var globalUpHandlers: [() -> Void] = []
+        var localUpHandlers: [() -> Void] = []
         let monitor = GooglyEyesClickMonitor(
-            addGlobalMonitor: { handler in
-                globalHandlers.append(handler)
-                return MonitorToken(name: "global")
+            addGlobalDownMonitor: { handler in
+                globalDownHandlers.append(handler)
+                return MonitorToken(name: "globalDown")
             },
-            addLocalMonitor: { handler in
-                localHandlers.append(handler)
-                return MonitorToken(name: "local")
+            addLocalDownMonitor: { handler in
+                localDownHandlers.append(handler)
+                return MonitorToken(name: "localDown")
+            },
+            addGlobalUpMonitor: { handler in
+                globalUpHandlers.append(handler)
+                return MonitorToken(name: "globalUp")
+            },
+            addLocalUpMonitor: { handler in
+                localUpHandlers.append(handler)
+                return MonitorToken(name: "localUp")
             },
             removeMonitor: { _ in }
         )
@@ -515,18 +525,20 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
 
         // 4 handlers installed: globalDown, localDown, globalUp, localUp
-        XCTAssertEqual(globalHandlers.count, 2)
-        XCTAssertEqual(localHandlers.count, 2)
+        XCTAssertEqual(globalDownHandlers.count, 1)
+        XCTAssertEqual(localDownHandlers.count, 1)
+        XCTAssertEqual(globalUpHandlers.count, 1)
+        XCTAssertEqual(localUpHandlers.count, 1)
 
-        // Simulate mouseDown events (first handler in each list)
-        globalHandlers[0]()
-        localHandlers[0]()
+        // Simulate mouseDown events
+        globalDownHandlers[0]()
+        localDownHandlers[0]()
         XCTAssertEqual(downCount, 2)
         XCTAssertEqual(upCount, 0)
 
-        // Simulate mouseUp events (second handler in each list)
-        globalHandlers[1]()
-        localHandlers[1]()
+        // Simulate mouseUp events
+        globalUpHandlers[0]()
+        localUpHandlers[0]()
         XCTAssertEqual(downCount, 2)
         XCTAssertEqual(upCount, 2)
     }
@@ -535,13 +547,21 @@ final class PreferencesAndPresentationTests: XCTestCase {
         var installCount = 0
         var removedTokens: [String] = []
         let monitor = GooglyEyesClickMonitor(
-            addGlobalMonitor: { _ in
+            addGlobalDownMonitor: { _ in
                 installCount += 1
-                return MonitorToken(name: "global")
+                return MonitorToken(name: "globalDown")
             },
-            addLocalMonitor: { _ in
+            addLocalDownMonitor: { _ in
                 installCount += 1
-                return MonitorToken(name: "local")
+                return MonitorToken(name: "localDown")
+            },
+            addGlobalUpMonitor: { _ in
+                installCount += 1
+                return MonitorToken(name: "globalUp")
+            },
+            addLocalUpMonitor: { _ in
+                installCount += 1
+                return MonitorToken(name: "localUp")
             },
             removeMonitor: { token in
                 removedTokens.append((token as? MonitorToken)?.name ?? "unknown")
@@ -555,7 +575,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         // 4 monitors: globalDown + localDown + globalUp + localUp
         XCTAssertEqual(installCount, 4)
-        XCTAssertEqual(removedTokens.sorted(), ["global", "global", "local", "local"])
+        XCTAssertEqual(removedTokens.sorted(), ["globalDown", "globalUp", "localDown", "localUp"])
     }
 
     func testCharacterSizePositionAndFacingDefaultPersistAndClamp() {
