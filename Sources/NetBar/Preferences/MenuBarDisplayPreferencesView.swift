@@ -33,7 +33,7 @@ struct MenuBarDisplaySection: View {
     }
 
     var body: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.display.title(language: appPreferences.resolvedLanguage)) {
+        VStack(alignment: .leading, spacing: 10) {
             MenuBarSubsectionHeader(
                 systemImage: "textformat.size",
                 title: appPreferences.text("文字样式", "Text Style")
@@ -63,7 +63,19 @@ struct MenuBarDisplaySection: View {
                 title: appPreferences.text("背景", "Background")
             )
 
-            Toggle(appPreferences.text("透明背景", "Transparent background"), isOn: transparentBackgroundBinding)
+            Toggle(appPreferences.text("透明背景", "Transparent background"), isOn: Binding(
+                get: { !settings.showsBackground },
+                set: { isTransparent in
+                    withAnimation(NetBarMotion.settle) {
+                        settings.showsBackground = !isTransparent
+                        if isTransparent {
+                            settings.backgroundOpacity = 0
+                        } else if settings.backgroundOpacity == 0 {
+                            settings.backgroundOpacity = 0.8
+                        }
+                    }
+                }
+            ))
 
             if settings.showsBackground {
                 ColorPicker(appPreferences.text("背景颜色", "Background color"), selection: backgroundColorBinding, supportsOpacity: true)
@@ -76,8 +88,8 @@ struct MenuBarDisplaySection: View {
                 )
 
                 Text(appPreferences.text(
-                    "启用背景时会使用 Retina bitmap 渲染；透明背景会使用原生菜单栏文字渲染，性能和清晰度更稳。",
-                    "Backgrounds use Retina bitmap rendering. Transparent mode uses native menu bar text for steadier performance and clarity."
+                    "启用背景时使用 Retina bitmap 渲染；透明背景使用原生菜单栏文字渲染。",
+                    "Backgrounds use Retina bitmap rendering. Transparent mode uses native text rendering."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)

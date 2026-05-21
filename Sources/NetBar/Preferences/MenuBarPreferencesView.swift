@@ -195,7 +195,7 @@ struct MenuBarPreferencesView: View {
         ) {
             Toggle(appPreferences.text("启用角色", "Enable Character"), isOn: Binding(
                 get: { settings.showsCat },
-                set: { withAnimation(NetBarMotion.settle) { settings.showsCat = $0 } }
+                set: { newValue in withAnimation(NetBarMotion.settle) { settings.showsCat = newValue } }
             ))
 
             if settings.showsCat {
@@ -417,6 +417,7 @@ struct MenuBarPreferencesView: View {
         ]
     }
 
+    @ViewBuilder
     private var animationContent: some View {
         if settings.showsCat {
             VStack(alignment: .leading, spacing: 10) {
@@ -453,7 +454,7 @@ struct MenuBarPreferencesView: View {
                 Toggle(appPreferences.text("摇头效果", "Head Swing"), isOn: $settings.catHeadSwing)
                 Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: Binding(
                     get: { settings.catRotationEnabled },
-                    set: { withAnimation(NetBarMotion.settle) { settings.catRotationEnabled = $0 } }
+                    set: { newValue in withAnimation(NetBarMotion.settle) { settings.catRotationEnabled = newValue } }
                 ))
 
                 if settings.catRotationEnabled {

@@ -5,7 +5,7 @@ struct MenuBarLayoutSection: View {
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.layout.title(language: appPreferences.resolvedLanguage)) {
+        VStack(alignment: .leading, spacing: 10) {
             Toggle(appPreferences.text("自动宽度", "Automatic width"), isOn: $settings.usesAutomaticWidth)
 
             if !settings.usesAutomaticWidth {
