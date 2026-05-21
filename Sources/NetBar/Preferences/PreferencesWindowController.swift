@@ -64,16 +64,18 @@ private struct PreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
     @ObservedObject var updater: AppUpdater
+    @State private var selectedTab = 0
 
     var body: some View {
         VStack(spacing: 16) {
             PreferencesHeroHeader(appPreferences: appPreferences, updater: updater)
 
-            TabView {
+            TabView(selection: $selectedTab) {
                 GeneralPreferencesView(appPreferences: appPreferences)
                     .tabItem {
                         Label(appPreferences.text("通用", "General"), systemImage: "gearshape")
                     }
+                    .tag(0)
 
                 MenuBarPreferencesView(
                     settings: settings,
@@ -83,12 +85,15 @@ private struct PreferencesView: View {
                     .tabItem {
                         Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
                     }
+                    .tag(1)
 
                 AboutPreferencesView(appPreferences: appPreferences, updater: updater)
                     .tabItem {
                         Label(appPreferences.text("关于", "About"), systemImage: "info.circle")
                     }
+                    .tag(2)
             }
+            .animation(.easeInOut(duration: 0.2), value: selectedTab)
         }
         .padding(20)
         .frame(minWidth: 620, minHeight: 520)
