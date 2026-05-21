@@ -1,0 +1,64 @@
+name: Release macOS App
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    name: Build & Release
+    runs-on: macos-15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing NetBar version: $VERSION"
+
+      - name: Update version in Info.plist
+        run: |
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.version }}" Resources/Info.plist
+
+      - name: Build macOS App
+        run: |
+          chmod +x Scripts/build-app.sh
+          ./Scripts/build-app.sh
+
+      - name: Verify build
+        run: |
+          test -d "build/NetBar.app" || { echo "Build failed"; exit 1; }
+          test -x "build/NetBar.app/Contents/MacOS/NetBar" || { echo "Executable not found"; exit 1; }
+          echo "Build verified: $(du -sh build/NetBar.app)"
+
+      - name: Package
+        run: |
+          mkdir -p dist
+          /usr/bin/ditto -c -k --keepParent build/NetBar.app dist/NetBar.app.zip
+          cd dist
+          shasum -a 256 NetBar.app.zip > NetBar.app.zip.sha256
+          echo "Package contents:"
+          ls -lh
+
+      - name: Run tests
+        run: swift test
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: NetBar ${{ steps.version.outputs.tag }}
+          files: |
+            dist/NetBar.app.zip
+            dist/NetBar.app.zip.sha256
+          draft: false
+          prerelease: false
