@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.34.4 (2026-05-22)
+
+### Bug Fix — CI 测试修复
+
+修复 CI 中两个预已存在的测试失败，使 release workflow 能正常通过。
+
+- 修正 `testDetailsWindowAutoDismissInterval` 期望值 10→30（匹配实际 autoDismissInterval）
+- 修正 `testNetworkTotalsExcludeVirtualProxyInterfaces` 为 async 测试（refresh() 内部是 Task.detached 异步执行）
+
+### 涉及子 issue
+
+- [LUC-192](mention://issue/7cfdc145-9449-401b-bf0d-85bda02f9f17) 角色眼睛状态Bug：鼠标点击任意区域后眼睛闭合，松开后未恢复睁开
+
 ## v0.34.3 (2026-05-22)
 
 ### Bug Fix — 角色眼睛点击后不恢复睁开
