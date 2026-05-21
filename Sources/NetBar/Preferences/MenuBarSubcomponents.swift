@@ -2,31 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-// MARK: - Menu Bar Group Enum
-
-enum MenuBarPreferenceGroup: String, CaseIterable {
-    case preview
-    case display
-    case character
-    case animation
-    case layout
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .preview:
-            return language.text("实时预览", "Live Preview")
-        case .display:
-            return language.text("显示内容", "Display")
-        case .character:
-            return language.text("角色", "Character")
-        case .animation:
-            return language.text("动画与轮换", "Animation & Rotation")
-        case .layout:
-            return language.text("宽度与布局", "Width & Layout")
-        }
-    }
-}
-
 // MARK: - Menu Bar Subsection Header
 
 struct MenuBarSubsectionHeader: View {
