@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.34.3 (2026-05-22)
+
+### Bug Fix — 角色眼睛点击后不恢复睁开
+
+修复角色眼睛在鼠标点击任意区域后闭合，松开后无法恢复睁开状态的 bug。
+
+- 拆分 Down/Up monitor installer，使 mouseUp 事件被正确监听
+- 移除 toggleDetailsWindow 中多余的 triggerGooglyEyesBlink() 调用
+
+### 涉及子 issue
+
+- [LUC-193] 修复 googly eyes mouseUp 事件监听缺失
+
+
 ## v0.34.2 (2026-05-21)
 
 ### Bug Fix — 开机自启动 Dock 图标问题
