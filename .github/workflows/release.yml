@@ -1,0 +1,81 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  build-macos:
+    runs-on: macos-15
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+
+      - name: Stamp app version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Resources/Info.plist
+
+      - name: Build release package
+        run: |
+          ./Scripts/package-release.sh
+          test -s dist/NetBar.app.zip
+          test -s dist/NetBar.app.zip.sha256
+          unzip -t dist/NetBar.app.zip
+
+      - name: Verify bundled version
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          BUNDLED_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" build/NetBar.app/Contents/Info.plist)
+          if [ "${BUNDLED_VERSION}" != "${VERSION}" ]; then
+            echo "Expected bundle version ${VERSION}, got ${BUNDLED_VERSION}"
+            exit 1
+          fi
+
+      - name: Generate release notes
+        id: notes
+        run: |
+          CURRENT_TAG="${{ steps.version.outputs.tag }}"
+          PREV_TAG=$(git tag --sort=-v:refname | grep -vxF "${CURRENT_TAG}" | head -1 || true)
+
+          if [ -n "${PREV_TAG}" ]; then
+            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges)
+          else
+            COMMITS=$(git log -10 --pretty=format:"- %s" --no-merges)
+          fi
+
+          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
+          echo "body<<${EOF}" >> "$GITHUB_OUTPUT"
+          echo "## NetBar ${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "${COMMITS}" >> "$GITHUB_OUTPUT"
+          echo "" >> "$GITHUB_OUTPUT"
+          echo "---" >> "$GITHUB_OUTPUT"
+          echo "Automated build by GitHub Actions" >> "$GITHUB_OUTPUT"
+          echo "${EOF}" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: NetBar ${{ steps.version.outputs.tag }}
+          body: ${{ steps.notes.outputs.body }}
+          files: |
+            dist/NetBar.app.zip
+            dist/NetBar.app.zip.sha256
