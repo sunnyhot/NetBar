@@ -5,11 +5,21 @@ import SwiftUI
 
 struct PreferenceSection<Content: View>: View {
     let title: String
+    var systemImage: String? = nil
     @ViewBuilder var content: Content
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            NetBarSectionHeader(title: title)
+            HStack(spacing: 6) {
+                if let systemImage {
+                    Image(systemName: systemImage)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.primary)
+            }
 
             VStack(alignment: .leading, spacing: 10) {
                 content
