@@ -37,16 +37,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updater.startAutomaticChecks()
 
-        guard !appPreferences.hasCompletedOnboarding else { return }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-            self?.statusBarController?.showDetailsWindow()
-        }
-
         // 延迟重申 activation policy，确保开机自启动场景下 Dock 图标正确隐藏
         if !appPreferences.showsDockIcon {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.applyActivationPolicy()
             }
+        }
+
+        guard !appPreferences.hasCompletedOnboarding else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
+            self?.statusBarController?.showDetailsWindow()
         }
     }
 
