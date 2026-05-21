@@ -146,10 +146,35 @@ struct MenuBarPreferencesView: View {
                     selectedCharacterAsset: selectedCharacterAsset()
                 )
 
-                MenuBarDisplaySection(settings: settings, appPreferences: appPreferences)
+                // Display section — always expanded
+                CollapsiblePreferenceSection(
+                    title: MenuBarPreferenceGroup.display.title(language: appPreferences.resolvedLanguage),
+                    systemImage: MenuBarPreferenceGroup.display.systemImage,
+                    defaultExpanded: true
+                ) {
+                    MenuBarDisplaySection(settings: settings, appPreferences: appPreferences)
+                }
+
+                // Character section — always expanded
                 characterPreferences
-                animationPreferences
-                MenuBarLayoutSection(settings: settings, appPreferences: appPreferences)
+
+                // Animation section — collapsed by default
+                CollapsiblePreferenceSection(
+                    title: MenuBarPreferenceGroup.animation.title(language: appPreferences.resolvedLanguage),
+                    systemImage: MenuBarPreferenceGroup.animation.systemImage,
+                    defaultExpanded: false
+                ) {
+                    animationContent
+                }
+
+                // Layout section — collapsed by default
+                CollapsiblePreferenceSection(
+                    title: MenuBarPreferenceGroup.layout.title(language: appPreferences.resolvedLanguage),
+                    systemImage: MenuBarPreferenceGroup.layout.systemImage,
+                    defaultExpanded: false
+                ) {
+                    MenuBarLayoutSection(settings: settings, appPreferences: appPreferences)
+                }
 
                 HStack {
                     Spacer()
@@ -163,8 +188,15 @@ struct MenuBarPreferencesView: View {
     }
 
     private var characterPreferences: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.character.title(language: appPreferences.resolvedLanguage)) {
-            Toggle(appPreferences.text("启用角色", "Enable Character"), isOn: $settings.showsCat)
+        CollapsiblePreferenceSection(
+            title: MenuBarPreferenceGroup.character.title(language: appPreferences.resolvedLanguage),
+            systemImage: MenuBarPreferenceGroup.character.systemImage,
+            defaultExpanded: true
+        ) {
+            Toggle(appPreferences.text("启用角色", "Enable Character"), isOn: Binding(
+                get: { settings.showsCat },
+                set: { withAnimation(NetBarMotion.settle) { settings.showsCat = $0 } }
+            ))
 
             if settings.showsCat {
                 MenuBarSubsectionHeader(
@@ -328,31 +360,21 @@ struct MenuBarPreferencesView: View {
             }
 
             if settings.catColorMode == CatColorMode.solid.rawValue {
-                HStack {
-                    Text(appPreferences.text("纯色", "Solid Color"))
-                        .font(.subheadline)
+                HStack(spacing: 6) {
+                    ForEach(presetColors, id: \.0) { color, _ in
+                        ColorSwatch(
+                            color: color,
+                            isSelected: settings.catColor.swiftUIColor == color
+                        ) {
+                            applyCatColor(color)
+                        }
+                    }
+
                     ColorPicker("", selection: Binding(
                         get: { settings.catColor.swiftUIColor },
                         set: { applyCatColor($0) }
                     ))
                     .labelsHidden()
-
-                    HStack(spacing: 4) {
-                        PresetColorButton(color: Color.white, label: "白", settings: settings)
-                        PresetColorButton(color: Color.black, label: "黑", settings: settings)
-                        PresetColorButton(color: Color.red, label: "红", settings: settings)
-                        PresetColorButton(color: Color.orange, label: "橙", settings: settings)
-                        PresetColorButton(color: Color.yellow, label: "黄", settings: settings)
-                        PresetColorButton(color: Color.green, label: "绿", settings: settings)
-                        PresetColorButton(color: Color.cyan, label: "青", settings: settings)
-                        PresetColorButton(color: Color.blue, label: "蓝", settings: settings)
-                        PresetColorButton(color: Color.purple, label: "紫", settings: settings)
-                    }
-
-                    Button(appPreferences.text("重置", "Reset")) {
-                        settings.catColor = .white
-                    }
-                    .font(.system(size: 10))
                 }
             }
 
@@ -371,8 +393,8 @@ struct MenuBarPreferencesView: View {
                         .foregroundColor(.orange)
                         .font(.system(size: 10))
                     Text(appPreferences.text(
-                        "系统文字颜色会覆盖角色颜色，已自动切换为自定义颜色",
-                        "System text color overrides character color, auto-switched to custom color"
+                        "系统文字颜色会覆盖角色颜色",
+                        "System text color overrides character color"
                     ))
                     .font(.system(size: 10))
                     .foregroundColor(.orange)
@@ -381,9 +403,23 @@ struct MenuBarPreferencesView: View {
         }
     }
 
-    private var animationPreferences: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.animation.title(language: appPreferences.resolvedLanguage)) {
-            if settings.showsCat {
+    private var presetColors: [(Color, String)] {
+        [
+            (.white, "白"),
+            (.black, "黑"),
+            (.red, "红"),
+            (.orange, "橙"),
+            (.yellow, "黄"),
+            (.green, "绿"),
+            (.cyan, "青"),
+            (.blue, "蓝"),
+            (.purple, "紫"),
+        ]
+    }
+
+    private var animationContent: some View {
+        if settings.showsCat {
+            VStack(alignment: .leading, spacing: 10) {
                 Picker(appPreferences.text("角色位置", "Character Position"), selection: $settings.catPosition) {
                     ForEach(StatusBarCharacterPosition.allCases) { position in
                         Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
@@ -412,25 +448,20 @@ struct MenuBarPreferencesView: View {
                     displayValue: String(format: "%.1fx", settings.catSpeedMultiplier)
                 )
 
-                Text(appPreferences.text(
-                    "速度倍率影响动画快慢：1.0x 为默认，2.0x 为两倍速，0.5x 为半速。",
-                    "Speed multiplier affects animation rate: 1.0x is default, 2.0x is double speed, 0.5x is half speed."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
-                .fixedSize(horizontal: false, vertical: true)
-
                 Divider()
 
                 Toggle(appPreferences.text("摇头效果", "Head Swing"), isOn: $settings.catHeadSwing)
-                Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: $settings.catRotationEnabled)
+                Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: Binding(
+                    get: { settings.catRotationEnabled },
+                    set: { withAnimation(NetBarMotion.settle) { settings.catRotationEnabled = $0 } }
+                ))
 
                 if settings.catRotationEnabled {
                     SliderPreference(
                         title: appPreferences.text("轮换间隔", "Rotation Interval"),
                         value: $settings.catRotationIntervalMinutes,
                         range: 1...60,
-                        displayValue: String(format: "%.0f分钟", settings.catRotationIntervalMinutes)
+                        displayValue: String(format: "%.0f", settings.catRotationIntervalMinutes)
                     )
 
                     let pool = rotationPoolSet
@@ -467,14 +498,16 @@ struct MenuBarPreferencesView: View {
                         }
                     }
                 }
-            } else {
+            }
+        } else {
+            AnyView(
                 Text(appPreferences.text(
-                    "启用角色后可配置动画速度、朝向与轮换。",
-                    "Enable the character to configure speed, facing, and rotation."
+                    "启用角色后可配置动画与轮换。",
+                    "Enable the character to configure animation and rotation."
                 ))
                 .font(.system(size: 11))
                 .foregroundStyle(.tertiary)
-            }
+            )
         }
     }
 
