@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.34.2 (2026-05-21)
+
+### Bug Fix — 开机自启动 Dock 图标问题
+
+修复"开机自启动 + Dock 不显示"配置下，Dock 图标残留和点击弹出不可操作窗口的两个 bug。
+
+- 修复 `applicationShouldHandleReopen`：只在 `showsDockIcon == true` 时才弹出窗口
+- 延迟重申 activation policy：确保开机自启动场景下 Dock 图标正确隐藏
+
+### 涉及子 issue
+
+- [LUC-191] 修复开机自启动后 Dock 图标残留 + 点击弹出不可关闭窗口
+
+
 ## v0.34.1 (2026-05-21)
 
 ### Bug Fix — Googly Eyes Click Interaction

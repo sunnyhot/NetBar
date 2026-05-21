@@ -37,6 +37,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updater.startAutomaticChecks()
 
+        // 延迟重申 activation policy，确保开机自启动场景下 Dock 图标正确隐藏
+        if !appPreferences.showsDockIcon {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.applyActivationPolicy()
+            }
+        }
+
         guard !appPreferences.hasCompletedOnboarding else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.statusBarController?.showDetailsWindow()
@@ -44,7 +51,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        statusBarController?.showDetailsWindow()
+        if appPreferences.showsDockIcon {
+            statusBarController?.showDetailsWindow()
+        }
         return false
     }
 
