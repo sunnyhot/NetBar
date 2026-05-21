@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.34.1 (2026-05-21)
+
+### Bug Fix — Googly Eyes Click Interaction
+
+Fixes the googly eyes character interaction so the eye open/close state correctly tracks the mouse button state.
+
+- **mouseDown/mouseUp tracking** — Replace the hardcoded 160ms blink-reset timer with proper mouseDown → close eyes, mouseUp → open eyes event handling
+- **Remove blinkResetTask** — Eliminate the `blinkResetTask` timer that caused eyes to automatically reopen regardless of mouse button state
+- **Dual-callback GooglyEyesClickMonitor** — Refactor `GooglyEyesClickMonitor` to support separate `onMouseDown` and `onMouseUp` callbacks with 4 event monitors (globalDown + localDown + globalUp + localUp)
+- **New `endGooglyEyesBlink()` method** — Clean eye-opening method called on mouseUp, replacing timer-based reset
+- **Test updates** — Update tests to verify mouseDown/mouseUp event separation and 4-monitor installation/removal
+
+## v0.34.0 (2026-05-21)
+
+### UI — Preferences Window Refactor
+
+Settings page restructuring: split the monolithic PreferencesWindowController into modular files and redesign the UI.
+
+- **File splitting** — Split `PreferencesWindowController.swift` (1277 lines) into 11 focused files under `Sources/NetBar/Preferences/`
+- **UI redesign** — Redesigned preferences views with collapsible sections and improved layout
+- **Animation interaction** — Improved menu bar animation preferences with conditional animations
+- **Character grid** — New `CharacterGridCard` and `ColorSwatch` components for character selection
+
 ## v0.33.1 (2026-05-21)
 
 ### Bug Fixes — Popover Speed Display & Interaction

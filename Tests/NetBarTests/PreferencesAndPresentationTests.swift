@@ -492,29 +492,43 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testGooglyEyesClickMonitorTriggersBlinkFromGlobalAndLocalClicks() {
-        var globalClick: (() -> Void)?
-        var localClick: (() -> Void)?
+        var globalHandlers: [() -> Void] = []
+        var localHandlers: [() -> Void] = []
         let monitor = GooglyEyesClickMonitor(
             addGlobalMonitor: { handler in
-                globalClick = handler
+                globalHandlers.append(handler)
                 return MonitorToken(name: "global")
             },
             addLocalMonitor: { handler in
-                localClick = handler
+                localHandlers.append(handler)
                 return MonitorToken(name: "local")
             },
             removeMonitor: { _ in }
         )
 
-        var blinkCount = 0
-        monitor.setActive(true) {
-            blinkCount += 1
-        }
+        var downCount = 0
+        var upCount = 0
+        monitor.setActive(
+            true,
+            onMouseDown: { downCount += 1 },
+            onMouseUp: { upCount += 1 }
+        )
 
-        globalClick?()
-        localClick?()
+        // 4 handlers installed: globalDown, localDown, globalUp, localUp
+        XCTAssertEqual(globalHandlers.count, 2)
+        XCTAssertEqual(localHandlers.count, 2)
 
-        XCTAssertEqual(blinkCount, 2)
+        // Simulate mouseDown events (first handler in each list)
+        globalHandlers[0]()
+        localHandlers[0]()
+        XCTAssertEqual(downCount, 2)
+        XCTAssertEqual(upCount, 0)
+
+        // Simulate mouseUp events (second handler in each list)
+        globalHandlers[1]()
+        localHandlers[1]()
+        XCTAssertEqual(downCount, 2)
+        XCTAssertEqual(upCount, 2)
     }
 
     func testGooglyEyesClickMonitorDoesNotDuplicateMonitorsAndRemovesThemWhenInactive() {
@@ -534,13 +548,14 @@ final class PreferencesAndPresentationTests: XCTestCase {
             }
         )
 
-        monitor.setActive(true) {}
-        monitor.setActive(true) {}
-        monitor.setActive(false) {}
-        monitor.setActive(false) {}
+        monitor.setActive(true, onMouseDown: {}, onMouseUp: {})
+        monitor.setActive(true, onMouseDown: {}, onMouseUp: {})
+        monitor.setActive(false)
+        monitor.setActive(false)
 
-        XCTAssertEqual(installCount, 2)
-        XCTAssertEqual(removedTokens.sorted(), ["global", "local"])
+        // 4 monitors: globalDown + localDown + globalUp + localUp
+        XCTAssertEqual(installCount, 4)
+        XCTAssertEqual(removedTokens.sorted(), ["global", "global", "local", "local"])
     }
 
     func testCharacterSizePositionAndFacingDefaultPersistAndClamp() {
