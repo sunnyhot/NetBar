@@ -84,14 +84,9 @@ private struct PreferencesView: View {
                         Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
                     }
 
-                ApplicationPreferencesView(appPreferences: appPreferences)
+                AboutPreferencesView(appPreferences: appPreferences, updater: updater)
                     .tabItem {
-                        Label(appPreferences.text("应用", "Apps"), systemImage: "app.connected.to.app.below.fill")
-                    }
-
-                UpdatePreferencesView(appPreferences: appPreferences, updater: updater)
-                    .tabItem {
-                        Label(appPreferences.text("更新", "Updates"), systemImage: "arrow.triangle.2.circlepath")
+                        Label(appPreferences.text("关于", "About"), systemImage: "info.circle")
                     }
             }
         }

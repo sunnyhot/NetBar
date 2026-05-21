@@ -1,0 +1,329 @@
+import AppKit
+import Combine
+import SwiftUI
+
+// MARK: - Menu Bar Group Enum
+
+enum MenuBarPreferenceGroup: String, CaseIterable {
+    case preview
+    case display
+    case character
+    case animation
+    case layout
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .preview:
+            return language.text("实时预览", "Live Preview")
+        case .display:
+            return language.text("显示内容", "Display")
+        case .character:
+            return language.text("角色", "Character")
+        case .animation:
+            return language.text("动画与轮换", "Animation & Rotation")
+        case .layout:
+            return language.text("宽度与布局", "Width & Layout")
+        }
+    }
+}
+
+// MARK: - Menu Bar Subsection Header
+
+struct MenuBarSubsectionHeader: View {
+    let systemImage: String
+    let title: String
+
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: systemImage)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .frame(width: 14)
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.secondary)
+        }
+    }
+}
+
+// MARK: - Character Choice Label
+
+struct CharacterChoiceLabel<Icon: View>: View {
+    let title: String
+    let isSelected: Bool
+    @ViewBuilder var icon: Icon
+
+    var body: some View {
+        HStack(spacing: 5) {
+            Circle()
+                .fill(isSelected ? Color.accentColor : Color.clear)
+                .frame(width: 6, height: 6)
+            icon
+            Text(title)
+                .font(.system(size: 12))
+                .lineLimit(1)
+                .minimumScaleFactor(0.82)
+        }
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
+        )
+    }
+}
+
+// MARK: - Status Bar Preview
+
+struct StatusBarPreview: View {
+    @ObservedObject var settings: StatusBarSettings
+    @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
+    let catFrameIndex: Int?
+
+    private let previewSnapshot = NetworkSnapshot(
+        timestamp: Date(timeIntervalSince1970: 0),
+        interfaces: [],
+        downloadBytesPerSecond: 1_280_000,
+        uploadBytesPerSecond: 84_000,
+        totalReceivedBytes: 0,
+        totalSentBytes: 0,
+        sampleCount: 1
+    )
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(appPreferences.text("菜单栏预览", "Menu Bar Preview"))
+                .font(.system(size: 12, weight: .bold))
+
+            HStack {
+                Spacer()
+                let presentation = StatusBarDisplayRenderer.presentation(
+                    snapshot: previewSnapshot,
+                    settings: settings,
+                    customCharacterStore: customCharacterStore,
+                    catFrameIndex: catFrameIndex
+                )
+
+                if presentation.kind == .nativeTitle {
+                    Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
+                        .multilineTextAlignment(textAlignment)
+                        .frame(
+                            width: presentation.width,
+                            height: max(NSStatusBar.system.thickness, 24)
+                        )
+                } else {
+                    Image(nsImage: StatusBarDisplayRenderer.image(
+                        snapshot: previewSnapshot,
+                        settings: settings,
+                        customCharacterStore: customCharacterStore,
+                        catFrameIndex: catFrameIndex
+                    ))
+                    .frame(
+                        width: presentation.width,
+                        height: max(NSStatusBar.system.thickness, 24)
+                    )
+                }
+                Spacer()
+            }
+            .frame(height: 48)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Color(nsColor: .underPageBackgroundColor))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8)
+                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+                    )
+            )
+        }
+    }
+
+    private var textAlignment: TextAlignment {
+        switch settings.alignment {
+        case .leading:
+            return .leading
+        case .center:
+            return .center
+        case .trailing:
+            return .trailing
+        }
+    }
+}
+
+// MARK: - Menu Bar Settings Summary
+
+struct MenuBarSettingsSummary: View {
+    @ObservedObject var settings: StatusBarSettings
+    @ObservedObject var appPreferences: AppPreferences
+    let characterName: String
+
+    var body: some View {
+        HStack(spacing: 8) {
+            NetBarBadge(
+                text: settings.showsCat ? characterName : appPreferences.text("无角色", "No character"),
+                tone: settings.showsCat ? .download : .neutral
+            )
+            NetBarBadge(
+                text: settings.usesAutomaticWidth ? appPreferences.text("自动宽度", "Auto width") : appPreferences.text("手动宽度", "Manual width"),
+                tone: .neutral
+            )
+            NetBarBadge(
+                text: settings.showsBackground ? appPreferences.text("背景开启", "Background on") : appPreferences.text("透明背景", "Transparent"),
+                tone: settings.showsBackground ? .success : .neutral
+            )
+            if settings.showsCat {
+                NetBarBadge(text: String(format: "%.1fx", settings.catSpeedMultiplier), tone: .upload)
+            }
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Character Picker Preview Icon
+
+struct CharacterPickerPreviewIcon: View {
+    let character: RunCatCharacter
+    let frameIndex: Int
+
+    private static let imageCache = NSCache<NSString, NSImage>()
+
+    var body: some View {
+        Group {
+            if let image = Self.cachedImage(for: character, frameIndex: frameIndex) {
+                Image(nsImage: image)
+                    .renderingMode(character.isTemplate ? .template : .original)
+                    .resizable()
+                    .interpolation(.none)
+                    .aspectRatio(contentMode: .fit)
+            } else {
+                Image(systemName: character.isGooglyEyes ? "eye" : "questionmark.square.dashed")
+                    .symbolRenderingMode(.hierarchical)
+                    .resizable()
+                    .aspectRatio(contentMode: .fit)
+            }
+        }
+        .foregroundStyle(.primary)
+        .frame(width: 24, height: 18)
+        .accessibilityHidden(true)
+    }
+
+    private static func cachedImage(for character: RunCatCharacter, frameIndex: Int) -> NSImage? {
+        let safeFrameIndex = frameIndex % max(character.frameCount, 1)
+        let cacheKey = "\(character.id)_\(safeFrameIndex)" as NSString
+
+        if let cached = imageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let image = loadFromDisk(character: character, frameIndex: safeFrameIndex)
+        if let image {
+            imageCache.setObject(image, forKey: cacheKey)
+        }
+        return image
+    }
+
+    private static func loadFromDisk(character: RunCatCharacter, frameIndex: Int) -> NSImage? {
+        let resourcePath = "RunCat/\(character.id)"
+        if let url = Bundle.main.url(
+            forResource: "frame_\(frameIndex)",
+            withExtension: "png",
+            subdirectory: resourcePath
+        ) {
+            return NSImage(contentsOf: url)
+        }
+        if let resourcePath = Bundle.main.resourcePath {
+            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(frameIndex).png"))
+        }
+        return nil
+    }
+}
+
+// MARK: - Animated Preview Section
+
+struct AnimatedPreviewSection: View {
+    @ObservedObject var settings: StatusBarSettings
+    @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
+    let selectedCharacterAsset: CharacterAsset
+
+    @State private var previewFrameTimeline = CharacterPreviewFrameTimeline()
+
+    private static let previewFrameInterval: TimeInterval = 1.0 / 8.0
+
+    private var selectedPreviewFrameIndex: Int? {
+        guard settings.showsCat else { return nil }
+        return previewFrameTimeline.frameIndex(for: selectedCharacterAsset)
+    }
+
+    var body: some View {
+        PreferenceSection(title: MenuBarPreferenceGroup.preview.title(language: appPreferences.resolvedLanguage)) {
+            StatusBarPreview(
+                settings: settings,
+                appPreferences: appPreferences,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: selectedPreviewFrameIndex
+            )
+
+            MenuBarSettingsSummary(
+                settings: settings,
+                appPreferences: appPreferences,
+                characterName: selectedCharacterAsset.displayName
+            )
+        }
+        .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .common).autoconnect()) { _ in
+            guard settings.showsCat else {
+                previewFrameTimeline.reset()
+                return
+            }
+            previewFrameTimeline.advance(for: selectedCharacterAsset)
+        }
+    }
+}
+
+// MARK: - Animated Character Catalog
+
+struct AnimatedCharacterCatalog: View {
+    @ObservedObject var settings: StatusBarSettings
+    let characterPickerFrameTick: Int?
+
+    @State private var frameTick = 0
+
+    private static let frameInterval: TimeInterval = 1.0 / 8.0
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
+                VStack(alignment: .leading, spacing: 5) {
+                    Text(category.rawValue)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(.secondary)
+
+                    let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 118))], spacing: 5) {
+                        ForEach(charsInCategory) { character in
+                            Button(action: {
+                                settings.catCharacter = character.id
+                            }) {
+                                CharacterChoiceLabel(
+                                    title: character.displayName,
+                                    isSelected: settings.catCharacter == character.id
+                                ) {
+                                    CharacterPickerPreviewIcon(
+                                        character: character,
+                                        frameIndex: frameTick
+                                    )
+                                }
+                            }
+                            .buttonStyle(.plain)
+                        }
+                    }
+                }
+            }
+        }
+        .onReceive(Timer.publish(every: Self.frameInterval, on: .main, in: .common).autoconnect()) { _ in
+            frameTick = (frameTick + 1) % 10_000
+        }
+    }
+}
