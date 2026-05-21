@@ -25,6 +25,16 @@ enum MenuBarPreferenceGroup: String, CaseIterable {
             return language.text("宽度与布局", "Width & Layout")
         }
     }
+
+    var systemImage: String {
+        switch self {
+        case .preview: return "eye"
+        case .display: return "textformat.size"
+        case .character: return "pawprint"
+        case .animation: return "waveform.path"
+        case .layout: return "rectangle.split.3x1"
+        }
+    }
 }
 
 // MARK: - Menu Bar Subsection Header
@@ -46,7 +56,41 @@ struct MenuBarSubsectionHeader: View {
     }
 }
 
-// MARK: - Character Choice Label
+// MARK: - Character Grid Card
+
+struct CharacterGridCard: View {
+    let character: RunCatCharacter
+    let isSelected: Bool
+    let frameIndex: Int
+
+    var body: some View {
+        VStack(spacing: 4) {
+            CharacterPickerPreviewIcon(
+                character: character,
+                frameIndex: frameIndex
+            )
+            .frame(width: 28, height: 22)
+
+            Text(character.displayName)
+                .font(.system(size: 10))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity)
+        .padding(.vertical, 6)
+        .padding(.horizontal, 4)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? Color.accentColor.opacity(0.12) : Color.primary.opacity(0.03))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.06), lineWidth: isSelected ? 1.5 : 0.5)
+        )
+    }
+}
+
+// MARK: - Character Choice Label (legacy, kept for custom characters)
 
 struct CharacterChoiceLabel<Icon: View>: View {
     let title: String
@@ -93,50 +137,67 @@ struct StatusBarPreview: View {
     )
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text(appPreferences.text("菜单栏预览", "Menu Bar Preview"))
-                .font(.system(size: 12, weight: .bold))
+        HStack {
+            Spacer()
+            let presentation = StatusBarDisplayRenderer.presentation(
+                snapshot: previewSnapshot,
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex
+            )
 
-            HStack {
-                Spacer()
-                let presentation = StatusBarDisplayRenderer.presentation(
-                    snapshot: previewSnapshot,
-                    settings: settings,
-                    customCharacterStore: customCharacterStore,
-                    catFrameIndex: catFrameIndex
-                )
-
-                if presentation.kind == .nativeTitle {
-                    Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
-                        .multilineTextAlignment(textAlignment)
-                        .frame(
-                            width: presentation.width,
-                            height: max(NSStatusBar.system.thickness, 24)
-                        )
-                } else {
-                    Image(nsImage: StatusBarDisplayRenderer.image(
-                        snapshot: previewSnapshot,
-                        settings: settings,
-                        customCharacterStore: customCharacterStore,
-                        catFrameIndex: catFrameIndex
-                    ))
+            if presentation.kind == .nativeTitle {
+                Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
+                    .multilineTextAlignment(textAlignment)
                     .frame(
                         width: presentation.width,
                         height: max(NSStatusBar.system.thickness, 24)
                     )
-                }
-                Spacer()
+            } else {
+                Image(nsImage: StatusBarDisplayRenderer.image(
+                    snapshot: previewSnapshot,
+                    settings: settings,
+                    customCharacterStore: customCharacterStore,
+                    catFrameIndex: catFrameIndex
+                ))
+                .frame(
+                    width: presentation.width,
+                    height: max(NSStatusBar.system.thickness, 24)
+                )
             }
-            .frame(height: 48)
-            .background(
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Color(nsColor: .underPageBackgroundColor))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
-                    )
-            )
+            Spacer()
         }
+        .frame(height: 56)
+        .background(
+            ZStack {
+                // Grid guidelines background
+                Canvas { context, size in
+                    let gridColor = Color.primary.opacity(0.04)
+                    let gridSpacing: CGFloat = 20
+                    var path = Path()
+                    var x: CGFloat = gridSpacing
+                    while x < size.width {
+                        path.move(to: CGPoint(x: x, y: 0))
+                        path.addLine(to: CGPoint(x: x, y: size.height))
+                        x += gridSpacing
+                    }
+                    var y: CGFloat = gridSpacing
+                    while y < size.height {
+                        path.move(to: CGPoint(x: 0, y: y))
+                        path.addLine(to: CGPoint(x: size.width, y: y))
+                        y += gridSpacing
+                    }
+                    context.stroke(path, with: .color(gridColor), lineWidth: 0.5)
+                }
+                RoundedRectangle(cornerRadius: 10)
+                    .fill(Color(nsColor: .underPageBackgroundColor))
+            }
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .strokeBorder(Color.primary.opacity(0.06), lineWidth: 0.5)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        )
     }
 
     private var textAlignment: TextAlignment {
@@ -178,6 +239,25 @@ struct MenuBarSettingsSummary: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+}
+
+// MARK: - Color Swatch (circular preset color)
+
+struct ColorSwatch: View {
+    let color: Color
+    let isSelected: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Circle()
+            .fill(color)
+            .frame(width: 22, height: 22)
+            .overlay(
+                Circle()
+                    .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.15), lineWidth: isSelected ? 2.5 : 0.5)
+            )
+            .onTapGesture { onTap() }
     }
 }
 
@@ -297,24 +377,20 @@ struct AnimatedCharacterCatalog: View {
             ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
                 VStack(alignment: .leading, spacing: 5) {
                     Text(category.rawValue)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
 
                     let charsInCategory = RunCatCharacter.allCharacters.filter { $0.category == category }
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 118))], spacing: 5) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: 60))], spacing: 6) {
                         ForEach(charsInCategory) { character in
                             Button(action: {
                                 settings.catCharacter = character.id
                             }) {
-                                CharacterChoiceLabel(
-                                    title: character.displayName,
-                                    isSelected: settings.catCharacter == character.id
-                                ) {
-                                    CharacterPickerPreviewIcon(
-                                        character: character,
-                                        frameIndex: frameTick
-                                    )
-                                }
+                                CharacterGridCard(
+                                    character: character,
+                                    isSelected: settings.catCharacter == character.id,
+                                    frameIndex: frameTick
+                                )
                             }
                             .buttonStyle(.plain)
                         }
