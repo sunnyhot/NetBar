@@ -23,10 +23,37 @@ struct MenuBarPreferencesView: View {
                     selectedCharacterAsset: characterSection.selectedCharacterAsset()
                 )
 
-                MenuBarDisplaySection(settings: settings, appPreferences: appPreferences)
-                characterSection
-                MenuBarAnimationSection(settings: settings, appPreferences: appPreferences)
-                MenuBarLayoutSection(settings: settings, appPreferences: appPreferences)
+                CollapsiblePreferenceSection(
+                    title: appPreferences.text("显示内容", "Display"),
+                    systemImage: "textformat.size",
+                    defaultExpanded: true
+                ) {
+                    MenuBarDisplaySectionContent(settings: settings, appPreferences: appPreferences)
+                }
+
+                CollapsiblePreferenceSection(
+                    title: appPreferences.text("角色", "Character"),
+                    systemImage: "pawprint",
+                    defaultExpanded: true
+                ) {
+                    characterSection
+                }
+
+                CollapsiblePreferenceSection(
+                    title: appPreferences.text("动画与轮换", "Animation & Rotation"),
+                    systemImage: "hare",
+                    defaultExpanded: false
+                ) {
+                    MenuBarAnimationSection(settings: settings, appPreferences: appPreferences)
+                }
+
+                CollapsiblePreferenceSection(
+                    title: appPreferences.text("宽度与布局", "Width & Layout"),
+                    systemImage: "rectangle.split.3x1",
+                    defaultExpanded: false
+                ) {
+                    MenuBarLayoutSectionContent(settings: settings, appPreferences: appPreferences)
+                }
 
                 HStack {
                     Spacer()

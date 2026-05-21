@@ -3,6 +3,55 @@ import SwiftUI
 
 // MARK: - Shared Preference UI Components
 
+struct CollapsiblePreferenceSection<Content: View>: View {
+    let title: String
+    let systemImage: String?
+    @State private var isExpanded: Bool
+    @ViewBuilder var content: Content
+
+    init(title: String, systemImage: String? = nil, defaultExpanded: Bool = true, @ViewBuilder content: () -> Content) {
+        self.title = title
+        self.systemImage = systemImage
+        self._isExpanded = State(initialValue: defaultExpanded)
+        self.content = content()
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Button {
+                withAnimation(NetBarMotion.settle) {
+                    isExpanded.toggle()
+                }
+            } label: {
+                HStack {
+                    if let systemImage {
+                        Image(systemName: systemImage)
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 14)
+                    }
+                    NetBarSectionHeader(title: title)
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                }
+            }
+            .buttonStyle(.plain)
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 10) {
+                    content
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .netBarCard(cornerRadius: 12, padding: 12)
+                .transition(.opacity.combined(with: .move(edge: .top)).animation(NetBarMotion.settle))
+            }
+        }
+    }
+}
+
 struct PreferenceSection<Content: View>: View {
     let title: String
     var systemImage: String? = nil
