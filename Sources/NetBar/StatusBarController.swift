@@ -6,13 +6,15 @@ import SwiftUI
 final class GooglyEyesClickMonitor {
     typealias MonitorInstaller = (@escaping () -> Void) -> Any?
 
-    private static let mouseClickEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+    private static let mouseDownEvents: NSEvent.EventTypeMask = [.leftMouseDown, .rightMouseDown, .otherMouseDown]
+    private static let mouseUpEvents: NSEvent.EventTypeMask = [.leftMouseUp, .rightMouseUp, .otherMouseUp]
 
     private let addGlobalMonitor: MonitorInstaller
     private let addLocalMonitor: MonitorInstaller
     private let removeMonitor: (Any) -> Void
     private var monitorTokens: [Any] = []
-    private var onClick: (() -> Void)?
+    private var onMouseDown: (() -> Void)?
+    private var onMouseUp: (() -> Void)?
     private var isActive = false
 
     init(
@@ -21,14 +23,14 @@ final class GooglyEyesClickMonitor {
         removeMonitor: @escaping (Any) -> Void = { NSEvent.removeMonitor($0) }
     ) {
         self.addGlobalMonitor = addGlobalMonitor ?? { handler in
-            NSEvent.addGlobalMonitorForEvents(matching: Self.mouseClickEvents) { _ in
+            NSEvent.addGlobalMonitorForEvents(matching: Self.mouseDownEvents) { _ in
                 Task { @MainActor in
                     handler()
                 }
             }
         }
         self.addLocalMonitor = addLocalMonitor ?? { handler in
-            NSEvent.addLocalMonitorForEvents(matching: Self.mouseClickEvents) { event in
+            NSEvent.addLocalMonitorForEvents(matching: Self.mouseDownEvents) { event in
                 Task { @MainActor in
                     handler()
                 }
@@ -42,26 +44,36 @@ final class GooglyEyesClickMonitor {
         monitorTokens.forEach(removeMonitor)
     }
 
-    func setActive(_ active: Bool, onClick: @escaping () -> Void = {}) {
+    func setActive(_ active: Bool, onMouseDown: @escaping () -> Void = {}, onMouseUp: @escaping () -> Void = {}) {
         if active {
-            self.onClick = onClick
+            self.onMouseDown = onMouseDown
+            self.onMouseUp = onMouseUp
             guard !isActive else { return }
             isActive = true
             installMonitors()
         } else {
             guard isActive else { return }
             isActive = false
-            self.onClick = nil
+            self.onMouseDown = nil
+            self.onMouseUp = nil
             removeMonitors()
         }
     }
 
     private func installMonitors() {
-        if let globalMonitor = addGlobalMonitor({ [weak self] in self?.handleClick() }) {
-            monitorTokens.append(globalMonitor)
+        // MouseDown monitors
+        if let globalDown = addGlobalMonitor({ [weak self] in self?.handleMouseDown() }) {
+            monitorTokens.append(globalDown)
         }
-        if let localMonitor = addLocalMonitor({ [weak self] in self?.handleClick() }) {
-            monitorTokens.append(localMonitor)
+        if let localDown = addLocalMonitor({ [weak self] in self?.handleMouseDown() }) {
+            monitorTokens.append(localDown)
+        }
+        // MouseUp monitors
+        if let globalUp = addGlobalMonitor({ [weak self] in self?.handleMouseUp() }) {
+            monitorTokens.append(globalUp)
+        }
+        if let localUp = addLocalMonitor({ [weak self] in self?.handleMouseUp() }) {
+            monitorTokens.append(localUp)
         }
     }
 
@@ -70,8 +82,12 @@ final class GooglyEyesClickMonitor {
         monitorTokens.removeAll()
     }
 
-    private func handleClick() {
-        onClick?()
+    private func handleMouseDown() {
+        onMouseDown?()
+    }
+
+    private func handleMouseUp() {
+        onMouseUp?()
     }
 }
 
@@ -100,7 +116,6 @@ final class StatusBarController {
     private var mouseMovedMonitorGlobal: Any?
     private var mouseMovedMonitorLocal: Any?
     private var googlyEyesState: GooglyEyesRenderState?
-    private var blinkResetTask: Task<Void, Never>?
     private let googlyEyesClickMonitor = GooglyEyesClickMonitor()
     private var lastPolledMouseLocation: CGPoint?
     private var renderCoalesceTimer: Timer?
@@ -147,7 +162,6 @@ final class StatusBarController {
             NSEvent.removeMonitor(local)
         }
         renderCoalesceTimer?.invalidate()
-        blinkResetTask?.cancel()
     }
 
     private func configureStatusItem() {
@@ -497,9 +511,11 @@ final class StatusBarController {
     private func resumeGooglyEyesTracking() {
         guard isGooglyEyesActive else { return }
         
-        googlyEyesClickMonitor.setActive(true) { [weak self] in
-            self?.triggerGooglyEyesBlink()
-        }
+        googlyEyesClickMonitor.setActive(
+            true,
+            onMouseDown: { [weak self] in self?.triggerGooglyEyesBlink() },
+            onMouseUp: { [weak self] in self?.endGooglyEyesBlink() }
+        )
         
         guard mouseMovedMonitorGlobal == nil else { return }
         
@@ -521,8 +537,6 @@ final class StatusBarController {
         guard isGooglyEyesActive else {
             pauseGooglyEyesTracking()
             googlyEyesState = nil
-            blinkResetTask?.cancel()
-            blinkResetTask = nil
             return
         }
 
@@ -573,15 +587,13 @@ final class StatusBarController {
 
     private func triggerGooglyEyesBlink() {
         guard isGooglyEyesActive else { return }
-        blinkResetTask?.cancel()
         googlyEyesState = makeGooglyEyesState(isBlinking: true)
         requestRender()
+    }
 
-        blinkResetTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .milliseconds(160))
-            guard let self, self.isGooglyEyesActive else { return }
-            self.googlyEyesState = self.makeGooglyEyesState(isBlinking: false)
-            self.requestRender()
-        }
+    private func endGooglyEyesBlink() {
+        guard isGooglyEyesActive else { return }
+        googlyEyesState = makeGooglyEyesState(isBlinking: false)
+        requestRender()
     }
 }
