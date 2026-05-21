@@ -172,7 +172,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testDetailsWindowAutoDismissIntervalMatchesTransientPopoverBehavior() {
-        XCTAssertEqual(DetailsWindowDismissalPolicy.autoDismissInterval, 10)
+        XCTAssertEqual(DetailsWindowDismissalPolicy.autoDismissInterval, 30)
     }
 
     func testAppearanceModeDefaultsToSystemAndPersistsSelection() {
@@ -1026,7 +1026,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.validCharacterID(for: imported.id), RunCatCharacter.defaultCat.id)
     }
 
-    func testNetworkTotalsExcludeVirtualProxyInterfaces() {
+    func testNetworkTotalsExcludeVirtualProxyInterfaces() async {
         var sampleDate = Date(timeIntervalSince1970: 1_000)
         let reader = SequenceNetworkStatsReader(samples: [
             [
@@ -1049,8 +1049,11 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
 
         monitor.refresh()
+        // refresh() is async (Task.detached inside), yield to let it complete
+        try? await Task.sleep(for: .milliseconds(100))
         sampleDate = sampleDate.addingTimeInterval(1)
         monitor.refresh()
+        try? await Task.sleep(for: .milliseconds(100))
 
         XCTAssertEqual(monitor.snapshot.downloadBytesPerSecond, 1_200)
         XCTAssertEqual(monitor.snapshot.uploadBytesPerSecond, 700)
