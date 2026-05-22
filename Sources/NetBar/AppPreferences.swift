@@ -137,6 +137,45 @@ enum AppAppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+/// Describes whether the app shows a Dock icon or runs as a menu-bar-only app.
+///
+/// Use this type instead of manually writing `showsDockIcon ? .regular : .accessory`
+/// or checking `!showsDockIcon` — the semantic name makes intent explicit at every call site.
+enum DockIconVisibility: String, CaseIterable, Identifiable {
+    /// App appears in both the Dock and the menu bar.
+    case visible
+    /// App runs as a menu-bar-only app (no Dock icon, activation policy = `.accessory`).
+    case menuBarOnly
+
+    var id: String { rawValue }
+
+    var title: String {
+        title(language: .simplifiedChinese)
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .visible:
+            return language.text("显示 Dock 图标", "Show Dock icon")
+        case .menuBarOnly:
+            return language.text("仅菜单栏", "Menu bar only")
+        }
+    }
+
+    /// The corresponding `NSApplication.ActivationPolicy` for this visibility mode.
+    var activationPolicy: NSApplication.ActivationPolicy {
+        switch self {
+        case .visible:    return .regular
+        case .menuBarOnly: return .accessory
+        }
+    }
+
+    /// Whether the Dock icon is currently visible.
+    var showsDockIcon: Bool {
+        self == .visible
+    }
+}
+
 protocol LoginItemManaging: AnyObject {
     func refreshStatus() -> Bool
     func setEnabled(_ isEnabled: Bool) throws
@@ -158,6 +197,8 @@ final class MainAppLoginItemManager: LoginItemManaging {
 
 @MainActor
 final class AppPreferences: ObservableObject {
+    /// Backing Bool storage — `true` means Dock icon visible, `false` means menu-bar-only.
+    /// Prefer using ``dockIconVisibility`` / ``setDockIconVisibility(_:)`` for clearer semantics.
     @Published var showsDockIcon: Bool { didSet { save() } }
     @Published var hidesSystemProcesses: Bool { didSet { save() } }
     @Published var applicationSort: ApplicationSortMode { didSet { save() } }
@@ -189,6 +230,19 @@ final class AppPreferences: ObservableObject {
 
     var resolvedLanguage: AppLanguage {
         language.resolved
+    }
+
+    // MARK: - Dock Icon Visibility
+
+    /// The current Dock visibility mode, derived from the backing `showsDockIcon` Bool.
+    var dockIconVisibility: DockIconVisibility {
+        showsDockIcon ? .visible : .menuBarOnly
+    }
+
+    /// Sets the Dock visibility mode. Centralises the mapping so call sites
+    /// never need to think about the Bool ↔ enum direction.
+    func setDockIconVisibility(_ visibility: DockIconVisibility) {
+        showsDockIcon = visibility.showsDockIcon
     }
 
     func text(_ simplifiedChinese: String, _ english: String) -> String {

@@ -192,6 +192,93 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(preferences.appearanceMode, .dark)
     }
 
+    // MARK: - DockIconVisibility
+
+    func testDockIconVisibilityDefaultValueIsVisible() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertEqual(preferences.dockIconVisibility, .visible)
+        XCTAssertTrue(preferences.showsDockIcon)
+    }
+
+    func testDockIconVisibilityReadsOldBoolTrueKey() {
+        let defaults = isolatedDefaults()
+        defaults.set(true, forKey: "app.showsDockIcon")
+
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertEqual(preferences.dockIconVisibility, .visible)
+        XCTAssertTrue(preferences.showsDockIcon)
+    }
+
+    func testDockIconVisibilityReadsOldBoolFalseKey() {
+        let defaults = isolatedDefaults()
+        defaults.set(false, forKey: "app.showsDockIcon")
+
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertEqual(preferences.dockIconVisibility, .menuBarOnly)
+        XCTAssertFalse(preferences.showsDockIcon)
+    }
+
+    func testSetDockIconVisibilityPersistsToOldBoolKey() {
+        let defaults = isolatedDefaults()
+
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.setDockIconVisibility(.menuBarOnly)
+
+        XCTAssertEqual(defaults.object(forKey: "app.showsDockIcon") as? Bool, false)
+        XCTAssertEqual(preferences.dockIconVisibility, .menuBarOnly)
+
+        preferences.setDockIconVisibility(.visible)
+        XCTAssertEqual(defaults.object(forKey: "app.showsDockIcon") as? Bool, true)
+        XCTAssertEqual(preferences.dockIconVisibility, .visible)
+    }
+
+    func testResetAppPreferencesRestoresDockIconVisibilityToDefault() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.setDockIconVisibility(.menuBarOnly)
+        XCTAssertEqual(preferences.dockIconVisibility, .menuBarOnly)
+
+        preferences.resetAppPreferences()
+        XCTAssertEqual(preferences.dockIconVisibility, .visible)
+        XCTAssertEqual(defaults.object(forKey: "app.showsDockIcon") as? Bool, true)
+    }
+
+    func testDockIconVisibilityEnumMapsActivationPolicy() {
+        XCTAssertEqual(DockIconVisibility.visible.activationPolicy, .regular)
+        XCTAssertEqual(DockIconVisibility.menuBarOnly.activationPolicy, .accessory)
+    }
+
+    func testDockIconVisibilityEnumShowsDockIconBoolean() {
+        XCTAssertTrue(DockIconVisibility.visible.showsDockIcon)
+        XCTAssertFalse(DockIconVisibility.menuBarOnly.showsDockIcon)
+    }
+
+    func testDockIconVisibilityEnumRawValueRoundTrip() {
+        for visibility in DockIconVisibility.allCases {
+            XCTAssertEqual(DockIconVisibility(rawValue: visibility.rawValue), visibility)
+        }
+    }
+
+    func testDockIconVisibilityEnumCaseOrder() {
+        XCTAssertEqual(DockIconVisibility.allCases, [.visible, .menuBarOnly])
+    }
+
     func testAppearanceModeMapsToMacOSAppearanceNames() {
         XCTAssertNil(AppAppearanceMode.system.nsAppearanceName)
         XCTAssertEqual(AppAppearanceMode.light.nsAppearanceName, .aqua)

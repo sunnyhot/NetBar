@@ -24,13 +24,16 @@ struct GeneralPreferencesView: View {
                         "Automatically launch NetBar at login"
                     ))
 
-                    Toggle(appPreferences.text("显示 Dock 图标", "Show Dock icon"), isOn: $appPreferences.showsDockIcon)
+                    Toggle(appPreferences.text("显示 Dock 图标", "Show Dock icon"), isOn: Binding(
+                        get: { appPreferences.showsDockIcon },
+                        set: { appPreferences.showsDockIcon = $0 }
+                    ))
                     .help(appPreferences.text(
                         "关闭 Dock 图标后，NetBar 会作为菜单栏 App 运行。仍可从菜单栏图标右键打开流量窗口或偏好设置。",
                         "When the Dock icon is hidden, NetBar runs as a menu bar app. You can still right-click the menu bar item to open the traffic window or preferences."
                     ))
 
-                    if !appPreferences.showsDockIcon {
+                    if appPreferences.dockIconVisibility == .menuBarOnly {
                         Text(appPreferences.text(
                             "Dock 图标已隐藏，可从菜单栏右键菜单访问",
                             "Dock icon hidden. Access via menu bar right-click"
