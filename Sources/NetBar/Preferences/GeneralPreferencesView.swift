@@ -26,17 +26,20 @@ struct GeneralPreferencesView: View {
 
                     Toggle(appPreferences.text("显示 Dock 图标", "Show Dock icon"), isOn: $appPreferences.showsDockIcon)
                     .help(appPreferences.text(
-                        "关闭 Dock 图标后，NetBar 会作为菜单栏 App 运行。仍可从菜单栏图标右键打开流量窗口或偏好设置。",
-                        "When the Dock icon is hidden, NetBar runs as a menu bar app. You can still right-click the menu bar item to open the traffic window or preferences."
+                        "开启：NetBar 显示在 Dock 栏，点击可切换回主窗口。\n关闭：NetBar 仅在菜单栏运行，通过菜单栏图标右键打开流量窗口或偏好设置。",
+                        "On: NetBar appears in the Dock — click to switch back to the window.\nOff: NetBar runs in the menu bar only — right-click the menu bar icon to open the traffic window or preferences."
                     ))
 
                     if !appPreferences.showsDockIcon {
-                        Text(appPreferences.text(
-                            "Dock 图标已隐藏，可从菜单栏右键菜单访问",
-                            "Dock icon hidden. Access via menu bar right-click"
-                        ))
+                        Label(
+                            appPreferences.text(
+                                "NetBar 正在以菜单栏模式运行。点击菜单栏图标可查看流量，右键可打开偏好设置",
+                                "NetBar is running in menu bar mode. Click the menu bar icon to view traffic; right-click to open preferences"
+                            ),
+                            systemImage: "menubar.rectangle"
+                        )
                         .font(.system(size: 11))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .fixedSize(horizontal: false, vertical: true)
                     }
 
