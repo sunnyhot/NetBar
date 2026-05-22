@@ -137,6 +137,8 @@ enum AppAppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Dock Icon Visibility
+
 /// Describes whether the app shows a Dock icon or runs as a menu-bar-only app.
 ///
 /// Use this type instead of manually writing `showsDockIcon ? .regular : .accessory`
@@ -149,6 +151,29 @@ enum DockIconVisibility: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    init(showsDockIcon: Bool) {
+        self = showsDockIcon ? .visible : .menuBarOnly
+    }
+
+    /// Whether the Dock icon is currently visible.
+    var showsDockIcon: Bool {
+        self == .visible
+    }
+
+    /// Alias for Bool representation, useful for round-trip tests.
+    var boolValue: Bool { showsDockIcon }
+
+    /// Alias for clarity in some call sites.
+    var isDockVisible: Bool { self == .visible }
+
+    /// The corresponding `NSApplication.ActivationPolicy` for this visibility mode.
+    var activationPolicy: NSApplication.ActivationPolicy {
+        switch self {
+        case .visible:    return .regular
+        case .menuBarOnly: return .accessory
+        }
+    }
+
     var title: String {
         title(language: .simplifiedChinese)
     }
@@ -160,19 +185,6 @@ enum DockIconVisibility: String, CaseIterable, Identifiable {
         case .menuBarOnly:
             return language.text("仅菜单栏", "Menu bar only")
         }
-    }
-
-    /// The corresponding `NSApplication.ActivationPolicy` for this visibility mode.
-    var activationPolicy: NSApplication.ActivationPolicy {
-        switch self {
-        case .visible:    return .regular
-        case .menuBarOnly: return .accessory
-        }
-    }
-
-    /// Whether the Dock icon is currently visible.
-    var showsDockIcon: Bool {
-        self == .visible
     }
 }
 
@@ -236,13 +248,25 @@ final class AppPreferences: ObservableObject {
 
     /// The current Dock visibility mode, derived from the backing `showsDockIcon` Bool.
     var dockIconVisibility: DockIconVisibility {
-        showsDockIcon ? .visible : .menuBarOnly
+        DockIconVisibility(showsDockIcon: showsDockIcon)
     }
 
     /// Sets the Dock visibility mode. Centralises the mapping so call sites
     /// never need to think about the Bool ↔ enum direction.
     func setDockIconVisibility(_ visibility: DockIconVisibility) {
         showsDockIcon = visibility.showsDockIcon
+    }
+
+    /// The AppKit activation policy that matches the current Dock visibility setting.
+    var activationPolicy: NSApplication.ActivationPolicy {
+        dockIconVisibility.activationPolicy
+    }
+
+    /// Whether clicking the Dock icon should reopen/show the traffic window.
+    /// Only meaningful when Dock icon is visible; in menu-bar-only mode the Dock
+    /// tile is absent so the reopen delegate is never called.
+    var shouldHandleDockReopen: Bool {
+        dockIconVisibility.isDockVisible
     }
 
     func text(_ simplifiedChinese: String, _ english: String) -> String {

@@ -175,6 +175,104 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(DetailsWindowDismissalPolicy.autoDismissInterval, 30)
     }
 
+    // MARK: - DockIconVisibility model tests
+
+    func testDockIconVisibilityMapsVisibleToRegularPolicy() {
+        XCTAssertEqual(DockIconVisibility.visible.activationPolicy, .regular)
+        XCTAssertTrue(DockIconVisibility.visible.isDockVisible)
+        XCTAssertTrue(DockIconVisibility.visible.boolValue)
+    }
+
+    func testDockIconVisibilityMapsHiddenToAccessoryPolicy() {
+        XCTAssertEqual(DockIconVisibility.menuBarOnly.activationPolicy, .accessory)
+        XCTAssertFalse(DockIconVisibility.menuBarOnly.isDockVisible)
+        XCTAssertFalse(DockIconVisibility.menuBarOnly.boolValue)
+    }
+
+    func testDockIconVisibilityInitFromBool() {
+        XCTAssertEqual(DockIconVisibility(showsDockIcon: true), .visible)
+        XCTAssertEqual(DockIconVisibility(showsDockIcon: false), .menuBarOnly)
+    }
+
+    func testDockIconVisibilityBoolValueRoundTrip() {
+        for visibility in DockIconVisibility.allCases {
+            XCTAssertEqual(DockIconVisibility(showsDockIcon: visibility.boolValue), visibility)
+        }
+    }
+
+    func testDockIconVisibilityIsCaseIterableWithExactlyTwoCases() {
+        XCTAssertEqual(DockIconVisibility.allCases, [.visible, .menuBarOnly])
+    }
+
+    func testDockIconVisibilityRawValueRoundTrip() {
+        for visibility in DockIconVisibility.allCases {
+            XCTAssertEqual(DockIconVisibility(rawValue: visibility.rawValue), visibility)
+        }
+    }
+
+    func testDockIconVisibilityLocalizedTitles() {
+        XCTAssertEqual(DockIconVisibility.visible.title(language: .simplifiedChinese), "显示 Dock 图标")
+        XCTAssertEqual(DockIconVisibility.visible.title(language: .english), "Show Dock icon")
+        XCTAssertEqual(DockIconVisibility.menuBarOnly.title(language: .simplifiedChinese), "仅菜单栏")
+        XCTAssertEqual(DockIconVisibility.menuBarOnly.title(language: .english), "Menu bar only")
+    }
+
+    // MARK: - AppPreferences Dock-derived properties
+
+    func testAppPreferencesActivationPolicyMatchesDockIconSetting() {
+        let defaults = isolatedDefaults()
+
+        var preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.showsDockIcon = true
+        XCTAssertEqual(preferences.activationPolicy, .regular)
+        XCTAssertTrue(preferences.shouldHandleDockReopen)
+
+        preferences.showsDockIcon = false
+        XCTAssertEqual(preferences.activationPolicy, .accessory)
+        XCTAssertFalse(preferences.shouldHandleDockReopen)
+    }
+
+    func testAppPreferencesDockVisibilityDerivesFromShowsDockIcon() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+
+        // Default is showsDockIcon = true
+        XCTAssertEqual(preferences.dockIconVisibility, .visible)
+
+        // After persistence round-trip, derived property still works
+        let defaults2 = isolatedDefaults()
+        defaults2.set(false, forKey: "app.showsDockIcon")
+        let preferences2 = AppPreferences(
+            defaults: defaults2,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertEqual(preferences2.dockIconVisibility, .menuBarOnly)
+        XCTAssertEqual(preferences2.activationPolicy, .accessory)
+        XCTAssertFalse(preferences2.shouldHandleDockReopen)
+    }
+
+    func testAppPreferencesShouldHandleDockReopenMatchesVisibility() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+
+        // When Dock is visible, reopen should be handled
+        preferences.showsDockIcon = true
+        XCTAssertTrue(preferences.shouldHandleDockReopen)
+
+        // When Dock is hidden, reopen should NOT be handled
+        preferences.showsDockIcon = false
+        XCTAssertFalse(preferences.shouldHandleDockReopen)
+    }
+
     func testAppearanceModeDefaultsToSystemAndPersistsSelection() {
         let defaults = isolatedDefaults()
         var preferences = AppPreferences(
