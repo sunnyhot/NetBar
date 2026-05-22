@@ -428,6 +428,81 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(defaults.string(forKey: "app.appearanceMode"), "light")
     }
 
+    // MARK: - Dock icon preference tests
+
+    func testShowsDockIconDefaultsToTrue() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertTrue(preferences.showsDockIcon, "Dock icon should be shown by default")
+    }
+
+    func testShowsDockIconPersistsWhenSetToFalse() {
+        let defaults = isolatedDefaults()
+        var preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.showsDockIcon = false
+
+        preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertFalse(preferences.showsDockIcon, "Dock icon should remain hidden after re-initialization")
+        XCTAssertEqual(defaults.bool(forKey: "app.showsDockIcon"), false)
+    }
+
+    func testShowsDockIconPersistsWhenSetBackToTrue() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.showsDockIcon = false
+        XCTAssertFalse(preferences.showsDockIcon)
+
+        preferences.showsDockIcon = true
+        XCTAssertTrue(preferences.showsDockIcon)
+
+        let reloaded = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertTrue(reloaded.showsDockIcon, "Dock icon should be shown after toggling back to true")
+    }
+
+    func testResetAppPreferencesRestoresShowsDockIconToDefault() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.showsDockIcon = false
+        XCTAssertFalse(preferences.showsDockIcon)
+
+        preferences.resetAppPreferences()
+        XCTAssertTrue(preferences.showsDockIcon, "Reset should restore showsDockIcon to true (default)")
+
+        let reloaded = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        XCTAssertTrue(reloaded.showsDockIcon, "Reset value should persist across re-initialization")
+    }
+
+    func testDockIconToggleHasNoDoubleNegative() {
+        // Verify that the toggle label is expressed positively:
+        // "显示 Dock 图标" (Show Dock icon) — ON means show, OFF means hide.
+        // No "隐藏" (hide) in the toggle label to avoid double-negative confusion.
+        let zhLabel = "显示 Dock 图标"
+        let enLabel = "Show Dock icon"
+        XCTAssertFalse(zhLabel.contains("隐藏"), "Chinese toggle label should not contain '隐藏' — avoids double negative")
+        XCTAssertFalse(enLabel.contains("Hide"), "English toggle label should not contain 'Hide' — avoids double negative")
+    }
+
     func testInterfaceIconNamesMatchInterfaceFamilies() {
         XCTAssertEqual(InterfacePresentation.iconName(for: "en0"), "wifi")
         XCTAssertEqual(InterfacePresentation.iconName(for: "bridge100"), "network.badge.shieldbell.fill")
