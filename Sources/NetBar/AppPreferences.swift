@@ -137,6 +137,47 @@ enum AppAppearanceMode: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Dock Icon Visibility
+
+/// Centralized Dock icon visibility model.
+/// Encapsulates the mapping from user preference → AppKit activation policy,
+/// so callers never need to write `showsDockIcon ? .regular : .accessory` directly.
+enum DockIconVisibility: String, CaseIterable, Identifiable {
+    /// App appears in both Dock and menu bar (NSApplication.ActivationPolicy.regular).
+    case visible
+    /// App lives in menu bar only; no Dock tile (NSApplication.ActivationPolicy.accessory).
+    case hidden
+
+    var id: String { rawValue }
+
+    var boolValue: Bool {
+        switch self {
+        case .visible: return true
+        case .hidden:  return false
+        }
+    }
+
+    var activationPolicy: NSApplication.ActivationPolicy {
+        switch self {
+        case .visible: return .regular
+        case .hidden:  return .accessory
+        }
+    }
+
+    var isDockVisible: Bool { self == .visible }
+
+    init(showsDockIcon: Bool) {
+        self = showsDockIcon ? .visible : .hidden
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .visible: return language.text("显示 Dock 图标", "Show Dock icon")
+        case .hidden:  return language.text("隐藏 Dock 图标", "Hide Dock icon")
+        }
+    }
+}
+
 protocol LoginItemManaging: AnyObject {
     func refreshStatus() -> Bool
     func setEnabled(_ isEnabled: Bool) throws
@@ -189,6 +230,23 @@ final class AppPreferences: ObservableObject {
 
     var resolvedLanguage: AppLanguage {
         language.resolved
+    }
+
+    /// Centralized Dock visibility derived from the raw `showsDockIcon` preference.
+    var dockIconVisibility: DockIconVisibility {
+        DockIconVisibility(showsDockIcon: showsDockIcon)
+    }
+
+    /// The AppKit activation policy that matches the current Dock visibility setting.
+    var activationPolicy: NSApplication.ActivationPolicy {
+        dockIconVisibility.activationPolicy
+    }
+
+    /// Whether clicking the Dock icon should reopen/show the traffic window.
+    /// Only meaningful when Dock icon is visible; in menu-bar-only mode the Dock
+    /// tile is absent so the reopen delegate is never called.
+    var shouldHandleDockReopen: Bool {
+        dockIconVisibility.isDockVisible
     }
 
     func text(_ simplifiedChinese: String, _ english: String) -> String {

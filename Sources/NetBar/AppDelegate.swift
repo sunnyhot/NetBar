@@ -18,6 +18,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Startup sequence (order matters):
+        // 1. Appearance — sets NSApp.appearance so all subsequent windows inherit it
+        // 2. Main menu — builds the app menu bar before any window appears
+        // 3. Activation policy — controls Dock visibility (.regular) vs menu-bar-only (.accessory)
+        // 4. Preference observers — react to runtime setting changes
+        // 5. Status bar controller — creates the menu bar item
         applyAppAppearance()
         configureMainMenu()
         applyActivationPolicy()
@@ -37,8 +43,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updater.startAutomaticChecks()
 
-        // 延迟重申 activation policy，确保开机自启动场景下 Dock 图标正确隐藏
-        if !appPreferences.showsDockIcon {
+        // Delayed re-assertion of activation policy for login-item launch scenario.
+        // When launched at login via SMAppService, macOS may initially force .regular
+        // policy. Re-applying after a short delay ensures the Dock tile is correctly
+        // hidden when the user has chosen menu-bar-only mode.
+        if !appPreferences.dockIconVisibility.isDockVisible {
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
                 self?.applyActivationPolicy()
             }
@@ -51,7 +60,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if appPreferences.showsDockIcon {
+        // Only open the traffic window when Dock icon is visible.
+        // In menu-bar-only mode (.accessory), there is no Dock tile to click,
+        // so this delegate method is effectively a no-op.
+        if appPreferences.shouldHandleDockReopen {
             statusBarController?.showDetailsWindow()
         }
         return false
@@ -110,7 +122,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyActivationPolicy() {
-        NSApplication.shared.setActivationPolicy(appPreferences.showsDockIcon ? .regular : .accessory)
+        NSApplication.shared.setActivationPolicy(appPreferences.activationPolicy)
     }
 
     private func applyAppAppearance() {
