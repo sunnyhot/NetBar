@@ -1,6 +1,19 @@
 # Changelog
 
-## v0.34.4 (2026-05-22)
+## v0.34.6 (2026-05-23)
+
+### Enhancement — 规范版本号显示格式
+
+统一 About 页面和设置页的版本号为语义化 `v{major.minor.patch}` 格式，从 Info.plist 动态读取。
+
+- 修改 About 页 fallback 版本号从硬编码 `0.33.0` 改为 `0.0.0`
+- 给 AppUpdater 的 `currentVersionText` 添加 `v` 前缀显示
+
+### 涉及子 issue
+
+- [LUC-224](mention://issue/837789ec-8957-47bc-bf90-e623afb8c02b) 规范 About/设置页版本号为动态语义化显示
+
+## v0.34.5 (2026-05-22)
 
 ### Bug Fix — CI 测试修复
 
