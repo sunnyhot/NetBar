@@ -225,7 +225,8 @@ final class AppUpdater: ObservableObject {
     }
 
     var currentVersionText: String {
-        currentVersion
+        let trimmed = currentVersion.hasPrefix("v") ? String(currentVersion.dropFirst()) : currentVersion
+        return "v\(trimmed)"
     }
 
     var releasePageURL: URL? {
