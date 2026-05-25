@@ -5,6 +5,7 @@ import SwiftUI
 final class NetworkMonitor: ObservableObject {
     @Published private(set) var snapshot = NetworkSnapshot.empty
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
+    @Published private(set) var systemResources = SystemResourceSnapshot.empty
     @Published private(set) var isRunning = false
 
     /// Controls whether the nettop process is active. Set to true when the
@@ -23,16 +24,20 @@ final class NetworkMonitor: ObservableObject {
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
     private let streamingReader: StreamingNettopReader?
+    private let systemResourceReader: SystemResourceReading
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
     private var previousApplicationSampleDate: Date?
+    private var previousCPUTickSample: CPUTickSample?
     private var isReadingApplicationTraffic = false
     private var isRefreshing = false
     private var shouldSampleApplicationTraffic = false
     private var timer: Timer?
     private var applicationTimer: Timer?
+    private var systemResourceTimer: Timer?
+    private var isRefreshingSystemResources = false
     private var powerSaveMode = false
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
@@ -51,9 +56,11 @@ final class NetworkMonitor: ObservableObject {
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
         appTrafficReader: ApplicationTrafficReading? = nil,
+        systemResourceReader: SystemResourceReading = LiveSystemResourceReader(),
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
+        self.systemResourceReader = systemResourceReader
         self.now = now
         if let appTrafficReader {
             self.appTrafficReader = appTrafficReader
@@ -70,10 +77,17 @@ final class NetworkMonitor: ObservableObject {
         isRunning = true
         refresh()
         refreshApplicationTraffic()
+        refreshSystemResources()
         scheduleNextSample()
         applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
+            }
+        }
+        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
+        systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshSystemResources()
             }
         }
     }
@@ -100,6 +114,8 @@ final class NetworkMonitor: ObservableObject {
     func stop() {
         timer?.invalidate()
         timer = nil
+        systemResourceTimer?.invalidate()
+        systemResourceTimer = nil
         pauseApplicationTrafficSampling()
         isRunning = false
     }
@@ -113,6 +129,7 @@ final class NetworkMonitor: ObservableObject {
         guard isRunning else { return }
         let interval: TimeInterval = powerSaveMode ? 2.0 : 1.0
         let appInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
+        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
 
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
@@ -125,6 +142,13 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer = Timer.scheduledTimer(withTimeInterval: appInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
+            }
+        }
+
+        systemResourceTimer?.invalidate()
+        systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshSystemResources()
             }
         }
     }
@@ -379,6 +403,70 @@ final class NetworkMonitor: ObservableObject {
 
             return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
         }
+    }
+
+    func refreshSystemResources() {
+        guard !isRefreshingSystemResources else { return }
+        isRefreshingSystemResources = true
+
+        let reader = systemResourceReader
+        let capturedPreviousCPU = previousCPUTickSample
+
+        Task { [weak self] in
+            let (memory, cpuSample, thermal) = await Task.detached(priority: .utility) { [reader] in
+                let memory = reader.readMemoryUsage()
+                let cpuSample = reader.readCPUTicks()
+                let thermal = reader.readThermalState()
+                return (memory, cpuSample, thermal)
+            }.value
+
+            guard let self else { return }
+            self.applySystemResources(
+                memory: memory,
+                cpuSample: cpuSample,
+                thermal: thermal,
+                previousCPU: capturedPreviousCPU
+            )
+            self.isRefreshingSystemResources = false
+        }
+    }
+
+    private func applySystemResources(
+        memory: MemoryUsage,
+        cpuSample: CPUTickSample,
+        thermal: ThermalInfo,
+        previousCPU: CPUTickSample?
+    ) {
+        // Compute CPU usage from delta between current and previous tick samples
+        let cpu: CPUUsage
+        if let previous = previousCPU {
+            let totalDelta = cpuSample.total > previous.total ? cpuSample.total - previous.total : 0
+            let userDelta = cpuSample.user > previous.user ? cpuSample.user - previous.user : 0
+            let systemDelta = cpuSample.system > previous.system ? cpuSample.system - previous.system : 0
+            let idleDelta = cpuSample.idle > previous.idle ? cpuSample.idle - previous.idle : 0
+            cpu = CPUUsage(
+                totalTicks: totalDelta,
+                userTicks: userDelta,
+                systemTicks: systemDelta,
+                idleTicks: idleDelta
+            )
+        } else {
+            // First sample: we have no delta, report zero usage
+            cpu = CPUUsage(
+                totalTicks: cpuSample.total,
+                userTicks: cpuSample.user,
+                systemTicks: cpuSample.system,
+                idleTicks: cpuSample.idle
+            )
+        }
+
+        systemResources = SystemResourceSnapshot(
+            memory: memory,
+            cpu: cpu,
+            thermal: thermal
+        )
+
+        previousCPUTickSample = cpuSample
     }
 
     private static func positiveDelta(_ current: UInt64, _ previous: UInt64?) -> UInt64 {
