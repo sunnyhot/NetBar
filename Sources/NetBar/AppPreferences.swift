@@ -188,6 +188,35 @@ enum DockIconVisibility: String, CaseIterable, Identifiable {
     }
 }
 
+// MARK: - Animation Speed Source
+
+/// Determines what system metric drives the RunCat character animation speed.
+/// Default is `.networkSpeed` to preserve backward compatibility.
+enum AnimationSpeedSource: String, CaseIterable, Identifiable {
+    case networkSpeed
+    case memoryUsage
+    case cpuUsage
+    case thermalState
+    case autoComposite
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .networkSpeed:
+            return language.text("网速", "Network Speed")
+        case .memoryUsage:
+            return language.text("内存占用", "Memory Usage")
+        case .cpuUsage:
+            return language.text("CPU 使用率", "CPU Usage")
+        case .thermalState:
+            return language.text("热状态", "Thermal State")
+        case .autoComposite:
+            return language.text("自动综合", "Auto Composite")
+        }
+    }
+}
+
 protocol LoginItemManaging: AnyObject {
     func refreshStatus() -> Bool
     func setEnabled(_ isEnabled: Bool) throws

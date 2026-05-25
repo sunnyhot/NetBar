@@ -612,6 +612,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var catRotationIntervalMinutes: Double { didSet { save() } }
     @Published var catRotationPool: String { didSet { save() } }  // comma-separated character IDs
     @Published var catHeadSwing: Bool { didSet { save() } }  // horizontally flip alternate frames for head-bobbing effect
+    @Published var catAnimationSpeedSource: String { didSet { save() } }  // AnimationSpeedSource raw value
 
     private let defaults: UserDefaults
 
@@ -642,6 +643,7 @@ final class StatusBarSettings: ObservableObject {
         catRotationIntervalMinutes = defaults.object(forKey: Keys.catRotationIntervalMinutes) as? Double ?? Defaults.catRotationIntervalMinutes
         catRotationPool = defaults.string(forKey: Keys.catRotationPool) ?? Defaults.catRotationPool
         catHeadSwing = defaults.object(forKey: Keys.catHeadSwing) as? Bool ?? Defaults.catHeadSwing
+        catAnimationSpeedSource = defaults.string(forKey: Keys.catAnimationSpeedSource) ?? Defaults.catAnimationSpeedSource
     }
 
     var clampedFontSize: CGFloat {
@@ -658,6 +660,11 @@ final class StatusBarSettings: ObservableObject {
 
     var clampedCatScale: CGFloat {
         CGFloat(catScale.clamped(to: 0.7...1.3))
+    }
+
+    /// The resolved animation speed source, falling back to `.networkSpeed` for invalid raw values.
+    var resolvedAnimationSpeedSource: AnimationSpeedSource {
+        AnimationSpeedSource(rawValue: catAnimationSpeedSource) ?? .networkSpeed
     }
 
     var fontWeight: NSFont.Weight {
@@ -694,6 +701,7 @@ final class StatusBarSettings: ObservableObject {
         catRotationIntervalMinutes = Defaults.catRotationIntervalMinutes
         catRotationPool = Defaults.catRotationPool
         catHeadSwing = Defaults.catHeadSwing
+        catAnimationSpeedSource = Defaults.catAnimationSpeedSource
     }
 
     private func save() {
@@ -722,6 +730,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(catRotationIntervalMinutes, forKey: Keys.catRotationIntervalMinutes)
         defaults.set(catRotationPool, forKey: Keys.catRotationPool)
         defaults.set(catHeadSwing, forKey: Keys.catHeadSwing)
+        defaults.set(catAnimationSpeedSource, forKey: Keys.catAnimationSpeedSource)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -770,6 +779,7 @@ final class StatusBarSettings: ObservableObject {
         static let catRotationIntervalMinutes = 5.0
         static let catRotationPool = ""  // empty = all characters
         static let catHeadSwing = false
+        static let catAnimationSpeedSource = AnimationSpeedSource.networkSpeed.rawValue
     }
 
     private enum Keys {
@@ -798,6 +808,7 @@ final class StatusBarSettings: ObservableObject {
         static let catRotationIntervalMinutes = "statusBar.catRotationIntervalMinutes"
         static let catRotationPool = "statusBar.catRotationPool"
         static let catHeadSwing = "statusBar.catHeadSwing"
+        static let catAnimationSpeedSource = "statusBar.catAnimationSpeedSource"
     }
 }
 

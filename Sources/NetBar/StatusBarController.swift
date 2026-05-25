@@ -120,6 +120,7 @@ final class StatusBarController {
     private let appPreferences: AppPreferences
     private let customCharacterStore: CustomCharacterStore
     private let powerObserver: SystemPowerObserver
+    private let systemMetricsSampler: SystemMetricsSampler
     private let openPreferences: () -> Void
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
@@ -147,6 +148,7 @@ final class StatusBarController {
         appPreferences: AppPreferences,
         customCharacterStore: CustomCharacterStore,
         powerObserver: SystemPowerObserver,
+        systemMetricsSampler: SystemMetricsSampler? = nil,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
@@ -155,6 +157,7 @@ final class StatusBarController {
         self.appPreferences = appPreferences
         self.customCharacterStore = customCharacterStore
         self.powerObserver = powerObserver
+        self.systemMetricsSampler = systemMetricsSampler ?? SystemMetricsSampler()
         self.openPreferences = openPreferences
         self.showAbout = showAbout
         self.statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
@@ -167,6 +170,7 @@ final class StatusBarController {
         configureStatusItem()
         configureObservers()
         configureDetailsWindowObserver()
+        configureSystemMetricsSampler()
         monitor.start()
         updateStatusItem()
     }
@@ -244,9 +248,11 @@ final class StatusBarController {
                 if isLocked {
                     self.catAnimation?.pauseForScreenLock()
                     self.pauseGooglyEyesTracking()
+                    self.systemMetricsSampler.stop()
                     self.monitor.stop()
                 } else {
                     self.monitor.start()
+                    self.systemMetricsSampler.start()
                     self.catAnimation?.resumeFromScreenLock()
                     self.configureGooglyEyesTracking()
                     self.lastRenderSignature = nil
@@ -328,6 +334,45 @@ final class StatusBarController {
         }
     }
 
+    // MARK: - System Metrics Integration
+
+    private func configureSystemMetricsSampler() {
+        // Always start the sampler; it's lightweight (2s interval, reads CPU/memory/thermal).
+        // Only start if character is shown.
+        if settings.showsCat {
+            systemMetricsSampler.start()
+        }
+
+        // Observe settings changes to start/stop sampler
+        settings.objectWillChange
+            .debounce(for: .milliseconds(200), scheduler: DispatchQueue.main)
+            .sink { [weak self] _ in
+                guard let self else { return }
+                if self.settings.showsCat {
+                    self.systemMetricsSampler.start()
+                } else {
+                    self.systemMetricsSampler.stop()
+                }
+            }
+            .store(in: &cancellables)
+
+        // Observe metric changes to trigger render (drives animation speed for non-network sources)
+        systemMetricsSampler.$lastCPUUsage
+            .removeDuplicates()
+            .sink { [weak self] _ in self?.requestRender() }
+            .store(in: &cancellables)
+
+        systemMetricsSampler.$lastMemoryUsage
+            .removeDuplicates()
+            .sink { [weak self] _ in self?.requestRender() }
+            .store(in: &cancellables)
+
+        systemMetricsSampler.$lastThermalState
+            .removeDuplicates()
+            .sink { [weak self] _ in self?.requestRender() }
+            .store(in: &cancellables)
+    }
+
     private var currentRenderCoalesceInterval: TimeInterval {
         if isGooglyEyesActive {
             return 1.0 / 15.0
@@ -360,11 +405,44 @@ final class StatusBarController {
         let appearanceName = button.effectiveAppearance.name.rawValue
         let activeGooglyEyesState = activeGooglyEyesRenderState()
 
-        // Update cat animation speed based on network speed
+        // Update cat animation speed based on selected speed source
         if settings.showsCat {
-            catAnimation?.updateNetworkSpeed(
-                totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
-            )
+            let source = settings.resolvedAnimationSpeedSource
+            switch source {
+            case .networkSpeed:
+                catAnimation?.updateNetworkSpeed(
+                    totalBytesPerSecond: UInt64(monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond)
+                )
+            case .cpuUsage:
+                let level = AnimationSpeedMapper.activityLevel(from: systemMetricsSampler.lastCPUUsage)
+                catAnimation?.updateActivityLevel(level)
+            case .memoryUsage:
+                let level = AnimationSpeedMapper.activityLevel(from: systemMetricsSampler.lastMemoryUsage)
+                catAnimation?.updateActivityLevel(level)
+            case .thermalState:
+                let level = AnimationSpeedMapper.activityLevel(fromThermalState: systemMetricsSampler.lastThermalState)
+                catAnimation?.updateActivityLevel(level)
+            case .autoComposite:
+                // For auto, determine network activity level from the existing flow
+                let totalBps = monitor.snapshot.uploadBytesPerSecond + monitor.snapshot.downloadBytesPerSecond
+                let networkLevel: ActivityLevel
+                if totalBps < 100 {
+                    networkLevel = .idle
+                } else if totalBps < 1_000 {
+                    networkLevel = .low
+                } else if totalBps < 100_000 {
+                    networkLevel = .moderate
+                } else {
+                    networkLevel = .high
+                }
+                let compositeLevel = AnimationSpeedMapper.autoCompositeActivityLevel(
+                    cpuUsage: systemMetricsSampler.lastCPUUsage,
+                    memoryUsage: systemMetricsSampler.lastMemoryUsage,
+                    thermalState: systemMetricsSampler.lastThermalState,
+                    networkActivityLevel: networkLevel
+                )
+                catAnimation?.updateActivityLevel(compositeLevel)
+            }
             if currentCatFrameIndex == nil {
                 currentCatFrameIndex = 0
             }

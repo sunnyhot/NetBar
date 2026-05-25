@@ -2124,3 +2124,162 @@ private struct FakeLoginItemError: LocalizedError {
         "Login item update failed"
     }
 }
+
+// MARK: - AnimationSpeedSource Tests
+
+extension PreferencesAndPresentationTests {
+
+    func testAnimationSpeedSourceDefaultIsNetworkSpeed() {
+        XCTAssertEqual(
+            AnimationSpeedSource(rawValue: StatusBarSettings(defaults: isolatedDefaults()).catAnimationSpeedSource),
+            .networkSpeed
+        )
+    }
+
+    func testAnimationSpeedSourceAllCases() {
+        XCTAssertEqual(
+            AnimationSpeedSource.allCases.map(\.rawValue),
+            ["networkSpeed", "memoryUsage", "cpuUsage", "thermalState", "autoComposite"]
+        )
+    }
+
+    func testAnimationSpeedSourceTitles() {
+        XCTAssertEqual(AnimationSpeedSource.networkSpeed.title(language: .simplifiedChinese), "网速")
+        XCTAssertEqual(AnimationSpeedSource.networkSpeed.title(language: .english), "Network Speed")
+        XCTAssertEqual(AnimationSpeedSource.memoryUsage.title(language: .simplifiedChinese), "内存占用")
+        XCTAssertEqual(AnimationSpeedSource.memoryUsage.title(language: .english), "Memory Usage")
+        XCTAssertEqual(AnimationSpeedSource.cpuUsage.title(language: .simplifiedChinese), "CPU 使用率")
+        XCTAssertEqual(AnimationSpeedSource.cpuUsage.title(language: .english), "CPU Usage")
+        XCTAssertEqual(AnimationSpeedSource.thermalState.title(language: .simplifiedChinese), "热状态")
+        XCTAssertEqual(AnimationSpeedSource.thermalState.title(language: .english), "Thermal State")
+        XCTAssertEqual(AnimationSpeedSource.autoComposite.title(language: .simplifiedChinese), "自动综合")
+        XCTAssertEqual(AnimationSpeedSource.autoComposite.title(language: .english), "Auto Composite")
+    }
+
+    func testStatusBarSettingsAnimationSpeedSourcePersist() {
+        let defaults = isolatedDefaults()
+        let settings = StatusBarSettings(defaults: defaults)
+
+        // Default is networkSpeed
+        XCTAssertEqual(settings.catAnimationSpeedSource, "networkSpeed")
+        XCTAssertEqual(settings.resolvedAnimationSpeedSource, .networkSpeed)
+
+        // Change to cpuUsage
+        settings.catAnimationSpeedSource = "cpuUsage"
+        XCTAssertEqual(defaults.string(forKey: "statusBar.catAnimationSpeedSource"), "cpuUsage")
+        XCTAssertEqual(settings.resolvedAnimationSpeedSource, .cpuUsage)
+
+        // Reload from defaults
+        let reloaded = StatusBarSettings(defaults: defaults)
+        XCTAssertEqual(reloaded.catAnimationSpeedSource, "cpuUsage")
+        XCTAssertEqual(reloaded.resolvedAnimationSpeedSource, .cpuUsage)
+    }
+
+    func testStatusBarSettingsAnimationSpeedSourceInvalidFallsBack() {
+        let defaults = isolatedDefaults()
+        defaults.set("invalid_value", forKey: "statusBar.catAnimationSpeedSource")
+        let settings = StatusBarSettings(defaults: defaults)
+        XCTAssertEqual(settings.resolvedAnimationSpeedSource, .networkSpeed)
+    }
+
+    func testStatusBarSettingsAnimationSpeedSourceReset() {
+        let defaults = isolatedDefaults()
+        let settings = StatusBarSettings(defaults: defaults)
+        settings.catAnimationSpeedSource = "memoryUsage"
+        settings.reset()
+        XCTAssertEqual(settings.catAnimationSpeedSource, "networkSpeed")
+    }
+}
+
+// MARK: - AnimationSpeedMapper Tests
+
+extension PreferencesAndPresentationTests {
+
+    func testAnimationSpeedMapperMetricValue() {
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.0), .idle)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.1), .idle)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.2), .low)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.4), .low)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.5), .moderate)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.7), .moderate)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 0.8), .high)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(from: 1.0), .high)
+    }
+
+    func testAnimationSpeedMapperThermalState() {
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromThermalState: 0), .idle)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromThermalState: 1), .low)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromThermalState: 2), .moderate)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromThermalState: 3), .high)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromThermalState: 99), .high)
+    }
+
+    func testAnimationSpeedMapperAutoComposite() {
+        // All idle → idle
+        let allIdle = AnimationSpeedMapper.autoCompositeActivityLevel(
+            cpuUsage: 0, memoryUsage: 0, thermalState: 0, networkActivityLevel: .idle
+        )
+        XCTAssertEqual(allIdle, .idle)
+
+        // All high → high
+        let allHigh = AnimationSpeedMapper.autoCompositeActivityLevel(
+            cpuUsage: 1.0, memoryUsage: 1.0, thermalState: 3, networkActivityLevel: .high
+        )
+        XCTAssertEqual(allHigh, .high)
+
+        // Mixed → moderate range
+        let mixed = AnimationSpeedMapper.autoCompositeActivityLevel(
+            cpuUsage: 0.5, memoryUsage: 0.3, thermalState: 1, networkActivityLevel: .low
+        )
+        // (0.5 + 0.3 + 0.333 + 0.25) / 4 ≈ 0.346 → low
+        XCTAssertEqual(mixed, .low)
+    }
+}
+
+// MARK: - RunCatAnimation.updateActivityLevel Tests
+
+extension PreferencesAndPresentationTests {
+
+    func testRunCatAnimationUpdateActivityLevel() {
+        let asset = CharacterAsset(builtIn: .defaultCat)
+        var lastFrame: Int?
+        let animation = RunCatAnimation(character: asset, speedMultiplier: 1.0) { frame in
+            lastFrame = frame
+        }
+
+        // Setting activity level should work
+        animation.updateActivityLevel(.high)
+        XCTAssertEqual(animation.activityLevel, .high)
+
+        animation.updateActivityLevel(.idle)
+        XCTAssertEqual(animation.activityLevel, .idle)
+
+        animation.updateActivityLevel(.moderate)
+        XCTAssertEqual(animation.activityLevel, .moderate)
+    }
+}
+
+// MARK: - Mock System Metrics Reader
+
+private final class MockSystemMetricsReader: SystemMetricsReading {
+    var cpu: Double = 0
+    var memory: Double = 0
+    var thermal: Int = 0
+
+    func cpuUsage() -> Double { cpu }
+    func memoryUsage() -> Double { memory }
+    func thermalState() -> Int { thermal }
+}
+
+// MARK: - SystemMetricsSampler Tests
+
+extension PreferencesAndPresentationTests {
+
+    func testSystemMetricsSamplerInitialValues() {
+        let mock = MockSystemMetricsReader()
+        let sampler = SystemMetricsSampler(reader: mock, sampleInterval: 2.0)
+        XCTAssertEqual(sampler.lastCPUUsage, 0)
+        XCTAssertEqual(sampler.lastMemoryUsage, 0)
+        XCTAssertEqual(sampler.lastThermalState, 0)
+    }
+}
