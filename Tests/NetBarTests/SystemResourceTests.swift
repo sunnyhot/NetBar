@@ -1,0 +1,393 @@
+import XCTest
+@testable import NetBar
+
+@MainActor
+final class SystemResourceTests: XCTestCase {
+
+    // MARK: - MemoryUsage Tests
+
+    func testMemoryUsageComputedProperties() {
+        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 4_000_000_000, swapUsedBytes: 1_000_000_000)
+
+        XCTAssertEqual(usage.freeBytes, 8_000_000_000)
+        XCTAssertEqualWithAccuracy(usage.usedFraction, 0.5, accuracy: 0.001)
+        XCTAssertEqualWithAccuracy(usage.usedPercentage, 50.0, accuracy: 0.01)
+        XCTAssertEqualWithAccuracy(usage.swapUsedFraction, 0.25, accuracy: 0.001)
+    }
+
+    func testMemoryUsageZeroTotal() {
+        let usage = MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0)
+
+        XCTAssertEqual(usage.freeBytes, 0)
+        XCTAssertEqual(usage.usedFraction, 0)
+        XCTAssertEqual(usage.usedPercentage, 0)
+        XCTAssertEqual(usage.swapUsedFraction, 0)
+    }
+
+    func testMemoryUsageMoreUsedThanTotal() {
+        // Edge case: usedBytes > totalBytes should not produce negative freeBytes
+        let usage = MemoryUsage(totalBytes: 8_000_000_000, usedBytes: 10_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
+
+        XCTAssertEqual(usage.freeBytes, 0)
+        XCTAssertGreaterThanOrEqual(usage.usedFraction, 1.0)
+    }
+
+    func testMemoryUsageNoSwap() {
+        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
+
+        XCTAssertEqual(usage.swapUsedFraction, 0)
+    }
+
+    // MARK: - CPUUsage Tests
+
+    func testCPUUsageFromDelta() {
+        // Simulate a delta where 25% of ticks are user, 10% are system
+        let cpu = CPUUsage(totalTicks: 1000, userTicks: 250, systemTicks: 100, idleTicks: 650)
+
+        XCTAssertEqualWithAccuracy(cpu.usageFraction, 0.35, accuracy: 0.001)
+        XCTAssertEqualWithAccuracy(cpu.usagePercentage, 35.0, accuracy: 0.01)
+    }
+
+    func testCPUUsageZeroTicks() {
+        let cpu = CPUUsage(totalTicks: 0, userTicks: 0, systemTicks: 0, idleTicks: 0)
+
+        XCTAssertEqual(cpu.usageFraction, 0)
+        XCTAssertEqual(cpu.usagePercentage, 0)
+    }
+
+    func testCPUUsageFullLoad() {
+        let cpu = CPUUsage(totalTicks: 1000, userTicks: 800, systemTicks: 200, idleTicks: 0)
+
+        XCTAssertEqualWithAccuracy(cpu.usageFraction, 1.0, accuracy: 0.001)
+    }
+
+    // MARK: - ThermalInfo Tests
+
+    func testThermalInfoLocalizedDescription() {
+        XCTAssertEqual(ThermalInfo(state: .nominal).localizedDescription, "Nominal")
+        XCTAssertEqual(ThermalInfo(state: .fair).localizedDescription, "Fair")
+        XCTAssertEqual(ThermalInfo(state: .serious).localizedDescription, "Serious")
+        XCTAssertEqual(ThermalInfo(state: .critical).localizedDescription, "Critical")
+    }
+
+    func testThermalPressureStateFromProcessInfo() {
+        XCTAssertEqual(ThermalPressureState(ProcessInfo.ThermalState.nominal), .nominal)
+        XCTAssertEqual(ThermalPressureState(ProcessInfo.ThermalState.fair), .fair)
+        XCTAssertEqual(ThermalPressureState(ProcessInfo.ThermalState.serious), .serious)
+        XCTAssertEqual(ThermalPressureState(ProcessInfo.ThermalState.critical), .critical)
+    }
+
+    // MARK: - SystemResourceSnapshot Tests
+
+    func testSystemResourceSnapshotEmpty() {
+        let empty = SystemResourceSnapshot.empty
+        XCTAssertEqual(empty.memory.totalBytes, 0)
+        XCTAssertEqual(empty.cpu.totalTicks, 0)
+        XCTAssertEqual(empty.thermal.state, .nominal)
+    }
+
+    func testSystemResourceSnapshotEquality() {
+        let a = SystemResourceSnapshot(
+            memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+            cpu: CPUUsage(totalTicks: 100, userTicks: 50, systemTicks: 20, idleTicks: 30),
+            thermal: ThermalInfo(state: .nominal)
+        )
+        let b = SystemResourceSnapshot(
+            memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+            cpu: CPUUsage(totalTicks: 100, userTicks: 50, systemTicks: 20, idleTicks: 30),
+            thermal: ThermalInfo(state: .nominal)
+        )
+        XCTAssertEqual(a, b)
+    }
+
+    // MARK: - SystemResourceFormat Tests
+
+    func testMemoryPercentageFormatting() {
+        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
+        let result = SystemResourceFormat.memoryPercentage(usage)
+        XCTAssertEqual(result, "50.0%")
+    }
+
+    func testCPUPercentageFormatting() {
+        let cpu = CPUUsage(totalTicks: 1000, userTicks: 250, systemTicks: 100, idleTicks: 650)
+        let result = SystemResourceFormat.cpuPercentage(cpu)
+        XCTAssertEqual(result, "35.0%")
+    }
+
+    func testThermalShortFormatting() {
+        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .nominal)), "✅ Nominal")
+        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .fair)), "⚠️ Fair")
+        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .serious)), "🌡️ Serious")
+        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .critical)), "🔥 Critical")
+    }
+
+    func testMemoryUsedFormatting() {
+        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_500_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
+        let result = SystemResourceFormat.memoryUsed(usage)
+        // 8.5 GB
+        XCTAssertTrue(result.contains("GB"))
+    }
+
+    func testMemorySummaryFormatting() {
+        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
+        let result = SystemResourceFormat.memorySummary(usage)
+        XCTAssertTrue(result.contains("50.0%"))
+        XCTAssertTrue(result.contains("GB"))
+    }
+
+    // MARK: - Mock SystemResourceReader Tests
+
+    func testMockReaderReturnsConfiguredValues() {
+        let mock = MockSystemResourceReader(
+            memory: MemoryUsage(totalBytes: 32_000_000_000, usedBytes: 16_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+            cpu: CPUTickSample(total: 2000, user: 500, system: 200, idle: 1300),
+            thermal: ThermalInfo(state: .fair)
+        )
+
+        let mem = mock.readMemoryUsage()
+        XCTAssertEqual(mem.totalBytes, 32_000_000_000)
+        XCTAssertEqual(mem.usedBytes, 16_000_000_000)
+
+        let cpu = mock.readCPUTicks()
+        XCTAssertEqual(cpu.total, 2000)
+        XCTAssertEqual(cpu.user, 500)
+
+        let thermal = mock.readThermalState()
+        XCTAssertEqual(thermal.state, .fair)
+    }
+
+    // MARK: - CPUTickSample Tests
+
+    func testCPUTickSampleEquality() {
+        let a = CPUTickSample(total: 1000, user: 300, system: 100, idle: 600)
+        let b = CPUTickSample(total: 1000, user: 300, system: 100, idle: 600)
+        XCTAssertEqual(a, b)
+    }
+
+    func testCPUTickSampleInequality() {
+        let a = CPUTickSample(total: 1000, user: 300, system: 100, idle: 600)
+        let b = CPUTickSample(total: 2000, user: 300, system: 100, idle: 600)
+        XCTAssertNotEqual(a, b)
+    }
+
+    // MARK: - ThermalPressureState Tests
+
+    func testThermalPressureStateEquality() {
+        XCTAssertEqual(ThermalPressureState.nominal, ThermalPressureState.nominal)
+        XCTAssertNotEqual(ThermalPressureState.nominal, ThermalPressureState.fair)
+        XCTAssertNotEqual(ThermalPressureState.fair, ThermalPressureState.serious)
+        XCTAssertNotEqual(ThermalPressureState.serious, ThermalPressureState.critical)
+    }
+
+    // MARK: - SystemResourceSummary Tests (LUC-227)
+
+    func testSystemResourceSummaryEmpty() {
+        let empty = SystemResourceSummary.empty
+        XCTAssertEqual(empty.totalMemory, 0)
+        XCTAssertEqual(empty.usedMemory, 0)
+        XCTAssertNil(empty.cpuUsage)
+        XCTAssertEqual(empty.processCount, 0)
+        XCTAssertNil(empty.memoryUsagePercentage)
+    }
+
+    func testSystemResourceSummaryMemoryPercentage() {
+        let summary = SystemResourceSummary(
+            totalMemory: 16_000_000_000,
+            usedMemory: 8_000_000_000,
+            cpuUsage: 25.5,
+            processCount: 300
+        )
+        XCTAssertEqualWithAccuracy(summary.memoryUsagePercentage!, 50.0, accuracy: 0.01)
+    }
+
+    func testSystemResourceSummaryZeroMemory() {
+        let summary = SystemResourceSummary(
+            totalMemory: 0,
+            usedMemory: 0,
+            cpuUsage: nil,
+            processCount: 0
+        )
+        XCTAssertNil(summary.memoryUsagePercentage)
+    }
+
+    func testSystemResourceSummaryEquality() {
+        let a = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0, processCount: 100)
+        let b = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0, processCount: 100)
+        XCTAssertEqual(a, b)
+    }
+
+    // MARK: - ProcessResourceUsage Tests (LUC-227)
+
+    func testProcessResourceUsageEquality() {
+        let a = ProcessResourceUsage(pid: 123, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0)
+        let b = ProcessResourceUsage(pid: 123, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0)
+        XCTAssertEqual(a, b)
+    }
+
+    func testProcessResourceUsageWithNilFields() {
+        let usage = ProcessResourceUsage(pid: 456, processName: "kernel", displayName: "kernel", residentMemory: nil, cpuPercentage: nil)
+        XCTAssertNil(usage.residentMemory)
+        XCTAssertNil(usage.cpuPercentage)
+        XCTAssertEqual(usage.pid, 456)
+    }
+
+    // MARK: - ApplicationTrafficRate Resource Fields (LUC-227)
+
+    func testApplicationTrafficRateWithResources() {
+        let rate = ApplicationTrafficRate(
+            id: "Safari",
+            displayName: "Safari",
+            processNames: ["Safari"],
+            pids: [123],
+            downloadBytesPerSecond: 1000,
+            uploadBytesPerSecond: 500,
+            totalReceivedBytes: 10000,
+            totalSentBytes: 5000,
+            residentMemory: 1024 * 1024 * 500, // 500 MB
+            cpuPercentage: 12.5
+        )
+        XCTAssertEqual(rate.residentMemory, 524_288_000)
+        XCTAssertEqual(rate.cpuPercentage, 12.5)
+    }
+
+    func testApplicationTrafficRateWithoutResources() {
+        let rate = ApplicationTrafficRate(
+            id: "unknown",
+            displayName: "unknown",
+            processNames: ["unknown"],
+            pids: [999],
+            downloadBytesPerSecond: 0,
+            uploadBytesPerSecond: 0,
+            totalReceivedBytes: 100,
+            totalSentBytes: 50,
+            residentMemory: nil,
+            cpuPercentage: nil
+        )
+        XCTAssertNil(rate.residentMemory)
+        XCTAssertNil(rate.cpuPercentage)
+    }
+
+    func testApplicationTrafficStateEmptyHasSystemResources() {
+        let empty = ApplicationTrafficState.empty
+        // Empty state should have .empty systemResources
+        XCTAssertEqual(empty.systemResources, SystemResourceSummary.empty)
+    }
+
+    // MARK: - Mock ApplicationResourceReader Tests (LUC-227)
+
+    func testMockApplicationResourceReader() {
+        let mock = MockApplicationResourceReader(processes: [
+            ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0),
+            ProcessResourceUsage(pid: 200, processName: "Mail", displayName: "Mail", residentMemory: 2048, cpuPercentage: 2.0),
+        ])
+        let results = mock.readProcessResources()
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results[0].processName, "Safari")
+        XCTAssertEqual(results[1].processName, "Mail")
+    }
+
+    // MARK: - NetworkMonitor Integration (with current API)
+
+    func testNetworkMonitorStartsAndStops() async {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.start()
+        XCTAssertTrue(monitor.isRunning)
+
+        monitor.stop()
+        XCTAssertFalse(monitor.isRunning)
+    }
+
+    func testNetworkMonitorRefreshesApplicationTraffic() async {
+        let mockResourceReader = MockApplicationResourceReader(processes: [
+            ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0),
+        ])
+
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            resourceReader: mockResourceReader,
+            now: Date.init
+        )
+
+        // Start the monitor — this sets isRunning and starts timers
+        monitor.start()
+        XCTAssertTrue(monitor.isRunning)
+
+        monitor.stop()
+        XCTAssertFalse(monitor.isRunning)
+    }
+
+    func testNetworkMonitorPowerSaveMode() {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // Should not crash when setting power save mode before start
+        monitor.setPowerSaveMode(true)
+
+        monitor.start()
+        monitor.setPowerSaveMode(false)
+
+        monitor.stop()
+    }
+}
+
+// MARK: - Mock Readers
+
+private final class MockSystemResourceReader: SystemResourceReading, @unchecked Sendable {
+    var memory: MemoryUsage
+    var cpu: CPUTickSample
+    var thermal: ThermalInfo
+
+    init(memory: MemoryUsage, cpu: CPUTickSample, thermal: ThermalInfo) {
+        self.memory = memory
+        self.cpu = cpu
+        self.thermal = thermal
+    }
+
+    func readMemoryUsage() -> MemoryUsage { memory }
+    func readCPUTicks() -> CPUTickSample { cpu }
+    func readThermalState() -> ThermalInfo { thermal }
+}
+
+private final class MockApplicationResourceReader: ApplicationResourceReading, @unchecked Sendable {
+    let processes: [ProcessResourceUsage]
+
+    init(processes: [ProcessResourceUsage]) {
+        self.processes = processes
+    }
+
+    func readProcessResources() -> [ProcessResourceUsage] { processes }
+}
+
+// MARK: - Test Helpers
+
+private final class SequenceNetworkStatsReader: NetworkStatsReading {
+    private var samples: [[InterfaceStats]]
+    private var index = 0
+
+    init(samples: [[InterfaceStats]]) {
+        self.samples = samples
+    }
+
+    func readInterfaces() -> [InterfaceStats] {
+        let sample = samples[min(index, samples.count - 1)]
+        index += 1
+        return sample
+    }
+}
+
+private struct EmptyApplicationTrafficReader: ApplicationTrafficReading {
+    func readApplications() -> ApplicationTrafficReadResult {
+        ApplicationTrafficReadResult(stats: [], errorMessage: nil)
+    }
+}
