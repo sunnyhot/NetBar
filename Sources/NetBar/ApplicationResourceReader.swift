@@ -54,8 +54,9 @@ final class PSApplicationResourceReader: ApplicationResourceReading, @unchecked 
         let pipe = Pipe()
 
         process.executableURL = executableURL
-        // -x: all users, -o: custom format (pid= PID, rss= RSS in KB, %cpu= CPU%, command=)
-        process.arguments = ["aux", "-o", "pid=,rss=,%cpu=,comm="]
+        // -e: all processes, -o: custom format with = to suppress header
+        // pid= PID, rss= RSS in KB, %cpu= CPU%, comm= command name
+        process.arguments = ["-e", "-o", "pid=,rss=,%cpu=,comm="]
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
 
@@ -75,15 +76,14 @@ final class PSApplicationResourceReader: ApplicationResourceReading, @unchecked 
 
     private func parse(_ output: String) -> [ProcessResourceUsage] {
         let lines = output.split(separator: "\n", omittingEmptySubsequences: true)
-        guard lines.count > 1 else { return [] }
+        guard !lines.isEmpty else { return [] }
 
-        // Skip header line
+        // No header line with -o col= syntax (= suppresses header)
         var results: [ProcessResourceUsage] = []
-        results.reserveCapacity(lines.count - 1)
+        results.reserveCapacity(lines.count)
 
-        for line in lines.dropFirst() {
-            // ps aux format: USER PID %CPU %MEM VSZ RSS TT STAT STARTED TIME COMMAND
-            // But we requested pid=,rss=,%cpu=,comm= so format is: PID RSS %CPU COMM
+        for line in lines {
+            // ps -e -o pid=,rss=,%cpu=,comm= format: PID RSS %CPU COMM
             let columns = line.split(separator: " ", omittingEmptySubsequences: true).map(String.init)
             guard columns.count >= 4 else { continue }
 
@@ -131,11 +131,14 @@ final class PSApplicationResourceReader: ApplicationResourceReading, @unchecked 
 // MARK: - System Resource Reader
 
 final class SystemResourceReader: @unchecked Sendable {
+    /// Stores previous CPU tick snapshot for delta-based instantaneous calculation.
+    private var previousCPUTicks: [UInt64]? // [user, system, nice, idle] aggregated across all cores
+
     /// Read overall system resource summary.
     func readSystemSummary(processCount: Int) -> SystemResourceSummary {
         let totalMemory = ProcessInfo.processInfo.physicalMemory
         let usedMemory = Self.readUsedMemory()
-        let cpuUsage = Self.readCPUUsage()
+        let cpuUsage = readCPUUsage()
 
         return SystemResourceSummary(
             totalMemory: totalMemory,
@@ -173,8 +176,8 @@ final class SystemResourceReader: @unchecked Sendable {
         return usedMemory
     }
 
-    /// Read CPU usage via host_processor_info.
-    private static func readCPUUsage() -> Double? {
+    /// Read instantaneous CPU usage via host_processor_info with delta calculation.
+    private func readCPUUsage() -> Double? {
         let host = mach_host_self()
         var numCPUs = natural_t(0)
         var cpuInfo: processor_info_array_t?
@@ -184,25 +187,40 @@ final class SystemResourceReader: @unchecked Sendable {
         guard result == KERN_SUCCESS, let cpuInfo = cpuInfo else { return nil }
         defer { vm_deallocate(mach_task_self_, vm_address_t(bitPattern: cpuInfo), vm_size_t(numCPUInfo) * vm_size_t(MemoryLayout<integer_t>.size)) }
 
-        var totalUsage: Double = 0
-        var totalTick: UInt64 = 0
+        // Aggregate ticks across all CPUs
+        var totalUser: UInt64 = 0
+        var totalSystem: UInt64 = 0
+        var totalNice: UInt64 = 0
+        var totalIdle: UInt64 = 0
 
         for i in 0..<Int(numCPUs) {
             let base = i * Int(CPU_STATE_MAX)
-            let user = UInt64(cpuInfo[base + Int(CPU_STATE_USER)])
-            let system = UInt64(cpuInfo[base + Int(CPU_STATE_SYSTEM)])
-            let nice = UInt64(cpuInfo[base + Int(CPU_STATE_NICE)])
-            let idle = UInt64(cpuInfo[base + Int(CPU_STATE_IDLE)])
-            let used = user + system + nice
-            let total = used + idle
-            if total > 0 {
-                totalUsage += Double(used) / Double(total) * 100.0
-            }
-            totalTick += total
+            totalUser += UInt64(cpuInfo[base + Int(CPU_STATE_USER)])
+            totalSystem += UInt64(cpuInfo[base + Int(CPU_STATE_SYSTEM)])
+            totalNice += UInt64(cpuInfo[base + Int(CPU_STATE_NICE)])
+            totalIdle += UInt64(cpuInfo[base + Int(CPU_STATE_IDLE)])
         }
 
-        guard numCPUs > 0 else { return nil }
-        // Average across all CPUs (result is 0-100 overall)
-        return totalUsage / Double(numCPUs)
+        let currentTicks = [totalUser, totalSystem, totalNice, totalIdle]
+
+        // First sample: store and return nil (no delta yet)
+        guard let prev = previousCPUTicks else {
+            previousCPUTicks = currentTicks
+            return nil
+        }
+
+        previousCPUTicks = currentTicks
+
+        // Delta calculation for instantaneous usage
+        let dUser = totalUser > prev[0] ? totalUser - prev[0] : 0
+        let dSystem = totalSystem > prev[1] ? totalSystem - prev[1] : 0
+        let dNice = totalNice > prev[2] ? totalNice - prev[2] : 0
+        let dIdle = totalIdle > prev[3] ? totalIdle - prev[3] : 0
+
+        let dUsed = dUser + dSystem + dNice
+        let dTotal = dUsed + dIdle
+
+        guard dTotal > 0 else { return nil }
+        return Double(dUsed) / Double(dTotal) * 100.0
     }
 }

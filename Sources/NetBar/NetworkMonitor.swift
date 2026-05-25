@@ -270,14 +270,13 @@ final class NetworkMonitor: ObservableObject {
         let resourceReader = self.resourceReader
         let systemResourceReader = self.systemResourceReader
         Task { [weak self, reader, resourceReader, systemResourceReader] in
-            let (result, resourceUsages, sampledAt) = await Task.detached(priority: .utility) { [reader, resourceReader] in
+            let (result, resourceUsages, systemSummary, sampledAt) = await Task.detached(priority: .utility) { [reader, resourceReader, systemResourceReader] in
                 let trafficResult = reader.readApplications()
                 let resourceUsages = resourceReader.readProcessResources()
-                return (trafficResult, resourceUsages, Date())
+                let processCount = resourceUsages.count
+                let systemSummary = systemResourceReader.readSystemSummary(processCount: processCount)
+                return (trafficResult, resourceUsages, systemSummary, Date())
             }.value
-
-            let processCount = resourceUsages.count
-            let systemSummary = systemResourceReader.readSystemSummary(processCount: processCount)
 
             self?.applyApplicationTraffic(result, resourceUsages: resourceUsages, systemSummary: systemSummary, sampledAt: sampledAt)
         }
