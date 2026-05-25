@@ -25,6 +25,8 @@ enum NetBarTone: Equatable {
     case neutral
     case success
     case warning
+    case purple
+    case danger
 
     var color: Color {
         switch self {
@@ -38,6 +40,10 @@ enum NetBarTone: Equatable {
             return .green
         case .warning:
             return .orange
+        case .purple:
+            return .purple
+        case .danger:
+            return .red
         }
     }
 
@@ -74,6 +80,18 @@ enum NetBarTone: Equatable {
         case .warning:
             return LinearGradient(
                 colors: [Color.orange, Color.yellow],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .purple:
+            return LinearGradient(
+                colors: [Color.purple, Color.indigo],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .danger:
+            return LinearGradient(
+                colors: [Color.red, Color.pink],
                 startPoint: .topLeading,
                 endPoint: .bottomTrailing
             )

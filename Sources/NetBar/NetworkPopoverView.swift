@@ -340,6 +340,15 @@ private struct ApplicationTrafficList: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
+
+                    // System resource summary card
+                    let sys = appTraffic.systemResources
+                    if sys.totalMemory > 0 {
+                        SystemResourceCard(
+                            summary: sys,
+                            appPreferences: preferences
+                        )
+                    }
                 }
 
                 if visibleApplications.isEmpty {
@@ -446,7 +455,7 @@ private struct ApplicationTrafficRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 8) {
+            HStack(spacing: 6) {
                 CompactMetric(
                     symbol: "arrow.down",
                     value: ByteFormat.speed(application.downloadBytesPerSecond),
@@ -457,6 +466,20 @@ private struct ApplicationTrafficRow: View {
                     value: ByteFormat.speed(application.uploadBytesPerSecond),
                     tint: .orange
                 )
+                if let mem = application.residentMemory {
+                    CompactMetric(
+                        symbol: "memorychip",
+                        value: ByteFormat.bytes(mem),
+                        tint: .purple
+                    )
+                }
+                if let cpu = application.cpuPercentage {
+                    CompactMetric(
+                        symbol: "cpu",
+                        value: String(format: "%.1f%%", cpu),
+                        tint: .red
+                    )
+                }
             }
         }
         .netBarCard(cornerRadius: 10, padding: 6)
@@ -678,6 +701,95 @@ private struct InterfaceRow: View {
         )
         .animation(NetBarMotion.quick, value: isHovering)
         .onHover { isHovering = $0 }
+    }
+}
+
+// MARK: - System Resource Card
+
+private struct SystemResourceCard: View {
+    let summary: SystemResourceSummary
+    @ObservedObject var appPreferences: AppPreferences
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Memory usage
+            HStack(spacing: 8) {
+                NetBarIconTile(systemName: "memorychip", tone: .purple, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appPreferences.text("内存", "Memory"))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 4) {
+                        Text(ByteFormat.bytes(Double(summary.usedMemory)))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        if let pct = summary.memoryUsagePercentage {
+                            Text(String(format: "%.0f%%", pct))
+                                .font(.system(size: 9, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    // Memory bar
+                    GeometryReader { geo in
+                        let pct = summary.memoryUsagePercentage ?? 0
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.primary.opacity(0.06))
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.purple.opacity(0.45))
+                                .frame(width: geo.size.width * min(pct / 100.0, 1.0))
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // CPU usage
+            HStack(spacing: 8) {
+                NetBarIconTile(systemName: "cpu", tone: .danger, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CPU")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                    if let cpu = summary.cpuUsage {
+                        Text(String(format: "%.1f%%", cpu))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.primary.opacity(0.06))
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.orange.opacity(0.45))
+                                    .frame(width: geo.size.width * min(cpu / 100.0, 1.0))
+                            }
+                        }
+                        .frame(height: 4)
+                    } else {
+                        Text("--")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.tertiary)
+                        Spacer().frame(height: 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Process count
+            VStack(alignment: .center, spacing: 2) {
+                Text(appPreferences.text("进程", "Procs"))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                Text("\(summary.processCount)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 52)
+        }
+        .netBarCard(cornerRadius: 12, padding: 10)
     }
 }
 
