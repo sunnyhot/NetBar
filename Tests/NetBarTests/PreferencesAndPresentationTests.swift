@@ -1388,7 +1388,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             ],
             sampleCount: 3,
             isRefreshing: false,
-            errorMessage: nil
+            errorMessage: nil,
+            systemResources: .empty
         )
 
         let visible = ApplicationTrafficPresentation.visibleApplications(
@@ -1518,7 +1519,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             ],
             sampleCount: 2,
             isRefreshing: false,
-            errorMessage: nil
+            errorMessage: nil,
+            systemResources: .empty
         )
 
         controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: appTraffic)
@@ -1608,7 +1610,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             ],
             sampleCount: 2,
             isRefreshing: false,
-            errorMessage: nil
+            errorMessage: nil,
+            systemResources: .empty
         )
 
         let cue = controller.triggerSkill(
@@ -1857,7 +1860,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             downloadBytesPerSecond: download,
             uploadBytesPerSecond: upload,
             totalReceivedBytes: total / 2,
-            totalSentBytes: total / 2
+            totalSentBytes: total / 2,
+            residentMemory: nil,
+            cpuPercentage: nil
         )
     }
 

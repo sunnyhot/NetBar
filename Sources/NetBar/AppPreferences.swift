@@ -7,6 +7,8 @@ enum ApplicationSortMode: String, CaseIterable, Identifiable {
     case download
     case upload
     case total
+    case memory
+    case cpu
     case name
 
     var id: String { rawValue }
@@ -25,6 +27,10 @@ enum ApplicationSortMode: String, CaseIterable, Identifiable {
             return language.text("上传速度", "Upload")
         case .total:
             return language.text("累计流量", "Total traffic")
+        case .memory:
+            return language.text("内存占用", "Memory")
+        case .cpu:
+            return language.text("CPU 占用", "CPU")
         case .name:
             return language.text("应用名称", "App name")
         }

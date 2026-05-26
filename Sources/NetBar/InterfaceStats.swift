@@ -81,6 +81,10 @@ struct ApplicationTrafficRate: Identifiable, Equatable {
     let uploadBytesPerSecond: Double
     let totalReceivedBytes: UInt64
     let totalSentBytes: UInt64
+    /// Total resident memory in bytes (nil if unavailable).
+    let residentMemory: UInt64?
+    /// Total CPU usage percentage (nil if unavailable).
+    let cpuPercentage: Double?
 
     var processLabel: String {
         let pidText = pids.prefix(3).map(String.init).joined(separator: ", ")
@@ -97,12 +101,15 @@ struct ApplicationTrafficState: Equatable {
     var sampleCount: Int
     var isRefreshing: Bool
     var errorMessage: String?
+    /// System-wide resource summary (memory, CPU).
+    var systemResources: SystemResourceSummary
 
     static let empty = ApplicationTrafficState(
         timestamp: nil,
         applications: [],
         sampleCount: 0,
         isRefreshing: false,
-        errorMessage: nil
+        errorMessage: nil,
+        systemResources: .empty
     )
 }

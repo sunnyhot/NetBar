@@ -45,6 +45,14 @@ enum ApplicationTrafficPresentation {
                     return lhsTotal > rhsTotal
                 }
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
+            case .memory:
+                let lhsMem = lhs.residentMemory ?? 0
+                let rhsMem = rhs.residentMemory ?? 0
+                return orderedDescending(Double(lhsMem), Double(rhsMem), lhs.displayName, rhs.displayName)
+            case .cpu:
+                let lhsCPU = lhs.cpuPercentage ?? -1
+                let rhsCPU = rhs.cpuPercentage ?? -1
+                return orderedDescending(lhsCPU, rhsCPU, lhs.displayName, rhs.displayName)
             case .name:
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
