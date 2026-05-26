@@ -135,7 +135,7 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertTrue(result.contains("GB"))
     }
 
-    // MARK: - Mock SystemResourceReader
+    // MARK: - Mock SystemResourceReader Tests
 
     func testMockReaderReturnsConfiguredValues() {
         let mock = MockSystemResourceReader(
@@ -156,6 +156,136 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(thermal.state, .fair)
     }
 
+    // MARK: - CPUTickSample Tests
+
+    func testCPUTickSampleEquality() {
+        let a = CPUTickSample(total: 1000, user: 300, system: 100, idle: 600)
+        let b = CPUTickSample(total: 1000, user: 300, system: 100, idle: 600)
+        XCTAssertEqual(a, b)
+    }
+
+    func testCPUTickSampleInequality() {
+        let a = CPUTickSample(total: 1000, user: 300, system: 100, idle: 600)
+        let b = CPUTickSample(total: 2000, user: 300, system: 100, idle: 600)
+        XCTAssertNotEqual(a, b)
+    }
+
+    // MARK: - ThermalPressureState Tests
+
+    func testThermalPressureStateEquality() {
+        XCTAssertEqual(ThermalPressureState.nominal, ThermalPressureState.nominal)
+        XCTAssertNotEqual(ThermalPressureState.nominal, ThermalPressureState.fair)
+        XCTAssertNotEqual(ThermalPressureState.fair, ThermalPressureState.serious)
+        XCTAssertNotEqual(ThermalPressureState.serious, ThermalPressureState.critical)
+    }
+
+    // MARK: - SystemResourceSummary Tests (LUC-227)
+
+    func testSystemResourceSummaryEmpty() {
+        let empty = SystemResourceSummary.empty
+        XCTAssertEqual(empty.totalMemory, 0)
+        XCTAssertEqual(empty.usedMemory, 0)
+        XCTAssertNil(empty.cpuUsage)
+        XCTAssertEqual(empty.processCount, 0)
+        XCTAssertNil(empty.memoryUsagePercentage)
+    }
+
+    func testSystemResourceSummaryMemoryPercentage() {
+        let summary = SystemResourceSummary(
+            totalMemory: 16_000_000_000,
+            usedMemory: 8_000_000_000,
+            cpuUsage: 25.5,
+            processCount: 300
+        )
+        XCTAssertEqualWithAccuracy(summary.memoryUsagePercentage!, 50.0, accuracy: 0.01)
+    }
+
+    func testSystemResourceSummaryZeroMemory() {
+        let summary = SystemResourceSummary(
+            totalMemory: 0,
+            usedMemory: 0,
+            cpuUsage: nil,
+            processCount: 0
+        )
+        XCTAssertNil(summary.memoryUsagePercentage)
+    }
+
+    func testSystemResourceSummaryEquality() {
+        let a = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0, processCount: 100)
+        let b = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0, processCount: 100)
+        XCTAssertEqual(a, b)
+    }
+
+    // MARK: - ProcessResourceUsage Tests (LUC-227)
+
+    func testProcessResourceUsageEquality() {
+        let a = ProcessResourceUsage(pid: 123, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0)
+        let b = ProcessResourceUsage(pid: 123, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0)
+        XCTAssertEqual(a, b)
+    }
+
+    func testProcessResourceUsageWithNilFields() {
+        let usage = ProcessResourceUsage(pid: 456, processName: "kernel", displayName: "kernel", residentMemory: nil, cpuPercentage: nil)
+        XCTAssertNil(usage.residentMemory)
+        XCTAssertNil(usage.cpuPercentage)
+        XCTAssertEqual(usage.pid, 456)
+    }
+
+    // MARK: - ApplicationTrafficRate Resource Fields (LUC-227)
+
+    func testApplicationTrafficRateWithResources() {
+        let rate = ApplicationTrafficRate(
+            id: "Safari",
+            displayName: "Safari",
+            processNames: ["Safari"],
+            pids: [123],
+            downloadBytesPerSecond: 1000,
+            uploadBytesPerSecond: 500,
+            totalReceivedBytes: 10000,
+            totalSentBytes: 5000,
+            residentMemory: 1024 * 1024 * 500, // 500 MB
+            cpuPercentage: 12.5
+        )
+        XCTAssertEqual(rate.residentMemory, 524_288_000)
+        XCTAssertEqual(rate.cpuPercentage, 12.5)
+    }
+
+    func testApplicationTrafficRateWithoutResources() {
+        let rate = ApplicationTrafficRate(
+            id: "unknown",
+            displayName: "unknown",
+            processNames: ["unknown"],
+            pids: [999],
+            downloadBytesPerSecond: 0,
+            uploadBytesPerSecond: 0,
+            totalReceivedBytes: 100,
+            totalSentBytes: 50,
+            residentMemory: nil,
+            cpuPercentage: nil
+        )
+        XCTAssertNil(rate.residentMemory)
+        XCTAssertNil(rate.cpuPercentage)
+    }
+
+    func testApplicationTrafficStateEmptyHasSystemResources() {
+        let empty = ApplicationTrafficState.empty
+        // Empty state should have .empty systemResources
+        XCTAssertEqual(empty.systemResources, SystemResourceSummary.empty)
+    }
+
+    // MARK: - Mock ApplicationResourceReader Tests (LUC-227)
+
+    func testMockApplicationResourceReader() {
+        let mock = MockApplicationResourceReader(processes: [
+            ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0),
+            ProcessResourceUsage(pid: 200, processName: "Mail", displayName: "Mail", residentMemory: 2048, cpuPercentage: 2.0),
+        ])
+        let results = mock.readProcessResources()
+        XCTAssertEqual(results.count, 2)
+        XCTAssertEqual(results[0].processName, "Safari")
+        XCTAssertEqual(results[1].processName, "Mail")
+    }
+
     // MARK: - NetworkMonitor System Resource Integration
 
     func testNetworkMonitorRefreshesSystemResources() async {
@@ -169,6 +299,7 @@ final class SystemResourceTests: XCTestCase {
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
             systemResourceReader: mock,
+            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -197,6 +328,7 @@ final class SystemResourceTests: XCTestCase {
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
             systemResourceReader: mock,
+            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -230,6 +362,7 @@ final class SystemResourceTests: XCTestCase {
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
             systemResourceReader: mock,
+            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -239,9 +372,66 @@ final class SystemResourceTests: XCTestCase {
         monitor.stop()
         XCTAssertFalse(monitor.isRunning)
     }
+
+    func testNetworkMonitorStartsAndStops() async {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.start()
+        XCTAssertTrue(monitor.isRunning)
+
+        monitor.stop()
+        XCTAssertFalse(monitor.isRunning)
+    }
+
+    func testNetworkMonitorRefreshesApplicationTraffic() async {
+        let mockResourceReader = MockApplicationResourceReader(processes: [
+            ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0),
+        ])
+
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            resourceReader: mockResourceReader,
+            now: Date.init
+        )
+
+        // Start the monitor — this sets isRunning and starts timers
+        monitor.start()
+        XCTAssertTrue(monitor.isRunning)
+
+        monitor.stop()
+        XCTAssertFalse(monitor.isRunning)
+    }
+
+    func testNetworkMonitorPowerSaveMode() {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // Should not crash when setting power save mode before start
+        monitor.setPowerSaveMode(true)
+
+        monitor.start()
+        monitor.setPowerSaveMode(false)
+
+        monitor.stop()
+    }
 }
 
-// MARK: - Mock Reader
+// MARK: - Mock Readers
 
 private final class MockSystemResourceReader: SystemResourceReading, @unchecked Sendable {
     var memory: MemoryUsage
@@ -259,7 +449,17 @@ private final class MockSystemResourceReader: SystemResourceReading, @unchecked 
     func readThermalState() -> ThermalInfo { thermal }
 }
 
-// MARK: - Test Helpers (duplicated from main test file for isolation)
+private final class MockApplicationResourceReader: ApplicationResourceReading, @unchecked Sendable {
+    let processes: [ProcessResourceUsage]
+
+    init(processes: [ProcessResourceUsage]) {
+        self.processes = processes
+    }
+
+    func readProcessResources() -> [ProcessResourceUsage] { processes }
+}
+
+// MARK: - Test Helpers
 
 private final class SequenceNetworkStatsReader: NetworkStatsReading {
     private var samples: [[InterfaceStats]]
