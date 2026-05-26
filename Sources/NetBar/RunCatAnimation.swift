@@ -275,6 +275,15 @@ final class RunCatAnimation {
             newLevel = .high
         }
 
+        applyActivityLevel(newLevel)
+    }
+
+    /// Directly set an externally computed activity level (e.g. from CPU/memory/thermal metrics).
+    func updateActivityLevel(_ level: ActivityLevel) {
+        applyActivityLevel(level)
+    }
+
+    private func applyActivityLevel(_ newLevel: ActivityLevel) {
         let wasIdle = activityLevel == .idle
         activityLevel = newLevel
 

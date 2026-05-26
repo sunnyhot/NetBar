@@ -49,6 +49,15 @@ struct MenuBarAnimationSection: View {
                     displayValue: String(format: "%.1fx", settings.catSpeedMultiplier)
                 )
 
+                Picker(
+                    appPreferences.text("速度关联", "Speed Source"),
+                    selection: $settings.catAnimationSpeedSource
+                ) {
+                    ForEach(AnimationSpeedSource.allCases) { source in
+                        Text(source.title(language: appPreferences.resolvedLanguage)).tag(source.rawValue)
+                    }
+                }
+
                 Text(appPreferences.text(
                     "速度倍率影响动画快慢：1.0x 为默认，2.0x 为两倍速，0.5x 为半速。",
                     "Speed multiplier affects animation rate: 1.0x is default, 2.0x is double speed, 0.5x is half speed."
