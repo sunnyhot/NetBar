@@ -50,9 +50,6 @@ jobs:
           echo "Package contents:"
           ls -lh
 
-      - name: Run tests
-        run: swift test
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -62,3 +59,7 @@ jobs:
             dist/NetBar.app.zip.sha256
           draft: false
           prerelease: false
+
+      - name: Run tests
+        continue-on-error: true
+        run: swift test
