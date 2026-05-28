@@ -374,8 +374,18 @@ private struct ApplicationTrafficList: View {
             : preferences.text("没有匹配的应用", "No Matching Apps")
     }
 
+
+
+    /// Always show controls (search + sort picker) when:
+    /// - there is application data, OR
+    /// - user is searching, OR
+    /// - initial loading is done (so the sort picker is always accessible after startup).
+    /// This ensures the sort picker is never hidden after the first load,
+    /// so users can always switch between traffic/memory/CPU sort modes.
     private var shouldShowControls: Bool {
-        !appTraffic.applications.isEmpty || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !appTraffic.applications.isEmpty
+            || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !appTraffic.isRefreshing && appTraffic.errorMessage == nil
     }
 
     private var emptyMessage: String {

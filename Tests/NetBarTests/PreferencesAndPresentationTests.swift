@@ -1866,6 +1866,32 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    /// Variant of `app()` that supports optional memory/CPU fields for testing
+    /// memory and CPU sort modes with apps that have no network traffic.
+    private func appWithResources(
+        _ displayName: String,
+        processNames: [String],
+        download: Double = 0,
+        upload: Double = 0,
+        totalReceived: UInt64 = 0,
+        totalSent: UInt64 = 0,
+        residentMemory: UInt64? = nil,
+        cpuPercentage: Double? = nil
+    ) -> ApplicationTrafficRate {
+        ApplicationTrafficRate(
+            id: displayName,
+            displayName: displayName,
+            processNames: processNames,
+            pids: [123],
+            downloadBytesPerSecond: download,
+            uploadBytesPerSecond: upload,
+            totalReceivedBytes: totalReceived,
+            totalSentBytes: totalSent,
+            residentMemory: residentMemory,
+            cpuPercentage: cpuPercentage
+        )
+    }
+
     private func foregroundPixelBounds(
         in image: NSImage,
         background: PersistedColor,
@@ -2274,6 +2300,142 @@ private final class MockSystemMetricsReader: SystemMetricsReading {
     func cpuUsage() -> Double { cpu }
     func memoryUsage() -> Double { memory }
     func thermalState() -> Int { thermal }
+}
+
+// MARK: - Memory & CPU Sort Tests
+
+extension PreferencesAndPresentationTests {
+
+    /// Apps with no network traffic but valid memory data should appear in memory sort mode,
+    /// sorted by residentMemory descending.
+    func testMemorySortShowsAppsWithoutNetworkTraffic() {
+        let preferences = AppPreferences(
+            defaults: isolatedDefaults(),
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.applicationSort = .memory
+
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                // Safari: no network traffic, but 500 MB memory
+                appWithResources("Safari", processNames: ["Safari"], residentMemory: 500_000_000),
+                // Xcode: no network traffic, 1.2 GB memory (should appear first)
+                appWithResources("Xcode", processNames: ["Xcode"], residentMemory: 1_200_000_000),
+                // Arc: has network traffic but no memory data (should appear last with memory=0)
+                app("Arc", processNames: ["Arc"], download: 5_000, upload: 2_000, total: 7_000)
+            ],
+            sampleCount: 3,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let visible = ApplicationTrafficPresentation.visibleApplications(
+            from: state,
+            preferences: preferences,
+            searchText: ""
+        )
+
+        // Xcode (1.2 GB) > Safari (500 MB) > Arc (0, no memory data)
+        XCTAssertEqual(visible.map(\.displayName), ["Xcode", "Safari", "Arc"])
+    }
+
+    /// Apps with no network traffic but valid CPU data should appear in CPU sort mode,
+    /// sorted by cpuPercentage descending.
+    func testCPUSortShowsAppsWithoutNetworkTraffic() {
+        let preferences = AppPreferences(
+            defaults: isolatedDefaults(),
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.applicationSort = .cpu
+
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                // Docker: no network traffic, 45% CPU
+                appWithResources("Docker", processNames: ["Docker"], cpuPercentage: 45.0),
+                // Final Cut: no network traffic, 82% CPU (should appear first)
+                appWithResources("Final Cut", processNames: ["Final Cut"], cpuPercentage: 82.0),
+                // Firefox: has network traffic but no CPU data (should appear last with cpu=-1)
+                app("Firefox", processNames: ["Firefox"], download: 3_000, upload: 1_000, total: 4_000)
+            ],
+            sampleCount: 3,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let visible = ApplicationTrafficPresentation.visibleApplications(
+            from: state,
+            preferences: preferences,
+            searchText: ""
+        )
+
+        // Final Cut (82%) > Docker (45%) > Firefox (-1, no CPU data)
+        XCTAssertEqual(visible.map(\.displayName), ["Final Cut", "Docker", "Firefox"])
+    }
+
+    /// In CPU sort, apps with equal CPU percentage should be sorted by display name.
+    func testCPUSortBreaksTiesByName() {
+        let preferences = AppPreferences(
+            defaults: isolatedDefaults(),
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.applicationSort = .cpu
+
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appWithResources("Zephyr", processNames: ["Zephyr"], cpuPercentage: 10.0),
+                appWithResources("Alpha", processNames: ["Alpha"], cpuPercentage: 10.0),
+                appWithResources("Middle", processNames: ["Middle"], cpuPercentage: 10.0)
+            ],
+            sampleCount: 3,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let visible = ApplicationTrafficPresentation.visibleApplications(
+            from: state,
+            preferences: preferences,
+            searchText: ""
+        )
+
+        // All have same CPU %, so sorted by display name ascending
+        XCTAssertEqual(visible.map(\.displayName), ["Alpha", "Middle", "Zephyr"])
+    }
+
+    /// In memory sort, apps with equal memory should be sorted by display name.
+    func testMemorySortBreaksTiesByName() {
+        let preferences = AppPreferences(
+            defaults: isolatedDefaults(),
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.applicationSort = .memory
+
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appWithResources("Zebra", processNames: ["Zebra"], residentMemory: 100_000_000),
+                appWithResources("Apple", processNames: ["Apple"], residentMemory: 100_000_000)
+            ],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let visible = ApplicationTrafficPresentation.visibleApplications(
+            from: state,
+            preferences: preferences,
+            searchText: ""
+        )
+
+        // Same memory, so sorted by display name ascending
+        XCTAssertEqual(visible.map(\.displayName), ["Apple", "Zebra"])
+    }
 }
 
 // MARK: - SystemMetricsSampler Tests
