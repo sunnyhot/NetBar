@@ -424,7 +424,9 @@ final class NetworkMonitor: ObservableObject {
                 cpuPercentage: totalCPU
             )
         }
-        .filter { $0.totalReceivedBytes > 0 || $0.totalSentBytes > 0 }
+        // Keep apps with network traffic OR resource data (memory/CPU),
+        // so memory/CPU sort modes show meaningful results even for idle apps.
+        .filter { $0.totalReceivedBytes > 0 || $0.totalSentBytes > 0 || $0.residentMemory != nil || $0.cpuPercentage != nil }
         .sorted { lhs, rhs in
             let lhsTraffic = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
             let rhsTraffic = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond
