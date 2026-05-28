@@ -297,22 +297,12 @@ private struct ApplicationTrafficList: View {
                     action: retry
                 )
             } else {
-                if shouldShowControls {
-                    HStack(spacing: 8) {
-                        TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12))
-
-                        Picker(preferences.text("排序", "Sort"), selection: $preferences.applicationSort) {
-                            ForEach(ApplicationSortMode.allCases) { sortMode in
-                                Text(sortMode.title(language: preferences.resolvedLanguage)).tag(sortMode)
-                            }
-                        }
-                        .labelsHidden()
-                        .frame(width: 126)
-                    }
-                    .netBarCard(cornerRadius: 11, padding: 8)
-                }
+                // Sort & search controls — always visible in the detail popup
+                AppTrafficControls(
+                    preferences: preferences,
+                    searchText: $searchText,
+                    appTraffic: appTraffic
+                )
 
                 if !appTraffic.applications.isEmpty {
                     let totalDown = appTraffic.applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
@@ -374,10 +364,6 @@ private struct ApplicationTrafficList: View {
             : preferences.text("没有匹配的应用", "No Matching Apps")
     }
 
-    private var shouldShowControls: Bool {
-        !appTraffic.applications.isEmpty || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-    }
-
     private var emptyMessage: String {
         if appTraffic.isRefreshing {
             return preferences.text(
@@ -395,6 +381,60 @@ private struct ApplicationTrafficList: View {
             "保持 NetBar 运行几秒后会显示有网络活动的应用。代理或 VPN 可能会把流量归到代理进程下。",
             "Keep NetBar running for a few seconds to show apps with network activity. Proxies and VPNs may attribute traffic to the proxy process."
         )
+    }
+}
+
+// MARK: - Application Traffic Controls (always visible)
+
+private struct AppTrafficControls: View {
+    @ObservedObject var preferences: AppPreferences
+    @Binding var searchText: String
+    let appTraffic: ApplicationTrafficState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+
+            Menu {
+                ForEach(ApplicationSortMode.allCases) { sortMode in
+                    Button {
+                        preferences.applicationSort = sortMode
+                    } label: {
+                        HStack {
+                            Text(sortMode.title(language: preferences.resolvedLanguage))
+                            if preferences.applicationSort == sortMode {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(preferences.applicationSort.title(language: preferences.resolvedLanguage))
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+            }
+            .fixedSize()
+        }
+        .netBarCard(cornerRadius: 11, padding: 8)
     }
 }
 
