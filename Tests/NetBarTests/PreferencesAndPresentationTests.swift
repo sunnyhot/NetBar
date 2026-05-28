@@ -1328,28 +1328,25 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
-    func testGitHubReleaseDecodesFromRESTAPIJSON() throws {
+    func testReleaseManifestDecodesFromJSON() throws {
         let json = """
         {
-            "tag_name": "v0.21.0",
-            "name": "NetBar 0.21.0",
-            "body": "Bug fixes and improvements",
-            "html_url": "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0",
-            "assets": [
-                {
-                    "name": "NetBar.app.zip",
-                    "size": 2400000,
-                    "browser_download_url": "https://github.com/sunnyhot/NetBar/releases/download/v0.21.0/NetBar.app.zip"
-                }
-            ]
+            "version": "0.21.0",
+            "tag": "v0.21.0",
+            "asset": "NetBar.app.zip",
+            "asset_url": "https://github.com/sunnyhot/NetBar/releases/download/v0.21.0/NetBar.app.zip",
+            "sha256": "abcdef1234567890",
+            "notes": "Bug fixes and improvements",
+            "html_url": "https://github.com/sunnyhot/NetBar/releases/tag/v0.21.0"
         }
         """.data(using: .utf8)!
 
-        let release = try JSONDecoder().decode(GitHubRelease.self, from: json)
-        XCTAssertEqual(release.tagName, "v0.21.0")
-        XCTAssertEqual(release.name, "NetBar 0.21.0")
-        XCTAssertEqual(release.body, "Bug fixes and improvements")
-        XCTAssertEqual(release.assets.first?.name, "NetBar.app.zip")
+        let manifest = try JSONDecoder().decode(ReleaseManifest.self, from: json)
+        XCTAssertEqual(manifest.version, "0.21.0")
+        XCTAssertEqual(manifest.tag, "v0.21.0")
+        XCTAssertEqual(manifest.asset, "NetBar.app.zip")
+        XCTAssertEqual(manifest.sha256, "abcdef1234567890")
+        XCTAssertEqual(manifest.notes, "Bug fixes and improvements")
     }
 
     func testAvailableUpdateProvidesVersionTextAndReleaseBody() {

@@ -30,6 +30,28 @@ struct GitHubReleaseAsset: Decodable, Equatable {
     }
 }
 
+/// Manifest model for the static latest.json uploaded as a Release asset.
+/// The App fetches this instead of calling the GitHub REST API to avoid rate limits.
+struct ReleaseManifest: Decodable, Equatable {
+    let version: String
+    let tag: String
+    let asset: String
+    let assetURL: String
+    let sha256: String
+    let notes: String?
+    let htmlURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case tag
+        case asset
+        case assetURL = "asset_url"
+        case sha256
+        case notes
+        case htmlURL = "html_url"
+    }
+}
+
 struct AvailableUpdate: Equatable {
     let release: GitHubRelease
     let asset: GitHubReleaseAsset
@@ -395,17 +417,38 @@ final class AppUpdater: ObservableObject {
     // MARK: - Network
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
-        guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
+        // Fetch the static latest.json manifest uploaded as a Release asset,
+        // avoiding the GitHub REST API rate limit (60 req/hr unauthenticated).
+        guard let url = URL(string: "https://github.com/\(repository)/releases/latest/download/latest.json") else {
             throw UpdateError.invalidUpdateURL
         }
 
         var request = URLRequest(url: url)
         request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
 
         let (data, response) = try await URLSession.shared.data(for: request)
         try validateHTTPResponse(response)
-        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+        let manifest = try JSONDecoder().decode(ReleaseManifest.self, from: data)
+
+        // Map manifest back to the existing GitHubRelease / GitHubReleaseAsset models
+        // so the rest of the update flow (version comparison, download, etc.) stays unchanged.
+        let assetURL = URL(string: manifest.assetURL)
+            ?? URL(string: "https://github.com/\(repository)/releases/download/\(manifest.tag)/\(manifest.asset)")!
+        let htmlURL = URL(string: manifest.htmlURL ?? "")
+            ?? URL(string: "https://github.com/\(repository)/releases/tag/\(manifest.tag)")!
+
+        let releaseAsset = GitHubReleaseAsset(
+            name: manifest.asset,
+            size: 0,
+            browserDownloadURL: assetURL
+        )
+        return GitHubRelease(
+            tagName: manifest.tag,
+            name: nil,
+            body: manifest.notes,
+            htmlURL: htmlURL,
+            assets: [releaseAsset]
+        )
     }
 
     private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
@@ -675,7 +718,7 @@ enum UpdateError: LocalizedError {
         case .invalidUpdateURL:
             return "更新地址无效"
         case .releaseFetchFailed:
-            return "获取 GitHub 最新版本信息失败"
+            return "获取更新信息失败"
         case .httpStatus(let status):
             if status == 403 {
                 return "GitHub 请求受限（HTTP 403），稍后会自动重试"
