@@ -42,13 +42,39 @@ jobs:
           echo "Build verified: $(du -sh build/NetBar.app)"
 
       - name: Package
+        id: package
         run: |
           mkdir -p dist
           /usr/bin/ditto -c -k --keepParent build/NetBar.app dist/NetBar.app.zip
           cd dist
           shasum -a 256 NetBar.app.zip > NetBar.app.zip.sha256
+          SHA256=$(awk '{print $1}' NetBar.app.zip.sha256)
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
           echo "Package contents:"
           ls -lh
+
+      - name: Generate latest.json
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          ASSET_URL="https://github.com/sunnyhot/NetBar/releases/download/${TAG}/NetBar.app.zip"
+          RELEASE_URL="https://github.com/sunnyhot/NetBar/releases/tag/${TAG}"
+          NOTES="Release ${TAG}"
+          cat > dist/latest.json <<MANIFEST_EOF
+          {
+            "version": "${VERSION}",
+            "tag": "${TAG}",
+            "asset": "NetBar.app.zip",
+            "asset_url": "${ASSET_URL}",
+            "sha256": "${SHA256}",
+            "notes": "${NOTES}",
+            "html_url": "${RELEASE_URL}"
+          }
+          MANIFEST_EOF
+          echo "Generated latest.json:"
+          cat dist/latest.json
 
       - name: Run tests
         run: swift test
@@ -60,5 +86,6 @@ jobs:
           files: |
             dist/NetBar.app.zip
             dist/NetBar.app.zip.sha256
+            dist/latest.json
           draft: false
           prerelease: false
