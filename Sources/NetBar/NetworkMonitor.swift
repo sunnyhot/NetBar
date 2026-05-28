@@ -79,14 +79,19 @@ final class NetworkMonitor: ObservableObject {
         guard !isRunning else { return }
         isRunning = true
         refresh()
-        refreshApplicationTraffic()
-        refreshSystemResources()
-        scheduleNextSample()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshApplicationTraffic()
+        // Only start app-traffic sampling if the detail popover is visible.
+        // When the popover opens later, resumeApplicationTrafficSampling()
+        // handles the first read + timer creation.
+        if shouldSampleApplicationTraffic {
+            refreshApplicationTraffic()
+            applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshApplicationTraffic()
+                }
             }
         }
+        refreshSystemResources()
+        scheduleNextSample()
         let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
         systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
@@ -98,6 +103,9 @@ final class NetworkMonitor: ObservableObject {
     func resumeApplicationTrafficSampling() {
         guard !shouldSampleApplicationTraffic else { return }
         shouldSampleApplicationTraffic = true
+        // Invalidate any stale timer before creating a new one
+        applicationTimer?.invalidate()
+        applicationTimer = nil
         streamingReader?.start()
         refreshApplicationTraffic()
         applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
@@ -300,7 +308,11 @@ final class NetworkMonitor: ObservableObject {
                 return (trafficResult, resourceUsages, systemSummary, Date())
             }.value
 
-            self?.applyApplicationTraffic(result, resourceUsages: resourceUsages, systemSummary: systemSummary, sampledAt: sampledAt)
+            guard let self else {
+                // If monitor is deallocated, ensure we don't leave isRefreshing stuck
+                return
+            }
+            self.applyApplicationTraffic(result, resourceUsages: resourceUsages, systemSummary: systemSummary, sampledAt: sampledAt)
         }
     }
 

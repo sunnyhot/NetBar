@@ -429,6 +429,157 @@ final class SystemResourceTests: XCTestCase {
 
         monitor.stop()
     }
+
+    // MARK: - Application Traffic State Machine Tests (LUC-231)
+
+    func testRefreshApplicationTrafficBlockedWhenSamplingDisabled() async {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // shouldSampleApplicationTraffic defaults to false, so refreshApplicationTraffic should be a no-op
+        monitor.refreshApplicationTraffic()
+        // appTraffic should remain in empty state (not isRefreshing)
+        XCTAssertFalse(monitor.appTraffic.isRefreshing)
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 0)
+    }
+
+    func testRefreshApplicationTrafficFirstSampleTransitionsOutOfRefreshing() async {
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // Enable sampling (simulates popover opening)
+        monitor.isApplicationTrafficVisible = true
+
+        // Give the async Task time to complete
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        // After first sample completes, isRefreshing must be false
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false after first sample completes")
+        XCTAssertNil(monitor.appTraffic.errorMessage, "No error expected for empty results")
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 1, "sampleCount should be 1 after first sample")
+    }
+
+    func testRefreshApplicationTrafficErrorTransitionsOutOfRefreshing() async {
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [], errorMessage: "nettop failed"),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false after error sample")
+        XCTAssertNotNil(monitor.appTraffic.errorMessage, "Error message should be set")
+    }
+
+    func testRefreshApplicationTrafficReentrancyGuard() async {
+        let trafficReader = BlockingApplicationTrafficReader()
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+
+        // First call should succeed (starts async task that blocks)
+        // Second call should be blocked by isReadingApplicationTraffic guard
+        monitor.refreshApplicationTraffic()
+        // This second call should be a no-op (guard prevents reentrancy)
+        monitor.refreshApplicationTraffic()
+
+        // Unblock the reader
+        trafficReader.unblock()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should reset after blocked read completes")
+    }
+
+    func testStartDoesNotCreateAppTrafficTimerWhenNotVisible() async {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // start() should not trigger app traffic sampling when popover is not visible
+        monitor.start()
+        try? await Task.sleep(nanoseconds: 200_000_000)
+
+        // appTraffic should remain in empty state
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 0, "start() should not sample app traffic when sampling disabled")
+
+        monitor.stop()
+    }
+
+    func testPauseAndResumeSamplingResetsState() async {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.start()
+
+        // Open popover → starts sampling
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "Should finish refreshing after first sample")
+
+        // Close popover → stops sampling
+        monitor.isApplicationTrafficVisible = false
+
+        // Reopen popover → should be able to sample again
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "Should finish refreshing after resume")
+
+        monitor.stop()
+    }
 }
 
 // MARK: - Mock Readers
@@ -473,6 +624,34 @@ private final class SequenceNetworkStatsReader: NetworkStatsReading {
         let sample = samples[min(index, samples.count - 1)]
         index += 1
         return sample
+    }
+}
+
+private final class SequenceApplicationTrafficReader: ApplicationTrafficReading, @unchecked Sendable {
+    private var samples: [ApplicationTrafficReadResult]
+    private var index = 0
+
+    init(samples: [ApplicationTrafficReadResult]) {
+        self.samples = samples
+    }
+
+    func readApplications() -> ApplicationTrafficReadResult {
+        let sample = samples[min(index, samples.count - 1)]
+        index += 1
+        return sample
+    }
+}
+
+private final class BlockingApplicationTrafficReader: ApplicationTrafficReading, @unchecked Sendable {
+    private let semaphore = DispatchSemaphore(value: 0)
+
+    func readApplications() -> ApplicationTrafficReadResult {
+        semaphore.wait()
+        return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
+    }
+
+    func unblock() {
+        semaphore.signal()
     }
 }
 
