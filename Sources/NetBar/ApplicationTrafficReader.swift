@@ -54,6 +54,7 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     func readApplications() -> ApplicationTrafficReadResult {
         lock.lock()
         let stats = Array(latestStats.values)
+        let running = isRunning
         let hasProcess = process != nil
         lock.unlock()
 
@@ -61,6 +62,19 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
         }
 
+        // When the streaming reader is active but hasn't produced data yet
+        // (just started), return empty results instead of falling back to the
+        // one-shot reader.  The one-shot reader calls nettop -L 1 and
+        // process.waitUntilExit(), which can hang on some macOS versions,
+        // leaving isRefreshing stuck at true forever.
+        // The 5-second timer will retry and pick up data once the streaming
+        // reader starts producing output.
+        if running {
+            return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
+        }
+
+        // Streaming reader is not active (stopped or never started);
+        // fall back to the one-shot reader.
         return fallback.readApplications()
     }
 
