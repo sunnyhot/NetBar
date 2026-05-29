@@ -120,6 +120,11 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer?.invalidate()
         applicationTimer = nil
         streamingReader?.stop()
+        // Reset reading state in case an in-flight Task is still executing
+        // reader.readApplications(). Without this, isReadingApplicationTraffic
+        // stays true if the streaming reader was stopped mid-read, blocking
+        // all subsequent refreshApplicationTraffic() calls.
+        isReadingApplicationTraffic = false
     }
 
     func stop() {

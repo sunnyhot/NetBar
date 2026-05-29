@@ -14,7 +14,6 @@ protocol ApplicationTrafficReading: Sendable {
 
 final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendable {
     private let executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-    private let fallback = NettopApplicationTrafficReader()
 
     private var process: Process?
     private var outputPipe: Pipe?
@@ -54,7 +53,6 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     func readApplications() -> ApplicationTrafficReadResult {
         lock.lock()
         let stats = Array(latestStats.values)
-        let running = isRunning
         let hasProcess = process != nil
         lock.unlock()
 
@@ -62,20 +60,16 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
         }
 
-        // When the streaming reader is active but hasn't produced data yet
-        // (just started), return empty results instead of falling back to the
-        // one-shot reader.  The one-shot reader calls nettop -L 1 and
+        // Always return empty results instead of falling back to the one-shot
+        // reader. The one-shot reader calls nettop -L 1 and
         // process.waitUntilExit(), which can hang on some macOS versions,
-        // leaving isRefreshing stuck at true forever.
+        // leaving isReadingApplicationTraffic stuck at true forever.
+        // This covers both scenarios:
+        // - Streaming reader is running but hasn't produced data yet (startup)
+        // - Streaming reader is not running (stopped / launch failure)
         // The 5-second timer will retry and pick up data once the streaming
         // reader starts producing output.
-        if running {
-            return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
-        }
-
-        // Streaming reader is not active (stopped or never started);
-        // fall back to the one-shot reader.
-        return fallback.readApplications()
+        return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
     }
 
     private func launchProcess() {
@@ -188,7 +182,22 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
 
         do {
             try process.run()
-            process.waitUntilExit()
+            // Add a 10-second timeout to prevent waitUntilExit() from hanging
+            // indefinitely on some macOS versions, which would leave
+            // isReadingApplicationTraffic stuck at true forever.
+            let semaphore = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                process.waitUntilExit()
+                semaphore.signal()
+            }
+            let timeoutResult = semaphore.wait(timeout: .now() + 10.0)
+            if timeoutResult == .timedOut {
+                process.terminate()
+                return ApplicationTrafficReadResult(
+                    stats: [],
+                    errorMessage: "nettop 读取超时（10秒）"
+                )
+            }
         } catch {
             return ApplicationTrafficReadResult(
                 stats: [],
