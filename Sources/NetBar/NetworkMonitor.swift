@@ -23,7 +23,7 @@ final class NetworkMonitor: ObservableObject {
 
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
-    private let streamingReader: StreamingNettopReader?
+    let streamingReader: StreamingNettopReader?
     private let systemResourceReader: SystemResourceReading
     private let resourceReader: ApplicationResourceReading
     private let now: () -> Date
@@ -364,7 +364,9 @@ final class NetworkMonitor: ObservableObject {
                     )
                 }, resourceByPID: resourceByPID),
                 sampleCount: 1,
-                isRefreshing: false,
+                isRefreshing: result.stats.isEmpty
+                    && streamingReader != nil
+                    && appTraffic.sampleCount < 3,
                 errorMessage: nil,
                 systemResources: systemSummary
             )
@@ -398,7 +400,9 @@ final class NetworkMonitor: ObservableObject {
             timestamp: sampledAt,
             applications: groupApplications(processRates, resourceByPID: resourceByPID),
             sampleCount: appTraffic.sampleCount + 1,
-            isRefreshing: false,
+            isRefreshing: result.stats.isEmpty
+                && streamingReader != nil
+                && appTraffic.sampleCount < 3,
             errorMessage: nil,
             systemResources: systemSummary
         )

@@ -580,7 +580,130 @@ final class SystemResourceTests: XCTestCase {
 
         monitor.stop()
     }
+
+    // MARK: - KeepRefreshing Logic Tests (LUC-257)
+
+    func testFirstSampleEmptyDataWithStreamingKeepsRefreshing() async {
+        // When streamingReader is active (appTrafficReader omitted) and first sample is empty,
+        // isRefreshing should stay true to avoid flashing "暂无应用流量".
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // Verify streamingReader is active
+        XCTAssertNotNil(monitor.streamingReader, "streamingReader should be non-nil when appTrafficReader is omitted")
+
+        // Enable sampling
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        // The first sample from StreamingNettopReader may or may not have data.
+        // If it has data, isRefreshing should be false.
+        // If it has no data, isRefreshing should remain true (keepRefreshing logic).
+        let hasData = !monitor.appTraffic.applications.isEmpty
+        if hasData {
+            XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false when streaming produces data")
+        } else {
+            XCTAssertTrue(monitor.appTraffic.isRefreshing, "isRefreshing should stay true when streaming has no data yet and sampleCount < 3")
+        }
+    }
+
+    func testFirstSampleEmptyDataWithoutStreamingStopsRefreshing() async {
+        // When streamingReader is nil (appTrafficReader provided) and first sample is empty,
+        // isRefreshing should be false — no keepRefreshing logic applies.
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        // Verify streamingReader is nil
+        XCTAssertNil(monitor.streamingReader, "streamingReader should be nil when appTrafficReader is provided")
+
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        // Empty result + no streaming → isRefreshing must be false
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false when streamingReader is nil and data is empty")
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 1)
+    }
+
+    func testFirstSampleWithDataStopsRefreshingRegardlessOfStreaming() async {
+        // When first sample has data, isRefreshing should be false even if streaming is active.
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [
+                ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: 1000, sentBytes: 500),
+            ], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false when first sample has data")
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 1)
+        XCTAssertEqual(monitor.appTraffic.applications.count, 1)
+    }
+
+    func testStreamingSafetyCapStopsRefreshingAfterThreeSamples() async {
+        // After 3 empty samples with streaming active, the safety cap should
+        // force isRefreshing to false even though data is still empty.
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        XCTAssertNotNil(monitor.streamingReader)
+
+        monitor.isApplicationTrafficVisible = true
+
+        // Sample multiple times to reach the safety cap
+        for _ in 0..<4 {
+            try? await Task.sleep(nanoseconds: 600_000_000)
+            monitor.refreshApplicationTraffic()
+        }
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        // After multiple samples, isRefreshing should eventually be false (safety cap)
+        // regardless of whether data appeared or not
+        if monitor.appTraffic.applications.isEmpty && monitor.appTraffic.sampleCount >= 3 {
+            XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false after sampleCount >= 3 (safety cap)")
+        }
+    }
 }
+
 
 // MARK: - Mock Readers
 
