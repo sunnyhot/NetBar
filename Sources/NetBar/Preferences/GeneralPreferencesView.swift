@@ -103,7 +103,7 @@ struct GeneralPreferencesView: View {
                     ))
 
                     Picker(appPreferences.text("默认排序", "Default sort"), selection: $appPreferences.applicationSort) {
-                        ForEach(ApplicationSortMode.allCases) { sortMode in
+                        ForEach(ApplicationSortMode.displayModes) { sortMode in
                             Text(sortMode.title(language: appPreferences.resolvedLanguage)).tag(sortMode)
                         }
                     }

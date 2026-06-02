@@ -1,5 +1,19 @@
 import Foundation
 
+enum ApplicationTrafficMetricKind: Equatable {
+    case download
+    case upload
+    case memory
+    case cpu
+}
+
+struct ApplicationTrafficMetric: Equatable, Identifiable {
+    let kind: ApplicationTrafficMetricKind
+    let value: String
+
+    var id: String { "\(kind)-\(value)" }
+}
+
 enum ApplicationTrafficPresentation {
     @MainActor
     static func visibleApplications(
@@ -56,6 +70,48 @@ enum ApplicationTrafficPresentation {
             case .name:
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
+        }
+    }
+
+    static func summaryMetrics(
+        for applications: [ApplicationTrafficRate],
+        displayMode: ApplicationSortMode
+    ) -> [ApplicationTrafficMetric] {
+        switch displayMode.displayModeFallback {
+        case .activity:
+            let totalDown = applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
+            let totalUp = applications.reduce(0) { $0 + $1.uploadBytesPerSecond }
+            return [
+                ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(totalDown)),
+                ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(totalUp))
+            ]
+        case .memory:
+            let totalMemory = applications.reduce(UInt64(0)) { $0 + ($1.residentMemory ?? 0) }
+            return [ApplicationTrafficMetric(kind: .memory, value: ByteFormat.bytes(totalMemory))]
+        case .cpu:
+            let totalCPU = applications.reduce(0) { $0 + ($1.cpuPercentage ?? 0) }
+            return [ApplicationTrafficMetric(kind: .cpu, value: String(format: "%.1f%%", totalCPU))]
+        case .download, .upload, .total, .name:
+            return summaryMetrics(for: applications, displayMode: .activity)
+        }
+    }
+
+    static func rowMetrics(
+        for application: ApplicationTrafficRate,
+        displayMode: ApplicationSortMode
+    ) -> [ApplicationTrafficMetric] {
+        switch displayMode.displayModeFallback {
+        case .activity:
+            return [
+                ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(application.downloadBytesPerSecond)),
+                ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(application.uploadBytesPerSecond))
+            ]
+        case .memory:
+            return [ApplicationTrafficMetric(kind: .memory, value: ByteFormat.bytes(application.residentMemory ?? 0))]
+        case .cpu:
+            return [ApplicationTrafficMetric(kind: .cpu, value: String(format: "%.1f%%", application.cpuPercentage ?? 0))]
+        case .download, .upload, .total, .name:
+            return rowMetrics(for: application, displayMode: .activity)
         }
     }
 

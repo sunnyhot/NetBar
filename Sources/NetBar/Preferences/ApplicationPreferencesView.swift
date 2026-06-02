@@ -9,7 +9,7 @@ struct ApplicationPreferencesView: View {
                 Toggle(appPreferences.text("隐藏系统进程", "Hide system processes"), isOn: $appPreferences.hidesSystemProcesses)
 
                 Picker(appPreferences.text("默认排序", "Default sort"), selection: $appPreferences.applicationSort) {
-                    ForEach(ApplicationSortMode.allCases) { sortMode in
+                    ForEach(ApplicationSortMode.displayModes) { sortMode in
                         Text(sortMode.title(language: appPreferences.resolvedLanguage)).tag(sortMode)
                     }
                 }

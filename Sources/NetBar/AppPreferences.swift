@@ -13,6 +13,12 @@ enum ApplicationSortMode: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    static let displayModes: [ApplicationSortMode] = [.activity, .memory, .cpu]
+
+    var displayModeFallback: ApplicationSortMode {
+        Self.displayModes.contains(self) ? self : .activity
+    }
+
     var title: String {
         title(language: .simplifiedChinese)
     }
@@ -267,7 +273,7 @@ final class AppPreferences: ObservableObject {
         self.loginItemManager = loginItemManager
         showsDockIcon = defaults.object(forKey: Keys.showsDockIcon) as? Bool ?? Defaults.showsDockIcon
         hidesSystemProcesses = defaults.object(forKey: Keys.hidesSystemProcesses) as? Bool ?? Defaults.hidesSystemProcesses
-        applicationSort = ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort
+        applicationSort = (ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort).displayModeFallback
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? Defaults.language
         appearanceMode = AppAppearanceMode(rawValue: defaults.string(forKey: Keys.appearanceMode) ?? "") ?? Defaults.appearanceMode
         popoverPosition = PopoverPosition(rawValue: defaults.string(forKey: Keys.popoverPosition) ?? "") ?? Defaults.popoverPosition

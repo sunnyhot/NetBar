@@ -2303,6 +2303,90 @@ private final class MockSystemMetricsReader: SystemMetricsReading {
 
 extension PreferencesAndPresentationTests {
 
+    func testApplicationSortModeDisplayModesOnlyIncludeTrafficMemoryAndCPU() {
+        XCTAssertEqual(ApplicationSortMode.displayModes, [.activity, .memory, .cpu])
+        XCTAssertEqual(
+            ApplicationSortMode.displayModes.map { $0.title(language: .simplifiedChinese) },
+            ["实时流量", "内存占用", "CPU 占用"]
+        )
+    }
+
+    func testLegacyHiddenApplicationSortFallsBackToRealtimeTraffic() {
+        let defaults = isolatedDefaults()
+        defaults.set(ApplicationSortMode.download.rawValue, forKey: "app.applicationSort")
+
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+
+        XCTAssertEqual(preferences.applicationSort, .activity)
+    }
+
+    func testApplicationRowMetricsFollowSelectedDisplayMode() {
+        let application = appWithResources(
+            "Safari",
+            processNames: ["Safari"],
+            download: 1_500,
+            upload: 500,
+            residentMemory: 512 * 1024 * 1024,
+            cpuPercentage: 7.5
+        )
+
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: .activity),
+            [
+                ApplicationTrafficMetric(kind: .download, value: "1.46 KB/s"),
+                ApplicationTrafficMetric(kind: .upload, value: "500 B/s")
+            ]
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: .memory),
+            [ApplicationTrafficMetric(kind: .memory, value: "512 MB")]
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: .cpu),
+            [ApplicationTrafficMetric(kind: .cpu, value: "7.5%")]
+        )
+    }
+
+    func testApplicationSummaryMetricsFollowSelectedDisplayMode() {
+        let applications = [
+            appWithResources(
+                "Safari",
+                processNames: ["Safari"],
+                download: 1_500,
+                upload: 500,
+                residentMemory: 512 * 1024 * 1024,
+                cpuPercentage: 7.5
+            ),
+            appWithResources(
+                "Xcode",
+                processNames: ["Xcode"],
+                download: 500,
+                upload: 250,
+                residentMemory: 1024 * 1024 * 1024,
+                cpuPercentage: 12.0
+            )
+        ]
+
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .activity),
+            [
+                ApplicationTrafficMetric(kind: .download, value: "1.95 KB/s"),
+                ApplicationTrafficMetric(kind: .upload, value: "750 B/s")
+            ]
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .memory),
+            [ApplicationTrafficMetric(kind: .memory, value: "1.50 GB")]
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .cpu),
+            [ApplicationTrafficMetric(kind: .cpu, value: "19.5%")]
+        )
+    }
+
     /// Apps with no network traffic but valid memory data should appear in memory sort mode,
     /// sorted by residentMemory descending.
     func testMemorySortShowsAppsWithoutNetworkTraffic() {

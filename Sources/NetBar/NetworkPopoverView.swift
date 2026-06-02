@@ -305,8 +305,10 @@ private struct ApplicationTrafficList: View {
                 )
 
                 if !appTraffic.applications.isEmpty {
-                    let totalDown = appTraffic.applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
-                    let totalUp = appTraffic.applications.reduce(0) { $0 + $1.uploadBytesPerSecond }
+                    let summaryMetrics = ApplicationTrafficPresentation.summaryMetrics(
+                        for: appTraffic.applications,
+                        displayMode: preferences.applicationSort
+                    )
 
                     HStack(spacing: 8) {
                         Text(preferences.text("应用级汇总", "App-level Total"))
@@ -316,16 +318,9 @@ private struct ApplicationTrafficList: View {
                         Spacer()
 
                         HStack(spacing: 8) {
-                            CompactMetric(
-                                symbol: "arrow.down",
-                                value: ByteFormat.speed(totalDown),
-                                tint: .blue
-                            )
-                            CompactMetric(
-                                symbol: "arrow.up",
-                                value: ByteFormat.speed(totalUp),
-                                tint: .orange
-                            )
+                            ForEach(summaryMetrics) { metric in
+                                CompactMetric(metric: metric)
+                            }
                         }
                     }
                     .padding(.horizontal, 8)
@@ -350,7 +345,10 @@ private struct ApplicationTrafficList: View {
                 } else {
                     VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
-                            ApplicationTrafficRow(application: application)
+                            ApplicationTrafficRow(
+                                application: application,
+                                displayMode: preferences.applicationSort
+                            )
                         }
                     }
                 }
@@ -411,7 +409,7 @@ private struct AppTrafficControls: View {
                 .font(.system(size: 12))
 
             Menu {
-                ForEach(ApplicationSortMode.allCases) { sortMode in
+                ForEach(ApplicationSortMode.displayModes) { sortMode in
                     Button {
                         preferences.applicationSort = sortMode
                     } label: {
@@ -488,6 +486,7 @@ private struct AppTrafficNotice: View {
 
 private struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
+    let displayMode: ApplicationSortMode
     @State private var isHovering = false
 
     var body: some View {
@@ -509,29 +508,8 @@ private struct ApplicationTrafficRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
-                CompactMetric(
-                    symbol: "arrow.down",
-                    value: ByteFormat.speed(application.downloadBytesPerSecond),
-                    tint: .blue
-                )
-                CompactMetric(
-                    symbol: "arrow.up",
-                    value: ByteFormat.speed(application.uploadBytesPerSecond),
-                    tint: .orange
-                )
-                if let mem = application.residentMemory {
-                    CompactMetric(
-                        symbol: "memorychip",
-                        value: ByteFormat.bytes(mem),
-                        tint: .purple
-                    )
-                }
-                if let cpu = application.cpuPercentage {
-                    CompactMetric(
-                        symbol: "cpu",
-                        value: String(format: "%.1f%%", cpu),
-                        tint: .red
-                    )
+                ForEach(ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: displayMode)) { metric in
+                    CompactMetric(metric: metric)
                 }
             }
         }
@@ -561,6 +539,18 @@ private struct CompactMetric: View {
     let value: String
     let tint: Color
 
+    init(symbol: String, value: String, tint: Color) {
+        self.symbol = symbol
+        self.value = value
+        self.tint = tint
+    }
+
+    init(metric: ApplicationTrafficMetric) {
+        self.symbol = metric.symbol
+        self.value = metric.value
+        self.tint = metric.tint
+    }
+
     var body: some View {
         Label(value, systemImage: symbol)
             .font(.system(size: 10, weight: .bold, design: .rounded))
@@ -569,6 +559,26 @@ private struct CompactMetric: View {
             .lineLimit(1)
             .minimumScaleFactor(0.7)
             .frame(minWidth: 72, alignment: .trailing)
+    }
+}
+
+private extension ApplicationTrafficMetric {
+    var symbol: String {
+        switch kind {
+        case .download: return "arrow.down"
+        case .upload: return "arrow.up"
+        case .memory: return "memorychip"
+        case .cpu: return "cpu"
+        }
+    }
+
+    var tint: Color {
+        switch kind {
+        case .download: return .blue
+        case .upload: return .orange
+        case .memory: return .purple
+        case .cpu: return .red
+        }
     }
 }
 
