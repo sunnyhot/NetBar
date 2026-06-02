@@ -413,6 +413,74 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertFalse(monitor.isRunning)
     }
 
+    func testNetworkMonitorIncludesResourceOnlyApplicationsWhenTrafficIsEmpty() async {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: [
+                ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 512_000_000, cpuPercentage: 7.5)
+            ]),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertEqual(monitor.appTraffic.applications.map(\.displayName), ["Safari"])
+        XCTAssertEqual(monitor.appTraffic.applications.first?.residentMemory, 512_000_000)
+        XCTAssertEqual(monitor.appTraffic.applications.first?.cpuPercentage, 7.5)
+    }
+
+    func testNetworkMonitorDoesNotDuplicateTrafficApplicationsWhenAddingResources() async {
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [
+                ApplicationTrafficStats(id: "Safari.100", processName: "Safari", displayName: "Safari", pid: 100, receivedBytes: 1_000, sentBytes: 500)
+            ], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [
+                ApplicationTrafficStats(id: "Safari.100", processName: "Safari", displayName: "Safari", pid: 100, receivedBytes: 2_500, sentBytes: 1_100)
+            ], errorMessage: nil),
+        ])
+        let sampleDates = [
+            Date(timeIntervalSince1970: 1_000),
+            Date(timeIntervalSince1970: 1_005),
+        ]
+        var dateIndex = 0
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: [
+                ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 512_000_000, cpuPercentage: 7.5)
+            ]),
+            now: {
+                defer { dateIndex += 1 }
+                return sampleDates[min(dateIndex, sampleDates.count - 1)]
+            }
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        try? await Task.sleep(nanoseconds: 500_000_000)
+        monitor.refreshApplicationTraffic()
+        try? await Task.sleep(nanoseconds: 500_000_000)
+
+        XCTAssertEqual(monitor.appTraffic.applications.count, 1)
+        let application = monitor.appTraffic.applications.first
+        XCTAssertEqual(application?.displayName, "Safari")
+        XCTAssertEqual(application?.downloadBytesPerSecond, 300)
+        XCTAssertEqual(application?.uploadBytesPerSecond, 120)
+        XCTAssertEqual(application?.residentMemory, 512_000_000)
+        XCTAssertEqual(application?.cpuPercentage, 7.5)
+    }
+
     func testNetworkMonitorPowerSaveMode() {
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
