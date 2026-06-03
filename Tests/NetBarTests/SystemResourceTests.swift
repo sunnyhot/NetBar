@@ -495,9 +495,9 @@ final class SystemResourceTests: XCTestCase {
         )
 
         monitor.isApplicationTrafficVisible = true
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        await waitForApplicationTrafficSamples(1, monitor: monitor)
         monitor.refreshApplicationTraffic()
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        await waitForApplicationTrafficSamples(2, monitor: monitor)
 
         XCTAssertEqual(monitor.appTraffic.applications.count, 1)
         let application = monitor.appTraffic.applications.first
@@ -786,6 +786,50 @@ final class SystemResourceTests: XCTestCase {
 
         XCTAssertFalse(monitor.appTraffic.isRefreshing, "Repeated empty samples should not leave the popover in a loading state")
         XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1)
+    }
+
+    func testStreamingNettopReaderUsesTerminalBackedOutputForImmediateCSV() async throws {
+        let scriptURL = try makeExecutableScript(
+            """
+            #!/bin/sh
+            if [ -t 1 ]; then
+              printf ',bytes_in,bytes_out,\\n'
+              printf 'Codex.123,4096,2048,\\n'
+              sleep 5
+            else
+              sleep 5
+            fi
+            """
+        )
+        let reader = StreamingNettopReader(
+            executableURL: URL(fileURLWithPath: "/usr/bin/script"),
+            arguments: ["-q", "/dev/null", scriptURL.path]
+        )
+
+        reader.start()
+        var result = reader.readApplications()
+        for _ in 0..<10 where result.stats.isEmpty {
+            try await Task.sleep(nanoseconds: 200_000_000)
+            result = reader.readApplications()
+        }
+        reader.stop()
+
+        XCTAssertNil(result.errorMessage)
+        XCTAssertEqual(result.stats.count, 1)
+        XCTAssertEqual(result.stats.first?.processName, "Codex")
+        XCTAssertEqual(result.stats.first?.receivedBytes, 4096)
+        XCTAssertEqual(result.stats.first?.sentBytes, 2048)
+    }
+
+    private func waitForApplicationTrafficSamples(
+        _ count: Int,
+        monitor: NetworkMonitor,
+        timeout: TimeInterval = 2.0
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while monitor.appTraffic.sampleCount < count && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
     }
 
     private func makeExecutableScript(_ contents: String) throws -> URL {

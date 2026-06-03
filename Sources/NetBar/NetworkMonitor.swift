@@ -44,6 +44,9 @@ final class NetworkMonitor: ObservableObject {
     private var historyWriteIndex = 0
     private let historyCapacity = 90
     private var activityLevel: NetworkActivityLevel = .idle
+    private var applicationSampleInterval: TimeInterval {
+        powerSaveMode ? 5.0 : 1.0
+    }
 
     var recentHistory: [RatePoint] {
         guard !historyBuffer.isEmpty else { return [] }
@@ -84,7 +87,7 @@ final class NetworkMonitor: ObservableObject {
         // handles the first read + timer creation.
         if shouldSampleApplicationTraffic {
             refreshApplicationTraffic()
-            applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+            applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
                 Task { @MainActor in
                     self?.refreshApplicationTraffic()
                 }
@@ -108,7 +111,7 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer = nil
         streamingReader?.start()
         refreshApplicationTraffic()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
             }
@@ -145,7 +148,6 @@ final class NetworkMonitor: ObservableObject {
     private func rescheduleTimers() {
         guard isRunning else { return }
         let interval: TimeInterval = powerSaveMode ? 2.0 : 1.0
-        let appInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
         let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
 
         timer?.invalidate()
@@ -156,7 +158,7 @@ final class NetworkMonitor: ObservableObject {
         }
 
         applicationTimer?.invalidate()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: appInterval, repeats: true) { [weak self] _ in
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
             }
