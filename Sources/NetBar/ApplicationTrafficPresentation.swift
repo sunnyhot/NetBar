@@ -14,6 +14,74 @@ struct ApplicationTrafficMetric: Equatable, Identifiable {
     var id: String { "\(kind)-\(value)" }
 }
 
+enum ApplicationAttributionStatus: Equatable {
+    case idle
+    case covered
+    case partial
+}
+
+struct ApplicationAttributionSummary: Equatable {
+    let interfaceBytesPerSecond: Double
+    let applicationBytesPerSecond: Double
+    let coveragePercentage: Int?
+    let proxyCandidateNames: [String]
+    let helperCandidateNames: [String]
+    let status: ApplicationAttributionStatus
+}
+
+enum ApplicationAttributionRole: Equatable {
+    case application
+    case proxyOrVPN
+    case helper
+    case systemService
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .application:
+            return language.text("应用", "App")
+        case .proxyOrVPN:
+            return language.text("代理", "Proxy")
+        case .helper:
+            return language.text("子进程", "Helper")
+        case .systemService:
+            return language.text("系统", "System")
+        }
+    }
+}
+
+enum TrafficHistoryWindow: String, CaseIterable, Identifiable {
+    case seconds90
+    case minutes5
+    case minutes15
+
+    var id: String { rawValue }
+
+    var duration: TimeInterval {
+        switch self {
+        case .seconds90: return 90
+        case .minutes5: return 5 * 60
+        case .minutes15: return 15 * 60
+        }
+    }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .seconds90:
+            return language.text("90 秒", "90s")
+        case .minutes5:
+            return language.text("5 分钟", "5m")
+        case .minutes15:
+            return language.text("15 分钟", "15m")
+        }
+    }
+
+    func points(from points: [RatePoint]) -> [RatePoint] {
+        guard let latest = points.last?.timestamp else { return [] }
+        let threshold = latest.addingTimeInterval(-duration)
+        return points.filter { $0.timestamp >= threshold }
+    }
+}
+
 enum ApplicationTrafficPresentation {
     @MainActor
     static func visibleApplications(
@@ -86,6 +154,47 @@ enum ApplicationTrafficPresentation {
                 return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
         }
+    }
+
+    static func attributionSummary(
+        snapshot: NetworkSnapshot,
+        applications: [ApplicationTrafficRate]
+    ) -> ApplicationAttributionSummary {
+        let interfaceBytes = snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond
+        let trafficApplications = displayApplications(applications, mode: .activity)
+        let applicationBytes = trafficApplications.reduce(0) {
+            $0 + $1.downloadBytesPerSecond + $1.uploadBytesPerSecond
+        }
+        let coverage: Int? = interfaceBytes > 0
+            ? min(100, Int((applicationBytes / interfaceBytes * 100).rounded()))
+            : nil
+        let status: ApplicationAttributionStatus = {
+            guard interfaceBytes >= 1 || applicationBytes >= 1 else { return .idle }
+            guard let coverage else { return .partial }
+            return coverage >= 80 ? .covered : .partial
+        }()
+
+        return ApplicationAttributionSummary(
+            interfaceBytesPerSecond: interfaceBytes,
+            applicationBytesPerSecond: applicationBytes,
+            coveragePercentage: coverage,
+            proxyCandidateNames: candidateNames(from: trafficApplications, role: .proxyOrVPN),
+            helperCandidateNames: candidateNames(from: trafficApplications, role: .helper),
+            status: status
+        )
+    }
+
+    static func attributionRole(for application: ApplicationTrafficRate) -> ApplicationAttributionRole {
+        if matches(application, keywords: proxyProcessKeywords) {
+            return .proxyOrVPN
+        }
+        if matches(application, keywords: helperProcessKeywords) {
+            return .helper
+        }
+        if isLikelySystemProcess(application) {
+            return .systemService
+        }
+        return .application
     }
 
     static func summaryMetrics(
@@ -177,6 +286,58 @@ enum ApplicationTrafficPresentation {
         application.downloadBytesPerSecond >= 1 || application.uploadBytesPerSecond >= 1
     }
 
+    private static func candidateNames(
+        from applications: [ApplicationTrafficRate],
+        role: ApplicationAttributionRole
+    ) -> [String] {
+        applications
+            .filter { attributionRole(for: $0) == role }
+            .sorted {
+                let lhs = $0.downloadBytesPerSecond + $0.uploadBytesPerSecond
+                let rhs = $1.downloadBytesPerSecond + $1.uploadBytesPerSecond
+                if lhs != rhs { return lhs > rhs }
+                return $0.displayName.localizedStandardCompare($1.displayName) == .orderedAscending
+            }
+            .map(\.displayName)
+            .uniqued()
+    }
+
+    private static func matches(_ application: ApplicationTrafficRate, keywords: Set<String>) -> Bool {
+        let names = ([application.displayName] + application.processNames)
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() }
+            .filter { !$0.isEmpty }
+        return names.contains { name in
+            keywords.contains { keyword in name.localizedStandardContains(keyword) }
+        }
+    }
+
+    private static let proxyProcessKeywords: Set<String> = [
+        "adguard",
+        "clash",
+        "corplink",
+        "eagleyun",
+        "hionetwork",
+        "mihomo",
+        "openvpn",
+        "proxy",
+        "shadow",
+        "sing-box",
+        "surge",
+        "tailscale",
+        "v2ray",
+        "vpn",
+        "wireguard",
+        "xray",
+        "zerotier"
+    ]
+
+    private static let helperProcessKeywords: Set<String> = [
+        "electron",
+        "helper",
+        "node",
+        "renderer"
+    ]
+
     private static let knownSystemProcessNames: Set<String> = [
         "airportd",
         "apsd",
@@ -201,4 +362,11 @@ enum ApplicationTrafficPresentation {
         "trustd",
         "usernoted"
     ]
+}
+
+private extension Array where Element: Hashable {
+    func uniqued() -> [Element] {
+        var seen = Set<Element>()
+        return filter { seen.insert($0).inserted }
+    }
 }

@@ -42,7 +42,7 @@ final class NetworkMonitor: ObservableObject {
     private var powerSaveMode = false
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
-    private let historyCapacity = 90
+    private let historyCapacity = 900
     private var activityLevel: NetworkActivityLevel = .idle
     private var applicationSampleInterval: TimeInterval {
         powerSaveMode ? 5.0 : 1.0

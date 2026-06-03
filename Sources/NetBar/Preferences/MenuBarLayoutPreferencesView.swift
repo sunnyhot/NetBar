@@ -26,12 +26,21 @@ struct MenuBarLayoutSectionContent: View {
             displayValue: String(format: "%.1f", settings.lineSpacing)
         )
 
-        Picker(appPreferences.text("排列", "Order"), selection: $settings.order) {
-            ForEach(StatusBarOrder.allCases) { order in
-                Text(order.title(language: appPreferences.resolvedLanguage)).tag(order)
+        Picker(appPreferences.text("内容", "Content"), selection: $settings.trafficDisplayMode) {
+            ForEach(StatusBarTrafficDisplayMode.allCases) { mode in
+                Text(mode.title(language: appPreferences.resolvedLanguage)).tag(mode)
             }
         }
         .pickerStyle(.segmented)
+
+        if settings.trafficDisplayMode == .upDown {
+            Picker(appPreferences.text("排列", "Order"), selection: $settings.order) {
+                ForEach(StatusBarOrder.allCases) { order in
+                    Text(order.title(language: appPreferences.resolvedLanguage)).tag(order)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
 
         Picker(appPreferences.text("对齐", "Alignment"), selection: $settings.alignment) {
             ForEach(StatusBarAlignment.allCases) { alignment in

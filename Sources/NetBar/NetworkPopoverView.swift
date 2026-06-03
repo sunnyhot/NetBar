@@ -5,6 +5,7 @@ struct NetworkPopoverView: View {
     @ObservedObject var appPreferences: AppPreferences
     let openPreferences: () -> Void
     @State private var appSearchText = ""
+    @State private var historyWindow: TrafficHistoryWindow = .seconds90
 
     var body: some View {
         VStack(spacing: 0) {
@@ -26,7 +27,11 @@ struct NetworkPopoverView: View {
                         )
                         .padding(.top, 16)
                     } else {
-                        TrafficChart(points: monitor.recentHistory)
+                        TrafficChart(
+                            points: historyWindow.points(from: monitor.recentHistory),
+                            selectedWindow: $historyWindow,
+                            appPreferences: appPreferences
+                        )
                             .frame(height: 132)
                             .padding(.top, 16)
                     }
@@ -34,6 +39,7 @@ struct NetworkPopoverView: View {
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
 
                     ApplicationTrafficList(
+                        snapshot: monitor.snapshot,
                         appTraffic: monitor.appTraffic,
                         preferences: appPreferences,
                         searchText: $appSearchText,
@@ -267,6 +273,7 @@ private struct SummaryCell: View {
 // MARK: - Application Traffic List
 
 private struct ApplicationTrafficList: View {
+    let snapshot: NetworkSnapshot
     let appTraffic: ApplicationTrafficState
     @ObservedObject var preferences: AppPreferences
     @Binding var searchText: String
@@ -303,6 +310,18 @@ private struct ApplicationTrafficList: View {
                     searchText: $searchText,
                     appTraffic: appTraffic
                 )
+
+                if appTraffic.sampleCount > 0 {
+                    AppTrafficAttributionCard(
+                        summary: ApplicationTrafficPresentation.attributionSummary(
+                            snapshot: snapshot,
+                            applications: appTraffic.applications
+                        ),
+                        preferences: preferences,
+                        sampleCount: appTraffic.sampleCount,
+                        applicationCount: visibleApplications.count
+                    )
+                }
 
                 if !visibleApplications.isEmpty {
                     let summaryMetrics = ApplicationTrafficPresentation.summaryMetrics(
@@ -347,6 +366,8 @@ private struct ApplicationTrafficList: View {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(
                                 application: application,
+                                role: ApplicationTrafficPresentation.attributionRole(for: application),
+                                language: preferences.resolvedLanguage,
                                 displayMode: preferences.applicationSort
                             )
                         }
@@ -396,6 +417,94 @@ private struct ApplicationTrafficList: View {
             "保持 NetBar 运行几秒后会显示有网络活动的应用。代理或 VPN 可能会把流量归到代理进程下。",
             "Keep NetBar running for a few seconds to show apps with network activity. Proxies and VPNs may attribute traffic to the proxy process."
         )
+    }
+}
+
+private struct AppTrafficAttributionCard: View {
+    let summary: ApplicationAttributionSummary
+    @ObservedObject var preferences: AppPreferences
+    let sampleCount: Int
+    let applicationCount: Int
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+
+                if !message.isEmpty {
+                    Text(message)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .netBarCard(cornerRadius: 11, padding: 9)
+    }
+
+    private var title: String {
+        guard let coverage = summary.coveragePercentage else {
+            return preferences.text("归因待采样", "Attribution pending")
+        }
+        return "\(preferences.text("应用级归因", "App attribution")) \(coverage)%"
+    }
+
+    private var detail: String {
+        "\(preferences.text("接口", "Interface")) \(ByteFormat.speed(summary.interfaceBytesPerSecond)) · \(preferences.text("应用", "Apps")) \(ByteFormat.speed(summary.applicationBytesPerSecond))"
+    }
+
+    private var message: String {
+        var parts: [String] = []
+        if summary.status == .partial {
+            parts.append(preferences.text("总流量与应用汇总存在差异", "Interface and app totals differ"))
+        }
+        if let proxy = summary.proxyCandidateNames.first {
+            parts.append(preferences.text("代理/VPN：\(proxy)", "Proxy/VPN: \(proxy)"))
+        } else if let helper = summary.helperCandidateNames.first {
+            parts.append(preferences.text("子进程：\(helper)", "Helper: \(helper)"))
+        }
+        parts.append("\(preferences.text("采样", "Samples")) \(sampleCount) · \(preferences.text("应用行", "Rows")) \(applicationCount)")
+        return parts.joined(separator: " · ")
+    }
+
+    private var symbol: String {
+        switch summary.status {
+        case .idle:
+            return "circle.dotted"
+        case .covered:
+            return "checkmark.seal"
+        case .partial:
+            return "point.3.connected.trianglepath.dotted"
+        }
+    }
+
+    private var tint: Color {
+        switch summary.status {
+        case .idle:
+            return .secondary
+        case .covered:
+            return .green
+        case .partial:
+            return .orange
+        }
     }
 }
 
@@ -490,6 +599,8 @@ private struct AppTrafficNotice: View {
 
 private struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
+    let role: ApplicationAttributionRole
+    let language: AppLanguage
     let displayMode: ApplicationSortMode
     @State private var isHovering = false
 
@@ -498,10 +609,13 @@ private struct ApplicationTrafficRow: View {
             AppBadge(title: application.displayName, pids: application.pids)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(application.displayName)
-                    .font(.system(size: 11, weight: .bold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 5) {
+                    Text(application.displayName)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    AttributionRoleBadge(role: role, language: language)
+                }
 
                 Text(detailSubtitle)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
@@ -535,6 +649,35 @@ private struct ApplicationTrafficRow: View {
             return "PID \(application.processLabel)"
         }
         return "\(processNames)  PID \(application.processLabel)"
+    }
+}
+
+private struct AttributionRoleBadge: View {
+    let role: ApplicationAttributionRole
+    let language: AppLanguage
+
+    var body: some View {
+        Text(role.title(language: language))
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.1), in: Capsule())
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private var tint: Color {
+        switch role {
+        case .application:
+            return .secondary
+        case .proxyOrVPN:
+            return .orange
+        case .helper:
+            return .blue
+        case .systemService:
+            return .gray
+        }
     }
 }
 
@@ -942,14 +1085,32 @@ private struct FooterView: View {
 
 private struct TrafficChart: View {
     let points: [RatePoint]
+    @Binding var selectedWindow: TrafficHistoryWindow
+    @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            NetBarSectionHeader(
-                title: "最近 90 秒",
-                subtitle: "下载 / 上传实时趋势",
-                trailing: "\(points.count) pts"
-            )
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appPreferences.text("最近 \(selectedWindow.title(language: appPreferences.resolvedLanguage))", "Last \(selectedWindow.title(language: appPreferences.resolvedLanguage))"))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text(appPreferences.text("下载 / 上传实时趋势", "Download / upload trend"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer(minLength: 8)
+
+                Picker("", selection: $selectedWindow) {
+                    ForEach(TrafficHistoryWindow.allCases) { window in
+                        Text(window.title(language: appPreferences.resolvedLanguage)).tag(window)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+            }
 
             GeometryReader { geometry in
                 ZStack {
@@ -959,8 +1120,11 @@ private struct TrafficChart: View {
                     VStack {
                         Spacer()
                         HStack(spacing: 10) {
-                            LegendDot(title: "下载", color: .blue)
-                            LegendDot(title: "上传", color: .orange)
+                            LegendDot(title: appPreferences.text("下载", "Down"), color: .blue)
+                            LegendDot(title: appPreferences.text("上传", "Up"), color: .orange)
+                            Text("\(points.count) pts")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.tertiary)
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 8)

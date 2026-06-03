@@ -31,6 +31,50 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testStatusBarTrafficDisplayModeControlsRenderedLines() {
+        let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsArrows = true
+
+        settings.trafficDisplayMode = .upDown
+        XCTAssertEqual(
+            StatusBarDisplayRenderer.presentation(snapshot: snapshot, settings: settings).lines,
+            ["↑ 9.28 KB/s", "↓ 41.0 KB/s"]
+        )
+
+        settings.trafficDisplayMode = .downloadOnly
+        XCTAssertEqual(
+            StatusBarDisplayRenderer.presentation(snapshot: snapshot, settings: settings).lines,
+            ["↓ 41.0 KB/s"]
+        )
+
+        settings.trafficDisplayMode = .uploadOnly
+        XCTAssertEqual(
+            StatusBarDisplayRenderer.presentation(snapshot: snapshot, settings: settings).lines,
+            ["↑ 9.28 KB/s"]
+        )
+
+        settings.trafficDisplayMode = .total
+        XCTAssertEqual(
+            StatusBarDisplayRenderer.presentation(snapshot: snapshot, settings: settings).lines,
+            ["↕ 50.3 KB/s"]
+        )
+    }
+
+    func testStatusBarTrafficDisplayModePersistsAndResets() {
+        let defaults = isolatedDefaults()
+        let settings = StatusBarSettings(defaults: defaults)
+
+        settings.trafficDisplayMode = .downloadOnly
+
+        XCTAssertEqual(defaults.string(forKey: "statusBar.trafficDisplayMode"), "downloadOnly")
+        XCTAssertEqual(StatusBarSettings(defaults: defaults).trafficDisplayMode, .downloadOnly)
+
+        settings.reset()
+
+        XCTAssertEqual(settings.trafficDisplayMode, .upDown)
+    }
+
     func testStatusBarRetinaImageWithBackground() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true
@@ -2385,6 +2429,65 @@ extension PreferencesAndPresentationTests {
             ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .cpu),
             [ApplicationTrafficMetric(kind: .cpu, value: "19.5%")]
         )
+    }
+
+    func testApplicationAttributionSummaryShowsCoverageAndLikelyProxy() {
+        let applications = [
+            app("mihomo-alpha", processNames: ["mihomo-alpha"], download: 60_000, upload: 20_000, total: 80_000),
+            app("node", processNames: ["node"], download: 5_000, upload: 2_000, total: 7_000)
+        ]
+        let summary = ApplicationTrafficPresentation.attributionSummary(
+            snapshot: sampleSnapshot(download: 100_000, upload: 50_000),
+            applications: applications
+        )
+
+        XCTAssertEqual(summary.interfaceBytesPerSecond, 150_000)
+        XCTAssertEqual(summary.applicationBytesPerSecond, 87_000)
+        XCTAssertEqual(summary.coveragePercentage, 58)
+        XCTAssertEqual(summary.proxyCandidateNames, ["mihomo-alpha"])
+        XCTAssertEqual(summary.helperCandidateNames, ["node"])
+        XCTAssertEqual(summary.status, .partial)
+    }
+
+    func testApplicationAttributionSummaryClassifiesRows() {
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.attributionRole(
+                for: app("mihomo-alpha", processNames: ["mihomo-alpha"], download: 1_000, upload: 0, total: 1_000)
+            ),
+            .proxyOrVPN
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.attributionRole(
+                for: app("node", processNames: ["node"], download: 1_000, upload: 0, total: 1_000)
+            ),
+            .helper
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.attributionRole(
+                for: app("networkd", processNames: ["networkd"], download: 1_000, upload: 0, total: 1_000)
+            ),
+            .systemService
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.attributionRole(
+                for: app("Safari", processNames: ["Safari"], download: 1_000, upload: 0, total: 1_000)
+            ),
+            .application
+        )
+    }
+
+    func testTrafficHistoryWindowFiltersRecentPoints() {
+        let points = (0..<400).map { index in
+            RatePoint(
+                timestamp: Date(timeIntervalSince1970: Double(index)),
+                downloadBytesPerSecond: Double(index),
+                uploadBytesPerSecond: Double(index)
+            )
+        }
+
+        XCTAssertEqual(TrafficHistoryWindow.seconds90.points(from: points).count, 91)
+        XCTAssertEqual(TrafficHistoryWindow.minutes5.points(from: points).count, 301)
+        XCTAssertEqual(TrafficHistoryWindow.minutes15.points(from: points).count, 400)
     }
 
     func testRealtimeTrafficModeHidesAppsWithoutCurrentTraffic() {
