@@ -125,6 +125,7 @@ final class NetworkMonitor: ObservableObject {
         // stays true if the streaming reader was stopped mid-read, blocking
         // all subsequent refreshApplicationTraffic() calls.
         isReadingApplicationTraffic = false
+        appTraffic.isRefreshing = false
     }
 
     func stop() {
@@ -375,9 +376,7 @@ final class NetworkMonitor: ObservableObject {
                 timestamp: sampledAt,
                 applications: applications,
                 sampleCount: 1,
-                isRefreshing: applications.isEmpty
-                    && streamingReader != nil
-                    && appTraffic.sampleCount < 3,
+                isRefreshing: false,
                 errorMessage: nil,
                 systemResources: systemSummary
             )
@@ -416,9 +415,7 @@ final class NetworkMonitor: ObservableObject {
             timestamp: sampledAt,
             applications: applications,
             sampleCount: appTraffic.sampleCount + 1,
-            isRefreshing: applications.isEmpty
-                && streamingReader != nil
-                && appTraffic.sampleCount < 3,
+            isRefreshing: false,
             errorMessage: nil,
             systemResources: systemSummary
         )

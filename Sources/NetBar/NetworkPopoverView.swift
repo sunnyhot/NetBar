@@ -338,8 +338,8 @@ private struct ApplicationTrafficList: View {
 
                 if visibleApplications.isEmpty {
                     AppTrafficNotice(
-                        symbol: appTraffic.isRefreshing ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
-                        title: appTraffic.isRefreshing ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
+                        symbol: isInitialLoading ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
+                        title: isInitialLoading ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
                         message: emptyMessage
                     )
                 } else {
@@ -362,6 +362,10 @@ private struct ApplicationTrafficList: View {
             : preferences.text("没有匹配的应用", "No Matching Apps")
     }
 
+    private var isInitialLoading: Bool {
+        appTraffic.isRefreshing && appTraffic.sampleCount == 0
+    }
+
 
     /// Always show controls (search + sort picker) when:
     /// - there is application data, OR
@@ -376,7 +380,7 @@ private struct ApplicationTrafficList: View {
     }
 
     private var emptyMessage: String {
-        if appTraffic.isRefreshing {
+        if isInitialLoading {
             return preferences.text(
                 "应用级数据来自 macOS nettop，首次采样后会显示实时速率。",
                 "Application-level data comes from macOS nettop. Live rates appear after the first sample."

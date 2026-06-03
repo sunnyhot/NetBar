@@ -47,31 +47,66 @@ struct SystemResourceSummary: Equatable {
 // MARK: - Concrete Reader (uses ps aux)
 
 final class PSApplicationResourceReader: ApplicationResourceReading, @unchecked Sendable {
-    private let executableURL = URL(fileURLWithPath: "/bin/ps")
+    private let executableURL: URL
+    private let arguments: [String]
+    private let timeout: TimeInterval
+
+    init(
+        executableURL: URL = URL(fileURLWithPath: "/bin/ps"),
+        arguments: [String] = ["-e", "-o", "pid=,rss=,%cpu=,comm="],
+        timeout: TimeInterval = 3
+    ) {
+        self.executableURL = executableURL
+        self.arguments = arguments
+        self.timeout = timeout
+    }
 
     func readProcessResources() -> [ProcessResourceUsage] {
         let process = Process()
         let pipe = Pipe()
+        let output = LockedProcessOutput()
 
         process.executableURL = executableURL
-        // -e: all processes, -o: custom format with = to suppress header
-        // pid= PID, rss= RSS in KB, %cpu= CPU%, comm= command name
-        process.arguments = ["-e", "-o", "pid=,rss=,%cpu=,comm="]
+        process.arguments = arguments
         process.standardOutput = pipe
         process.standardError = FileHandle.nullDevice
 
+        pipe.fileHandleForReading.readabilityHandler = { handle in
+            let data = handle.availableData
+            guard !data.isEmpty else { return }
+            output.append(data)
+        }
+        defer {
+            pipe.fileHandleForReading.readabilityHandler = nil
+        }
+
         do {
             try process.run()
-            process.waitUntilExit()
         } catch {
             return []
         }
 
+        let semaphore = DispatchSemaphore(value: 0)
+        DispatchQueue.global(qos: .utility).async {
+            process.waitUntilExit()
+            semaphore.signal()
+        }
+
+        if semaphore.wait(timeout: .now() + timeout) == .timedOut {
+            process.terminate()
+            return []
+        }
+
+        pipe.fileHandleForReading.readabilityHandler = nil
+        let remainingData = pipe.fileHandleForReading.readDataToEndOfFile()
+        if !remainingData.isEmpty {
+            output.append(remainingData)
+        }
+
         guard process.terminationStatus == 0 else { return [] }
 
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        let output = String(data: data, encoding: .utf8) ?? ""
-        return parse(output)
+        let outputText = String(data: output.data, encoding: .utf8) ?? ""
+        return parse(outputText)
     }
 
     private func parse(_ output: String) -> [ProcessResourceUsage] {
@@ -125,6 +160,23 @@ final class PSApplicationResourceReader: ApplicationResourceReading, @unchecked 
         }
 
         return fallback
+    }
+}
+
+private final class LockedProcessOutput: @unchecked Sendable {
+    private let lock = NSLock()
+    private var storage = Data()
+
+    var data: Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return storage
+    }
+
+    func append(_ data: Data) {
+        lock.lock()
+        storage.append(data)
+        lock.unlock()
     }
 }
 

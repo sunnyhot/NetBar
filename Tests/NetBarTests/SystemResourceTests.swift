@@ -286,6 +286,33 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(results[1].processName, "Mail")
     }
 
+    func testPSApplicationResourceReaderDrainsLargeOutputWithoutHanging() throws {
+        let scriptURL = try makeExecutableScript(
+            """
+            #!/bin/sh
+            i=1
+            while [ "$i" -le 20000 ]; do
+              printf "%d 1024 0.0 /Applications/TestApp.app/Contents/MacOS/TestApp\\n" "$i"
+              i=$((i + 1))
+            done
+            """
+        )
+        let reader = PSApplicationResourceReader(
+            executableURL: scriptURL,
+            arguments: [],
+            timeout: 2
+        )
+
+        let startedAt = Date()
+        let processes = reader.readProcessResources()
+        let elapsed = Date().timeIntervalSince(startedAt)
+
+        XCTAssertLessThan(elapsed, 2, "Reader should drain stdout while the process is still running instead of blocking on a full pipe")
+        XCTAssertEqual(processes.count, 20_000)
+        XCTAssertEqual(processes.first?.residentMemory, 1_048_576)
+        XCTAssertEqual(processes.first?.cpuPercentage, 0)
+    }
+
     // MARK: - NetworkMonitor System Resource Integration
 
     func testNetworkMonitorRefreshesSystemResources() async {
@@ -649,11 +676,12 @@ final class SystemResourceTests: XCTestCase {
         monitor.stop()
     }
 
-    // MARK: - KeepRefreshing Logic Tests (LUC-257)
+    // MARK: - Application Traffic Loading State Tests
 
-    func testFirstSampleEmptyDataWithStreamingKeepsRefreshing() async {
-        // When streamingReader is active (appTrafficReader omitted) and first sample is empty,
-        // isRefreshing should stay true to avoid flashing "暂无应用流量".
+    func testFirstSampleEmptyDataWithStreamingStopsRefreshing() async {
+        // When streamingReader is active (appTrafficReader omitted) and the first sample is empty,
+        // the completed sample should stop the loading state. Future timer ticks can keep retrying
+        // in the background without leaving the popover stuck on "正在读取应用流量".
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             systemResourceReader: MockSystemResourceReader(
@@ -672,15 +700,8 @@ final class SystemResourceTests: XCTestCase {
         monitor.isApplicationTrafficVisible = true
         try? await Task.sleep(nanoseconds: 500_000_000)
 
-        // The first sample from StreamingNettopReader may or may not have data.
-        // If it has data, isRefreshing should be false.
-        // If it has no data, isRefreshing should remain true (keepRefreshing logic).
-        let hasData = !monitor.appTraffic.applications.isEmpty
-        if hasData {
-            XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false when streaming produces data")
-        } else {
-            XCTAssertTrue(monitor.appTraffic.isRefreshing, "isRefreshing should stay true when streaming has no data yet and sampleCount < 3")
-        }
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false after the first streaming sample completes")
+        XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1)
     }
 
     func testFirstSampleEmptyDataWithoutStreamingStopsRefreshing() async {
@@ -739,9 +760,9 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(monitor.appTraffic.applications.count, 1)
     }
 
-    func testStreamingSafetyCapStopsRefreshingAfterThreeSamples() async {
-        // After 3 empty samples with streaming active, the safety cap should
-        // force isRefreshing to false even though data is still empty.
+    func testRepeatedEmptyStreamingSamplesStayOutOfRefreshing() async {
+        // Repeated empty samples should keep retrying in the background without
+        // putting the empty-state notice back into a loading state.
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             systemResourceReader: MockSystemResourceReader(
@@ -757,18 +778,24 @@ final class SystemResourceTests: XCTestCase {
 
         monitor.isApplicationTrafficVisible = true
 
-        // Sample multiple times to reach the safety cap
         for _ in 0..<4 {
             try? await Task.sleep(nanoseconds: 600_000_000)
             monitor.refreshApplicationTraffic()
         }
         try? await Task.sleep(nanoseconds: 500_000_000)
 
-        // After multiple samples, isRefreshing should eventually be false (safety cap)
-        // regardless of whether data appeared or not
-        if monitor.appTraffic.applications.isEmpty && monitor.appTraffic.sampleCount >= 3 {
-            XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false after sampleCount >= 3 (safety cap)")
-        }
+        XCTAssertFalse(monitor.appTraffic.isRefreshing, "Repeated empty samples should not leave the popover in a loading state")
+        XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1)
+    }
+
+    private func makeExecutableScript(_ contents: String) throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NetBarSystemResourceTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        let scriptURL = directory.appendingPathComponent("fake-ps.sh")
+        try Data(contents.utf8).write(to: scriptURL)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: scriptURL.path)
+        return scriptURL
     }
 }
 
