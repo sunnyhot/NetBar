@@ -304,9 +304,9 @@ private struct ApplicationTrafficList: View {
                     appTraffic: appTraffic
                 )
 
-                if !appTraffic.applications.isEmpty {
+                if !visibleApplications.isEmpty {
                     let summaryMetrics = ApplicationTrafficPresentation.summaryMetrics(
-                        for: appTraffic.applications,
+                        for: visibleApplications,
                         displayMode: preferences.applicationSort
                     )
 
@@ -325,15 +325,15 @@ private struct ApplicationTrafficList: View {
                     }
                     .padding(.horizontal, 8)
                     .padding(.vertical, 4)
+                }
 
-                    // System resource summary card
-                    let sys = appTraffic.systemResources
-                    if sys.totalMemory > 0 {
-                        SystemResourceCard(
-                            summary: sys,
-                            appPreferences: preferences
-                        )
-                    }
+                // System resource summary card
+                let sys = appTraffic.systemResources
+                if sys.totalMemory > 0 {
+                    SystemResourceCard(
+                        summary: sys,
+                        appPreferences: preferences
+                    )
                 }
 
                 if visibleApplications.isEmpty {

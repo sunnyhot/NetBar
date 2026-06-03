@@ -149,7 +149,7 @@ struct UpdateDialogView: View {
     }
 
     private func changelogSection(_ body: String) -> some View {
-        GroupBox {
+        GroupBox(appPreferences.text("更新内容", "What's New")) {
             ScrollView {
                 Text(body)
                     .font(.system(.caption, design: .monospaced))

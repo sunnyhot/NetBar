@@ -2387,6 +2387,62 @@ extension PreferencesAndPresentationTests {
         )
     }
 
+    func testRealtimeTrafficModeHidesAppsWithoutCurrentTraffic() {
+        let preferences = AppPreferences(
+            defaults: isolatedDefaults(),
+            loginItemManager: FakeLoginItemManager()
+        )
+        preferences.applicationSort = .activity
+
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appWithResources("Idle Memory App", processNames: ["Idle Memory App"], residentMemory: 500_000_000),
+                appWithResources("Idle CPU App", processNames: ["Idle CPU App"], cpuPercentage: 12),
+                appWithResources("Browser", processNames: ["Browser"], download: 2_000, upload: 800, residentMemory: 600_000_000),
+                appWithResources("Uploader", processNames: ["Uploader"], download: 0, upload: 1_500)
+            ],
+            sampleCount: 3,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let visible = ApplicationTrafficPresentation.visibleApplications(
+            from: state,
+            preferences: preferences,
+            searchText: ""
+        )
+
+        XCTAssertEqual(visible.map(\.displayName), ["Browser", "Uploader"])
+    }
+
+    func testApplicationSummaryUsesVisibleApplicationsForSelectedDisplayMode() {
+        let applications = [
+            appWithResources("Idle Memory App", processNames: ["Idle Memory App"], residentMemory: 500_000_000),
+            appWithResources("Browser", processNames: ["Browser"], download: 2_000, upload: 800, residentMemory: 600_000_000),
+            appWithResources("Uploader", processNames: ["Uploader"], download: 0, upload: 1_500)
+        ]
+
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.summaryMetrics(
+                for: ApplicationTrafficPresentation.displayApplications(applications, mode: .activity),
+                displayMode: .activity
+            ),
+            [
+                ApplicationTrafficMetric(kind: .download, value: "1.95 KB/s"),
+                ApplicationTrafficMetric(kind: .upload, value: "2.25 KB/s")
+            ]
+        )
+        XCTAssertEqual(
+            ApplicationTrafficPresentation.summaryMetrics(
+                for: ApplicationTrafficPresentation.displayApplications(applications, mode: .memory),
+                displayMode: .memory
+            ),
+            [ApplicationTrafficMetric(kind: .memory, value: "1.02 GB")]
+        )
+    }
+
     /// Apps with no network traffic but valid memory data should appear in memory sort mode,
     /// sorted by residentMemory descending.
     func testMemorySortShowsAppsWithoutNetworkTraffic() {

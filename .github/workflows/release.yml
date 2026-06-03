@@ -53,26 +53,73 @@ jobs:
           echo "Package contents:"
           ls -lh
 
+      - name: Extract release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import sys
+
+          tag = os.environ["TAG"]
+          version = os.environ["VERSION"]
+          changelog_path = pathlib.Path("CHANGELOG.md")
+          lines = changelog_path.read_text(encoding="utf-8").splitlines()
+
+          capturing = False
+          notes = []
+          for line in lines:
+              if line.startswith("## "):
+                  heading = line[3:].strip()
+                  if capturing:
+                      break
+                  if heading.startswith(tag) or heading.startswith(f"v{version}") or heading.startswith(version):
+                      capturing = True
+                      continue
+              elif capturing:
+                  notes.append(line)
+
+          body = "\n".join(notes).strip()
+          if not body:
+              print(f"Release notes for {tag} were not found in CHANGELOG.md", file=sys.stderr)
+              sys.exit(1)
+
+          pathlib.Path("dist").mkdir(exist_ok=True)
+          pathlib.Path("dist/release-notes.md").write_text(body + "\n", encoding="utf-8")
+          PY
+          echo "Release notes:"
+          cat dist/release-notes.md
+
       - name: Generate latest.json
         env:
           TAG: ${{ steps.version.outputs.tag }}
           VERSION: ${{ steps.version.outputs.version }}
           SHA256: ${{ steps.package.outputs.sha256 }}
         run: |
-          ASSET_URL="https://github.com/sunnyhot/NetBar/releases/download/${TAG}/NetBar.app.zip"
-          RELEASE_URL="https://github.com/sunnyhot/NetBar/releases/tag/${TAG}"
-          NOTES="Release ${TAG}"
-          cat > dist/latest.json <<MANIFEST_EOF
-          {
-            "version": "${VERSION}",
-            "tag": "${TAG}",
-            "asset": "NetBar.app.zip",
-            "asset_url": "${ASSET_URL}",
-            "sha256": "${SHA256}",
-            "notes": "${NOTES}",
-            "html_url": "${RELEASE_URL}"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          tag = os.environ["TAG"]
+          version = os.environ["VERSION"]
+          sha256 = os.environ["SHA256"]
+          manifest = {
+              "version": version,
+              "tag": tag,
+              "asset": "NetBar.app.zip",
+              "asset_url": f"https://github.com/sunnyhot/NetBar/releases/download/{tag}/NetBar.app.zip",
+              "sha256": sha256,
+              "notes": pathlib.Path("dist/release-notes.md").read_text(encoding="utf-8").strip(),
+              "html_url": f"https://github.com/sunnyhot/NetBar/releases/tag/{tag}",
           }
-          MANIFEST_EOF
+          pathlib.Path("dist/latest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8"
+          )
+          PY
           echo "Generated latest.json:"
           cat dist/latest.json
 
@@ -80,6 +127,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           name: NetBar ${{ steps.version.outputs.tag }}
+          body_path: dist/release-notes.md
           files: |
             dist/NetBar.app.zip
             dist/NetBar.app.zip.sha256

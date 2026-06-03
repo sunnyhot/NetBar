@@ -35,7 +35,22 @@ enum ApplicationTrafficPresentation {
             return searchableText.localizedStandardContains(normalizedSearch)
         }
 
-        return Array(sorted(filtered, by: preferences.applicationSort).prefix(limit))
+        let displayFiltered = displayApplications(filtered, mode: preferences.applicationSort)
+        return Array(sorted(displayFiltered, by: preferences.applicationSort).prefix(limit))
+    }
+
+    static func displayApplications(
+        _ applications: [ApplicationTrafficRate],
+        mode: ApplicationSortMode
+    ) -> [ApplicationTrafficRate] {
+        switch mode.displayModeFallback {
+        case .activity:
+            return applications.filter(hasVisibleRealtimeTraffic)
+        case .memory, .cpu:
+            return applications
+        case .download, .upload, .total, .name:
+            return displayApplications(applications, mode: .activity)
+        }
     }
 
     static func sorted(
@@ -156,6 +171,10 @@ enum ApplicationTrafficPresentation {
             return lhsValue > rhsValue
         }
         return lhsName.localizedStandardCompare(rhsName) == .orderedAscending
+    }
+
+    private static func hasVisibleRealtimeTraffic(_ application: ApplicationTrafficRate) -> Bool {
+        application.downloadBytesPerSecond >= 1 || application.uploadBytesPerSecond >= 1
     }
 
     private static let knownSystemProcessNames: Set<String> = [
