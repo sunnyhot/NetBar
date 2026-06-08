@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.38.1 (2026-06-08)
+
+### Bug Fix — 更新检查 504 兜底
+
+- 修复 Swift URLSession 访问 GitHub Release 下载端点可能持续返回 HTTP 504，导致无法发现新版本的问题
+- 更新检查遇到 GitHub Release 资产 5xx 或网络瞬断时，会退回 GitHub Releases API 获取最新版本信息
+- 更新请求改用临时 URLSession 并禁用缓存，避免旧的错误响应影响后续手动检查
+
 ## v0.38.0 (2026-06-08)
 
 ### Enhancement — 网络智能提醒与历史统计

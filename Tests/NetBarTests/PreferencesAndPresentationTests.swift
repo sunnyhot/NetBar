@@ -2181,6 +2181,55 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(manifest.notes, "Bug fixes and improvements")
     }
 
+    func testUpdateReleaseFetcherFallsBackToGitHubAPIAfterManifestGatewayTimeout() async throws {
+        var requestedURLs: [URL] = []
+        let fetcher = UpdateReleaseFetcher(
+            repository: "sunnyhot/NetBar",
+            currentVersion: "0.37.1",
+            loadData: { request in
+                requestedURLs.append(try XCTUnwrap(request.url))
+                if request.url?.host == "github.com" {
+                    let response = HTTPURLResponse(
+                        url: request.url!,
+                        statusCode: 504,
+                        httpVersion: nil,
+                        headerFields: nil
+                    )!
+                    return (Data("Gateway Time-out".utf8), response)
+                }
+
+                let json = """
+                {
+                    "tag_name": "v0.38.1",
+                    "name": "NetBar v0.38.1",
+                    "body": "Retry update checks",
+                    "html_url": "https://github.com/sunnyhot/NetBar/releases/tag/v0.38.1",
+                    "assets": [
+                        {
+                            "name": "NetBar.app.zip",
+                            "size": 3200000,
+                            "browser_download_url": "https://github.com/sunnyhot/NetBar/releases/download/v0.38.1/NetBar.app.zip"
+                        }
+                    ]
+                }
+                """.data(using: .utf8)!
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (json, response)
+            }
+        )
+
+        let release = try await fetcher.fetchLatestRelease()
+
+        XCTAssertEqual(release.tagName, "v0.38.1")
+        XCTAssertEqual(release.assets.first?.name, "NetBar.app.zip")
+        XCTAssertEqual(requestedURLs.map(\.host), ["github.com", "api.github.com"])
+    }
+
     func testAvailableUpdateProvidesVersionTextAndReleaseBody() {
         let update = AvailableUpdate(
             release: release(

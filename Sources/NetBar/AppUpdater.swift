@@ -61,6 +61,110 @@ struct AvailableUpdate: Equatable {
     }
 }
 
+struct UpdateReleaseFetcher {
+    typealias DataLoader = (URLRequest) async throws -> (Data, URLResponse)
+
+    let repository: String
+    let currentVersion: String
+    let loadData: DataLoader
+
+    init(
+        repository: String,
+        currentVersion: String,
+        loadData: @escaping DataLoader = { request in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            configuration.urlCache = nil
+            return try await URLSession(configuration: configuration).data(for: request)
+        }
+    ) {
+        self.repository = repository
+        self.currentVersion = currentVersion
+        self.loadData = loadData
+    }
+
+    func fetchLatestRelease() async throws -> GitHubRelease {
+        do {
+            return try await fetchManifestRelease()
+        } catch {
+            guard isTransientFetchError(error) else { throw error }
+            return try await fetchGitHubAPIRelease()
+        }
+    }
+
+    private func fetchManifestRelease() async throws -> GitHubRelease {
+        guard let url = URL(string: "https://github.com/\(repository)/releases/latest/download/latest.json") else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        let (data, response) = try await loadData(manifestRequest(url: url))
+        try validateHTTPResponse(response)
+        let manifest = try JSONDecoder().decode(ReleaseManifest.self, from: data)
+
+        let assetURL = URL(string: manifest.assetURL)
+            ?? URL(string: "https://github.com/\(repository)/releases/download/\(manifest.tag)/\(manifest.asset)")!
+        let htmlURL = URL(string: manifest.htmlURL ?? "")
+            ?? URL(string: "https://github.com/\(repository)/releases/tag/\(manifest.tag)")!
+
+        let releaseAsset = GitHubReleaseAsset(
+            name: manifest.asset,
+            size: 0,
+            browserDownloadURL: assetURL
+        )
+        return GitHubRelease(
+            tagName: manifest.tag,
+            name: nil,
+            body: manifest.notes,
+            htmlURL: htmlURL,
+            assets: [releaseAsset]
+        )
+    }
+
+    private func fetchGitHubAPIRelease() async throws -> GitHubRelease {
+        guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        let (data, response) = try await loadData(apiRequest(url: url))
+        try validateHTTPResponse(response)
+        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+    }
+
+    private func manifestRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
+    private func apiRequest(url: URL) -> URLRequest {
+        var request = manifestRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    private func validateHTTPResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw UpdateError.httpStatus(httpResponse.statusCode)
+        }
+    }
+
+    private func isTransientFetchError(_ error: Error) -> Bool {
+        if case UpdateError.httpStatus(let status) = error {
+            return (500..<600).contains(status)
+        }
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
+    }
+}
+
 // MARK: - Update Dialog View
 
 struct UpdateDialogView: View {
@@ -232,6 +336,7 @@ final class AppUpdater: ObservableObject {
     private let currentVersion: String
     private let currentBundleIdentifier: String
     private let appPreferences: AppPreferences
+    private let releaseFetcher: UpdateReleaseFetcher
     private var automaticTimer: Timer?
     private var preparedAppURL: URL?
     private var updateWindow: NSWindow?
@@ -242,6 +347,7 @@ final class AppUpdater: ObservableObject {
         assetName = bundle.object(forInfoDictionaryKey: "NBUpdateAssetName") as? String ?? "NetBar.app.zip"
         currentVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
         currentBundleIdentifier = bundle.bundleIdentifier ?? "local.codex.NetBar"
+        releaseFetcher = UpdateReleaseFetcher(repository: repository, currentVersion: currentVersion)
         automaticallyChecksForUpdates = defaults.object(forKey: Keys.automaticallyChecksForUpdates) as? Bool ?? true
         self.appPreferences = appPreferences
     }
@@ -417,38 +523,7 @@ final class AppUpdater: ObservableObject {
     // MARK: - Network
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
-        // Fetch the static latest.json manifest uploaded as a Release asset,
-        // avoiding the GitHub REST API rate limit (60 req/hr unauthenticated).
-        guard let url = URL(string: "https://github.com/\(repository)/releases/latest/download/latest.json") else {
-            throw UpdateError.invalidUpdateURL
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try validateHTTPResponse(response)
-        let manifest = try JSONDecoder().decode(ReleaseManifest.self, from: data)
-
-        // Map manifest back to the existing GitHubRelease / GitHubReleaseAsset models
-        // so the rest of the update flow (version comparison, download, etc.) stays unchanged.
-        let assetURL = URL(string: manifest.assetURL)
-            ?? URL(string: "https://github.com/\(repository)/releases/download/\(manifest.tag)/\(manifest.asset)")!
-        let htmlURL = URL(string: manifest.htmlURL ?? "")
-            ?? URL(string: "https://github.com/\(repository)/releases/tag/\(manifest.tag)")!
-
-        let releaseAsset = GitHubReleaseAsset(
-            name: manifest.asset,
-            size: 0,
-            browserDownloadURL: assetURL
-        )
-        return GitHubRelease(
-            tagName: manifest.tag,
-            name: nil,
-            body: manifest.notes,
-            htmlURL: htmlURL,
-            assets: [releaseAsset]
-        )
+        try await releaseFetcher.fetchLatestRelease()
     }
 
     private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
