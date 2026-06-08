@@ -695,6 +695,79 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
     }
 
+    func testNetworkNotificationControllerRefreshesAuthorizationStatus() async {
+        let center = FakeNetworkNotificationCenter(authorizationStatus: .authorized)
+        let controller = NetworkNotificationController(center: center)
+
+        let status = await controller.refreshAuthorizationStatus()
+
+        XCTAssertEqual(status, .authorized)
+        XCTAssertEqual(controller.authorizationStatus, .authorized)
+    }
+
+    func testNetworkNotificationControllerSuppressesDuplicateCooldownEvents() async {
+        let center = FakeNetworkNotificationCenter(authorizationStatus: .authorized)
+        let controller = NetworkNotificationController(center: center, now: { Date(timeIntervalSince1970: 100) })
+        let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
+        let event = NetworkAnomalyEvent(
+            kind: .highTraffic,
+            severity: .warning,
+            title: "High",
+            message: "Traffic",
+            timestamp: Date(timeIntervalSince1970: 100),
+            bytesPerSecond: 1_000,
+            cooldownKey: "highTraffic"
+        )
+
+        await controller.refreshAuthorizationStatus()
+        await controller.handle(event, settings: settings)
+        await controller.handle(event, settings: settings)
+
+        XCTAssertEqual(center.deliveredTitles, ["High"])
+        XCTAssertEqual(center.deliveredBodies, ["Traffic"])
+    }
+
+    func testNetworkNotificationControllerAllowsCooldownAfterWindowExpires() async {
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let center = FakeNetworkNotificationCenter(authorizationStatus: .authorized)
+        let controller = NetworkNotificationController(center: center, now: { currentDate })
+        let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Drop",
+            message: "Quiet",
+            timestamp: currentDate,
+            cooldownKey: "networkDrop"
+        )
+
+        await controller.refreshAuthorizationStatus()
+        await controller.handle(event, settings: settings)
+        currentDate = currentDate.addingTimeInterval(180)
+        await controller.handle(event, settings: settings)
+
+        XCTAssertEqual(center.deliveredTitles, ["Drop", "Drop"])
+    }
+
+    func testNetworkNotificationControllerDoesNotSendWhenAuthorizationDenied() async {
+        let center = FakeNetworkNotificationCenter(authorizationStatus: .denied)
+        let controller = NetworkNotificationController(center: center, now: { Date(timeIntervalSince1970: 100) })
+        let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Drop",
+            message: "Quiet",
+            timestamp: Date(timeIntervalSince1970: 100),
+            cooldownKey: "networkDrop"
+        )
+
+        await controller.refreshAuthorizationStatus()
+        await controller.handle(event, settings: settings)
+
+        XCTAssertTrue(center.deliveredTitles.isEmpty)
+    }
+
     func testApplicationDailyUsageCodablePreservesRole() throws {
         let usage = ApplicationDailyUsage(
             applicationID: "com.example.proxy",
@@ -3403,6 +3476,38 @@ extension PreferencesAndPresentationTests {
 
         // Same memory, so sorted by display name ascending
         XCTAssertEqual(visible.map(\.displayName), ["Apple", "Zebra"])
+    }
+}
+
+@MainActor
+private final class FakeNetworkNotificationCenter: NetworkNotificationCentering {
+    var status: NetworkNotificationAuthorizationStatus
+    var deliveredTitles: [String] = []
+    var deliveredBodies: [String] = []
+
+    init(authorizationStatus: NetworkNotificationAuthorizationStatus) {
+        self.status = authorizationStatus
+    }
+
+    func authorizationStatus() async -> NetworkNotificationAuthorizationStatus {
+        status
+    }
+
+    func requestAuthorization() async -> NetworkNotificationAuthorizationStatus {
+        status
+    }
+
+    func deliver(title: String, body: String) async {
+        deliveredTitles.append(title)
+        deliveredBodies.append(body)
+    }
+}
+
+private extension NetworkIntelligenceSettings {
+    func withSystemNotificationsEnabled() -> NetworkIntelligenceSettings {
+        var copy = self
+        copy.isSystemNotificationEnabled = true
+        return copy
     }
 }
 
