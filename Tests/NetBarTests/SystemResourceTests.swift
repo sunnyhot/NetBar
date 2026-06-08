@@ -453,6 +453,41 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(monitor.intelligenceSummary.latestEvent?.kind, .highTraffic)
     }
 
+    func testNetworkIntelligenceCoordinatorForwardsEventsToNotificationAndPet() {
+        var notified: [NetworkAnomalyEvent] = []
+        var notificationSettings: [NetworkIntelligenceSettings] = []
+        var cued: [NetworkAnomalyEvent] = []
+        var todaySummaries: [NetworkDailySummary] = []
+        let coordinator = NetworkIntelligenceCoordinator(
+            notify: { event, settings in
+                notified.append(event)
+                notificationSettings.append(settings)
+            },
+            petCue: { event in
+                cued.append(event)
+            },
+            petDailySummary: { summary in
+                todaySummaries.append(summary)
+            }
+        )
+        let event = NetworkAnomalyEvent(
+            kind: .highTraffic,
+            severity: .warning,
+            title: "High",
+            message: "Traffic",
+            timestamp: Date(timeIntervalSince1970: 1_717_200_000),
+            cooldownKey: "high"
+        )
+        let today = NetworkDailySummary.empty(dateKey: "2026-06-08")
+
+        coordinator.handle(events: [event], todaySummary: today, settings: .default)
+
+        XCTAssertEqual(notified, [event])
+        XCTAssertEqual(notificationSettings, [.default])
+        XCTAssertEqual(cued, [event])
+        XCTAssertEqual(todaySummaries, [today])
+    }
+
     func testNetworkMonitorRefreshesSystemResources() async {
         let mock = MockSystemResourceReader(
             memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),

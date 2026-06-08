@@ -10,6 +10,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let powerObserver = SystemPowerObserver()
     private let networkHistoryStore = NetworkHistoryStore()
     private let notificationController = NetworkNotificationController()
+    private let petController = PetController()
     private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
@@ -17,8 +18,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         customCharacterStore: customCharacterStore,
         updater: updater,
         notificationController: notificationController,
-        clearNetworkHistory: { [networkHistoryStore] in
-            networkHistoryStore.clear()
+        clearNetworkHistory: { [weak self] in
+            self?.statusBarController?.clearNetworkHistory()
         }
     )
     private var cancellables: Set<AnyCancellable> = []
@@ -40,6 +41,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             appPreferences: appPreferences,
             customCharacterStore: customCharacterStore,
             powerObserver: powerObserver,
+            notificationController: notificationController,
+            petController: petController,
             openPreferences: { [weak self] in
                 self?.showPreferences(nil)
             },

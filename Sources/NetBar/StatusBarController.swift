@@ -118,6 +118,8 @@ final class StatusBarController {
     private let monitor: NetworkMonitor
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
+    private let notificationController: NetworkNotificationController
+    private let petController: PetController
     private let customCharacterStore: CustomCharacterStore
     private let powerObserver: SystemPowerObserver
     private let systemMetricsSampler: SystemMetricsSampler
@@ -141,6 +143,20 @@ final class StatusBarController {
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
     private var renderCoalesceInterval: TimeInterval = 1.0 / 15.0
+    private lazy var networkIntelligenceCoordinator = NetworkIntelligenceCoordinator(
+        notify: { [weak self] event, settings in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                await self.notificationController.handle(event, settings: settings)
+            }
+        },
+        petCue: { [weak self] event in
+            self?.petController.observe(anomaly: event)
+        },
+        petDailySummary: { [weak self] summary in
+            self?.petController.observe(todaySummary: summary)
+        }
+    )
 
     init(
         monitor: NetworkMonitor,
@@ -149,12 +165,16 @@ final class StatusBarController {
         customCharacterStore: CustomCharacterStore,
         powerObserver: SystemPowerObserver,
         systemMetricsSampler: SystemMetricsSampler? = nil,
+        notificationController: NetworkNotificationController,
+        petController: PetController,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
         self.monitor = monitor
         self.settings = settings
         self.appPreferences = appPreferences
+        self.notificationController = notificationController
+        self.petController = petController
         self.customCharacterStore = customCharacterStore
         self.powerObserver = powerObserver
         self.systemMetricsSampler = systemMetricsSampler ?? SystemMetricsSampler()
@@ -216,6 +236,15 @@ final class StatusBarController {
             }
             .store(in: &cancellables)
 
+        Publishers.CombineLatest(monitor.$snapshot, monitor.$appTraffic)
+            .removeDuplicates { previous, current in
+                previous.0 == current.0 && previous.1 == current.1
+            }
+            .sink { [weak self] _ in
+                self?.handleNetworkIntelligenceUpdate()
+            }
+            .store(in: &cancellables)
+
         settings.objectWillChange
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
@@ -269,6 +298,19 @@ final class StatusBarController {
             .store(in: &cancellables)
 
         setupCatAnimation()
+    }
+
+    private func handleNetworkIntelligenceUpdate() {
+        let settings = appPreferences.networkIntelligenceSettings
+        let events = monitor.refreshIntelligence(
+            settings: settings,
+            language: appPreferences.resolvedLanguage
+        )
+        networkIntelligenceCoordinator.handle(
+            events: events,
+            todaySummary: monitor.intelligenceSummary.today,
+            settings: settings
+        )
     }
 
     private func setupCatAnimation() {
@@ -498,6 +540,10 @@ final class StatusBarController {
     func showDetailsWindow(anchorToMenuBar: Bool = false) {
         monitor.resumeApplicationTrafficSampling()
         detailsWindowController.show(anchor: anchorToMenuBar ? statusItem.button : nil)
+    }
+
+    func clearNetworkHistory() {
+        monitor.clearNetworkHistory()
     }
 
     private var applicationTrafficPauseTask: Task<Void, Never>?

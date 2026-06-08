@@ -323,6 +323,12 @@ final class NetworkMonitor: ObservableObject {
         return events
     }
 
+    func clearNetworkHistory() {
+        historyStore.clear()
+        intelligenceSummary = historyStore.summary
+        lastApplicationTrafficDate = nil
+    }
+
     func refreshApplicationTraffic() {
         guard !isReadingApplicationTraffic else { return }
         guard shouldSampleApplicationTraffic else { return }
