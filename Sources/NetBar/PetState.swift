@@ -87,6 +87,7 @@ enum PetCueKind: String, Codable, Equatable {
     case reminder
     case skill
     case status
+    case networkIntelligence
 }
 
 enum PetAnimationHint: String, Codable, Equatable {

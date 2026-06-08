@@ -2358,6 +2358,46 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(controller.latestCue?.message.contains("Arc") == true)
     }
 
+    func testPetControllerEmitsCueForApplicationSpikeAnomaly() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings { $0.isEnabled = true }
+        let event = NetworkAnomalyEvent(
+            kind: .applicationSpike,
+            severity: .warning,
+            title: "应用突增",
+            message: "Chrome 当前较活跃。",
+            timestamp: Date(timeIntervalSince1970: 100),
+            applicationName: "Chrome",
+            bytesPerSecond: 5_000_000,
+            cooldownKey: "applicationSpike.Chrome"
+        )
+
+        controller.observe(anomaly: event)
+
+        XCTAssertEqual(controller.latestCue?.kind, .networkIntelligence)
+        XCTAssertTrue(controller.latestCue?.message.contains("Chrome") == true)
+        XCTAssertEqual(controller.latestCue?.animationHint, .focused)
+    }
+
+    func testPetControllerMoodReflectsDailyNetworkActivity() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings { $0.isEnabled = true }
+        let summary = NetworkDailySummary(
+            dateKey: "2026-06-08",
+            downloadBytes: 20_000_000_000,
+            uploadBytes: 1_000_000_000,
+            peakDownloadBytesPerSecond: 8_000_000,
+            peakUploadBytesPerSecond: 1_000_000,
+            sampleCount: 120,
+            activeSeconds: 3_000,
+            topApplications: []
+        )
+
+        controller.observe(todaySummary: summary)
+
+        XCTAssertEqual(controller.state.mood, .excited)
+    }
+
     func testPetControllerMapsLowNetworkSpeedToSleepyMood() {
         let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
         controller.updateSettings { $0.isEnabled = true }
