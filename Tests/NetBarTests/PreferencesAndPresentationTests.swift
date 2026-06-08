@@ -768,6 +768,17 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(center.deliveredTitles.isEmpty)
     }
 
+    func testHighTrafficThresholdTitlesAreLocalized() {
+        XCTAssertEqual(HighTrafficThreshold.mbps5.title(language: .simplifiedChinese), "5 MB/s")
+        XCTAssertEqual(HighTrafficThreshold.mbps50.title(language: .english), "50 MB/s")
+    }
+
+    func testNetworkNotificationAuthorizationStatusTitles() {
+        XCTAssertEqual(NetworkNotificationAuthorizationStatus.authorized.title(language: .simplifiedChinese), "已授权")
+        XCTAssertEqual(NetworkNotificationAuthorizationStatus.denied.title(language: .english), "Denied")
+        XCTAssertEqual(NetworkNotificationAuthorizationStatus.notDetermined.title(language: .simplifiedChinese), "未设置")
+    }
+
     func testNetworkIntelligenceStatusPresentationMapsSeverity() {
         let event = NetworkAnomalyEvent(
             kind: .networkDrop,

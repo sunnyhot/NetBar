@@ -7,18 +7,24 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let appPreferences: AppPreferences
     private let customCharacterStore: CustomCharacterStore
     private let updater: AppUpdater
+    private let notificationController: NetworkNotificationController
+    private let clearNetworkHistory: () -> Void
     private var window: NSWindow?
 
     init(
         settings: StatusBarSettings,
         appPreferences: AppPreferences,
         customCharacterStore: CustomCharacterStore,
-        updater: AppUpdater
+        updater: AppUpdater,
+        notificationController: NetworkNotificationController,
+        clearNetworkHistory: @escaping () -> Void
     ) {
         self.settings = settings
         self.appPreferences = appPreferences
         self.customCharacterStore = customCharacterStore
         self.updater = updater
+        self.notificationController = notificationController
+        self.clearNetworkHistory = clearNetworkHistory
     }
 
     func show() {
@@ -49,7 +55,9 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
                 settings: settings,
                 appPreferences: appPreferences,
                 customCharacterStore: customCharacterStore,
-                updater: updater
+                updater: updater,
+                notificationController: notificationController,
+                clearNetworkHistory: clearNetworkHistory
             )
         )
         preferencesWindow.collectionBehavior = [.moveToActiveSpace]
@@ -64,6 +72,8 @@ private struct PreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
     @ObservedObject var updater: AppUpdater
+    @ObservedObject var notificationController: NetworkNotificationController
+    let clearNetworkHistory: () -> Void
     @State private var selectedTab = 0
 
     var body: some View {
@@ -87,11 +97,21 @@ private struct PreferencesView: View {
                     }
                     .tag(1)
 
+                IntelligencePreferencesView(
+                    appPreferences: appPreferences,
+                    notificationController: notificationController,
+                    clearHistory: clearNetworkHistory
+                )
+                    .tabItem {
+                        Label(appPreferences.text("智能", "Intelligence"), systemImage: "sparkles")
+                    }
+                    .tag(2)
+
                 AboutPreferencesView(appPreferences: appPreferences, updater: updater)
                     .tabItem {
                         Label(appPreferences.text("关于", "About"), systemImage: "info.circle")
                     }
-                    .tag(2)
+                    .tag(3)
             }
             .animation(.easeInOut(duration: 0.2), value: selectedTab)
         }

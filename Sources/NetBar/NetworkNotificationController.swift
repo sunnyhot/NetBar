@@ -8,6 +8,19 @@ enum NetworkNotificationAuthorizationStatus: Equatable {
     case authorized
 }
 
+extension NetworkNotificationAuthorizationStatus {
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .notDetermined:
+            return language.text("未设置", "Not set")
+        case .denied:
+            return language.text("已拒绝", "Denied")
+        case .authorized:
+            return language.text("已授权", "Authorized")
+        }
+    }
+}
+
 @MainActor
 protocol NetworkNotificationCentering: AnyObject {
     func authorizationStatus() async -> NetworkNotificationAuthorizationStatus

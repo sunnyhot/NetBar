@@ -8,12 +8,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appPreferences = AppPreferences()
     private let customCharacterStore = CustomCharacterStore()
     private let powerObserver = SystemPowerObserver()
+    private let networkHistoryStore = NetworkHistoryStore()
+    private let notificationController = NetworkNotificationController()
     private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         appPreferences: appPreferences,
         customCharacterStore: customCharacterStore,
-        updater: updater
+        updater: updater,
+        notificationController: notificationController,
+        clearNetworkHistory: { [networkHistoryStore] in
+            networkHistoryStore.clear()
+        }
     )
     private var cancellables: Set<AnyCancellable> = []
 
@@ -29,7 +35,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         applyActivationPolicy()
         configurePreferenceObservers()
         statusBarController = StatusBarController(
-            monitor: NetworkMonitor(),
+            monitor: NetworkMonitor(historyStore: networkHistoryStore),
             settings: settings,
             appPreferences: appPreferences,
             customCharacterStore: customCharacterStore,
