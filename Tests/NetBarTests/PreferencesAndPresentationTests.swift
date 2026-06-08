@@ -768,6 +768,46 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(center.deliveredTitles.isEmpty)
     }
 
+    func testNetworkIntelligenceStatusPresentationMapsSeverity() {
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "网络断流",
+            message: "网络活动下降。",
+            timestamp: Date(timeIntervalSince1970: 10),
+            cooldownKey: "networkDrop"
+        )
+
+        let presentation = NetworkIntelligenceStatusPresentation(
+            event: event,
+            language: .simplifiedChinese
+        )
+
+        XCTAssertEqual(presentation.title, "网络断流")
+        XCTAssertEqual(presentation.message, "网络活动下降。")
+        XCTAssertEqual(presentation.tone, .critical)
+        XCTAssertEqual(presentation.symbolName, "exclamationmark.triangle.fill")
+    }
+
+    func testNetworkDailySummaryPresentationFormatsTodayEstimate() {
+        let summary = NetworkDailySummary(
+            dateKey: "2026-06-08",
+            downloadBytes: 10_000_000,
+            uploadBytes: 5_000_000,
+            peakDownloadBytesPerSecond: 2_000_000,
+            peakUploadBytesPerSecond: 1_000_000,
+            sampleCount: 20,
+            activeSeconds: 80,
+            topApplications: []
+        )
+
+        let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
+
+        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active"])
+        XCTAssertEqual(cards.map(\.id), ["down", "up", "peak", "active"])
+        XCTAssertEqual(cards.last?.value, "1m")
+    }
+
     func testApplicationDailyUsageCodablePreservesRole() throws {
         let usage = ApplicationDailyUsage(
             applicationID: "com.example.proxy",

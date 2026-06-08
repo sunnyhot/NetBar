@@ -19,13 +19,22 @@ struct NetworkPopoverView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    NetworkIntelligenceStatusCard(
+                        presentation: NetworkIntelligenceStatusPresentation(
+                            event: monitor.intelligenceSummary.latestEvent,
+                            language: appPreferences.resolvedLanguage
+                        ),
+                        appPreferences: appPreferences,
+                        openPreferences: openPreferences
+                    )
+                    .padding(.top, 16)
+
                     if !appPreferences.hasCompletedOnboarding {
                         FirstLaunchGuide(
                             appPreferences: appPreferences,
                             openPreferences: openPreferences,
                             completeOnboarding: appPreferences.completeOnboarding
                         )
-                        .padding(.top, 16)
                     } else {
                         TrafficChart(
                             points: historyWindow.points(from: monitor.recentHistory),
@@ -33,10 +42,20 @@ struct NetworkPopoverView: View {
                             appPreferences: appPreferences
                         )
                             .frame(height: 132)
-                            .padding(.top, 16)
                     }
 
+                    TodayNetworkSummary(
+                        summary: monitor.intelligenceSummary.today,
+                        appPreferences: appPreferences
+                    )
+
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
+
+                    ApplicationTopSection(
+                        realtimeApplications: monitor.intelligenceSummary.realtimeTopApplications,
+                        todayApplications: monitor.intelligenceSummary.todayTopApplications,
+                        appPreferences: appPreferences
+                    )
 
                     ApplicationTrafficList(
                         snapshot: monitor.snapshot,
@@ -44,6 +63,11 @@ struct NetworkPopoverView: View {
                         preferences: appPreferences,
                         searchText: $appSearchText,
                         retry: monitor.refreshApplicationTraffic
+                    )
+
+                    SevenDaySummarySection(
+                        summaries: monitor.intelligenceSummary.recentDays,
+                        appPreferences: appPreferences
                     )
 
                     InterfaceList(
@@ -164,6 +188,331 @@ private struct FirstLaunchGuide: View {
             }
         }
         .netBarCard(cornerRadius: 14, padding: 14, isProminent: true)
+    }
+}
+
+// MARK: - Network Intelligence
+
+enum NetworkIntelligenceTone: Equatable {
+    case normal
+    case attention
+    case critical
+}
+
+struct NetworkIntelligenceStatusPresentation: Equatable {
+    let title: String
+    let message: String
+    let tone: NetworkIntelligenceTone
+    let symbolName: String
+
+    init(event: NetworkAnomalyEvent?, language: AppLanguage) {
+        guard let event else {
+            title = language.text("网络状态正常", "Network status normal")
+            message = language.text("没有检测到需要注意的网络异常。", "No network anomalies need attention.")
+            tone = .normal
+            symbolName = "checkmark.seal.fill"
+            return
+        }
+
+        title = event.title
+        message = event.message
+        switch event.severity {
+        case .info:
+            tone = .normal
+            symbolName = "info.circle.fill"
+        case .warning:
+            tone = .attention
+            symbolName = "exclamationmark.circle.fill"
+        case .critical:
+            tone = .critical
+            symbolName = "exclamationmark.triangle.fill"
+        }
+    }
+}
+
+struct NetworkDailySummaryCard: Equatable, Identifiable {
+    let id: String
+    let title: String
+    let value: String
+}
+
+enum NetworkDailySummaryPresentation {
+    static func cards(for summary: NetworkDailySummary, language: AppLanguage) -> [NetworkDailySummaryCard] {
+        [
+            NetworkDailySummaryCard(
+                id: "down",
+                title: language.text("今日下载", "Today Down"),
+                value: ByteFormat.bytes(summary.downloadBytes)
+            ),
+            NetworkDailySummaryCard(
+                id: "up",
+                title: language.text("今日上传", "Today Up"),
+                value: ByteFormat.bytes(summary.uploadBytes)
+            ),
+            NetworkDailySummaryCard(
+                id: "peak",
+                title: language.text("今日峰值", "Peak"),
+                value: ByteFormat.speed(max(summary.peakDownloadBytesPerSecond, summary.peakUploadBytesPerSecond))
+            ),
+            NetworkDailySummaryCard(
+                id: "active",
+                title: language.text("活跃时长", "Active"),
+                value: duration(summary.activeSeconds)
+            )
+        ]
+    }
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds / 60)
+        if minutes < 1 { return "<1m" }
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+}
+
+private struct NetworkIntelligenceStatusCard: View {
+    let presentation: NetworkIntelligenceStatusPresentation
+    @ObservedObject var appPreferences: AppPreferences
+    let openPreferences: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 11) {
+            Image(systemName: presentation.symbolName)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(presentation.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(presentation.message)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button { openPreferences() } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .buttonStyle(NetBarIconButtonStyle())
+            .help(appPreferences.text("调整智能检测", "Adjust Intelligence"))
+        }
+        .netBarCard(cornerRadius: 12, padding: 11, isProminent: presentation.tone != .normal)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 0.7)
+        )
+    }
+
+    private var tint: Color {
+        switch presentation.tone {
+        case .normal:
+            return .green
+        case .attention:
+            return .orange
+        case .critical:
+            return .red
+        }
+    }
+}
+
+private struct TodayNetworkSummary: View {
+    let summary: NetworkDailySummary
+    @ObservedObject var appPreferences: AppPreferences
+
+    private var cards: [NetworkDailySummaryCard] {
+        NetworkDailySummaryPresentation.cards(
+            for: summary,
+            language: appPreferences.resolvedLanguage
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            NetBarSectionHeader(
+                title: appPreferences.text("今日统计", "Today"),
+                subtitle: appPreferences.text("本地累计估算", "Local estimate")
+            )
+
+            HStack(spacing: 8) {
+                ForEach(cards) { card in
+                    DailySummaryCell(card: card, tone: tone(for: card.id))
+                }
+            }
+        }
+    }
+
+    private func tone(for id: String) -> NetBarTone {
+        switch id {
+        case "down":
+            return .download
+        case "up":
+            return .upload
+        case "peak":
+            return .warning
+        default:
+            return .neutral
+        }
+    }
+}
+
+private struct DailySummaryCell: View {
+    let card: NetworkDailySummaryCard
+    let tone: NetBarTone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(card.title)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+            Text(card.value)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .netBarCard(cornerRadius: 10, padding: 9)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(tone.color.opacity(0.12), lineWidth: 0.6)
+        )
+    }
+}
+
+private struct ApplicationTopSection: View {
+    let realtimeApplications: [ApplicationTrafficRate]
+    let todayApplications: [ApplicationDailyUsage]
+    @ObservedObject var appPreferences: AppPreferences
+
+    var body: some View {
+        if !realtimeApplications.isEmpty || !todayApplications.isEmpty {
+            VStack(alignment: .leading, spacing: 9) {
+                NetBarSectionHeader(
+                    title: appPreferences.text("应用 Top", "App Top"),
+                    subtitle: appPreferences.text("实时活跃与今日累计", "Realtime and today")
+                )
+
+                if !realtimeApplications.isEmpty {
+                    TopSubsectionTitle(title: appPreferences.text("当前最活跃", "Most Active Now"))
+                    VStack(spacing: 4) {
+                        ForEach(Array(realtimeApplications.prefix(3))) { application in
+                            ApplicationTrafficRow(
+                                application: application,
+                                role: ApplicationTrafficPresentation.attributionRole(for: application),
+                                language: appPreferences.resolvedLanguage,
+                                displayMode: .activity
+                            )
+                        }
+                    }
+                }
+
+                if !todayApplications.isEmpty {
+                    TopSubsectionTitle(title: appPreferences.text("今日累计", "Today Total"))
+                    VStack(spacing: 4) {
+                        ForEach(Array(todayApplications.prefix(5))) { application in
+                            DailyApplicationUsageRow(
+                                application: application,
+                                language: appPreferences.resolvedLanguage
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct TopSubsectionTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 8)
+    }
+}
+
+private struct DailyApplicationUsageRow: View {
+    let application: ApplicationDailyUsage
+    let language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 8) {
+            AppBadge(title: application.displayName, pids: [])
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(application.displayName)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1)
+                    AttributionRoleBadge(role: application.role, language: language)
+                }
+                Text(application.processNames.prefix(2).joined(separator: ", "))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 6) {
+                MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(application.downloadBytes), tint: .blue, fixedWidth: 92)
+                MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(application.uploadBytes), tint: .orange, fixedWidth: 92)
+            }
+        }
+        .netBarCard(cornerRadius: 10, padding: 6)
+    }
+}
+
+private struct SevenDaySummarySection: View {
+    let summaries: [NetworkDailySummary]
+    @ObservedObject var appPreferences: AppPreferences
+
+    private var visibleSummaries: [NetworkDailySummary] {
+        Array(summaries.suffix(7).reversed())
+    }
+
+    var body: some View {
+        if !visibleSummaries.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                NetBarSectionHeader(
+                    title: appPreferences.text("最近 7 天", "Recent 7 Days"),
+                    subtitle: appPreferences.text("按日期查看累计流量", "Daily accumulated traffic")
+                )
+
+                VStack(spacing: 4) {
+                    ForEach(visibleSummaries) { summary in
+                        SevenDaySummaryRow(summary: summary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct SevenDaySummaryRow: View {
+    let summary: NetworkDailySummary
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(summary.dateKey)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+
+            MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(summary.downloadBytes), tint: .blue)
+            MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(summary.uploadBytes), tint: .orange)
+            CompactMetric(symbol: "clock", value: NetworkDailySummaryPresentation.duration(summary.activeSeconds), tint: .secondary)
+        }
+        .netBarCard(cornerRadius: 10, padding: 7)
     }
 }
 
