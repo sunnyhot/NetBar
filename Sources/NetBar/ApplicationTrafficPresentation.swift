@@ -29,7 +29,7 @@ struct ApplicationAttributionSummary: Equatable {
     let status: ApplicationAttributionStatus
 }
 
-enum ApplicationAttributionRole: Equatable {
+enum ApplicationAttributionRole: String, Codable, Equatable {
     case application
     case proxyOrVPN
     case helper

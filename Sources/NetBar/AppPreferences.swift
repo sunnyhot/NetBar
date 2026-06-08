@@ -265,6 +265,7 @@ final class AppPreferences: ObservableObject {
     @Published var appearanceMode: AppAppearanceMode { didSet { save() } }
     @Published var popoverPosition: PopoverPosition { didSet { save() } }
     @Published private(set) var hasCompletedOnboarding: Bool { didSet { save() } }
+    @Published var networkIntelligenceSettings: NetworkIntelligenceSettings { didSet { save() } }
     @Published private(set) var launchesAtLogin: Bool
     @Published private(set) var loginItemErrorMessage: String?
 
@@ -285,6 +286,12 @@ final class AppPreferences: ObservableObject {
         appearanceMode = AppAppearanceMode(rawValue: defaults.string(forKey: Keys.appearanceMode) ?? "") ?? Defaults.appearanceMode
         popoverPosition = PopoverPosition(rawValue: defaults.string(forKey: Keys.popoverPosition) ?? "") ?? Defaults.popoverPosition
         hasCompletedOnboarding = defaults.object(forKey: Keys.hasCompletedOnboarding) as? Bool ?? Defaults.hasCompletedOnboarding
+        if let data = defaults.data(forKey: Keys.networkIntelligenceSettings),
+           let decoded = try? JSONDecoder().decode(NetworkIntelligenceSettings.self, from: data) {
+            networkIntelligenceSettings = decoded
+        } else {
+            networkIntelligenceSettings = Defaults.networkIntelligenceSettings
+        }
         launchesAtLogin = loginItemManager.refreshStatus()
     }
 
@@ -351,6 +358,7 @@ final class AppPreferences: ObservableObject {
         language = Defaults.language
         appearanceMode = Defaults.appearanceMode
         popoverPosition = Defaults.popoverPosition
+        networkIntelligenceSettings = Defaults.networkIntelligenceSettings
     }
 
     private func save() {
@@ -361,6 +369,9 @@ final class AppPreferences: ObservableObject {
         defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
         defaults.set(popoverPosition.rawValue, forKey: Keys.popoverPosition)
         defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding)
+        if let data = try? JSONEncoder().encode(networkIntelligenceSettings) {
+            defaults.set(data, forKey: Keys.networkIntelligenceSettings)
+        }
     }
 
     private enum Defaults {
@@ -371,6 +382,7 @@ final class AppPreferences: ObservableObject {
         static let appearanceMode = AppAppearanceMode.system
         static let popoverPosition = PopoverPosition.right
         static let hasCompletedOnboarding = false
+        static let networkIntelligenceSettings = NetworkIntelligenceSettings.default
     }
 
     private enum Keys {
@@ -381,5 +393,6 @@ final class AppPreferences: ObservableObject {
         static let appearanceMode = "app.appearanceMode"
         static let popoverPosition = "app.popoverPosition"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
+        static let networkIntelligenceSettings = "app.networkIntelligenceSettings"
     }
 }

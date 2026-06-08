@@ -335,6 +335,91 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(preferences.appearanceMode, .dark)
     }
 
+    func testNetworkIntelligenceSettingsDefaultsAreConservative() {
+        let settings = NetworkIntelligenceSettings.default
+
+        XCTAssertTrue(settings.isAnomalyDetectionEnabled)
+        XCTAssertFalse(settings.isSystemNotificationEnabled)
+        XCTAssertEqual(settings.highTrafficThreshold, .mbps10)
+        XCTAssertTrue(settings.isApplicationSpikeAlertEnabled)
+        XCTAssertTrue(settings.isNetworkDropAlertEnabled)
+        XCTAssertTrue(settings.isProxyAttributionAlertEnabled)
+        XCTAssertTrue(settings.isHistoryTrackingEnabled)
+    }
+
+    func testNetworkIntelligenceSettingsDecodeMissingFieldsFromDefaults() throws {
+        let data = """
+        {
+          "isAnomalyDetectionEnabled": false,
+          "highTrafficThreshold": 26214400
+        }
+        """.data(using: .utf8)!
+
+        let settings = try JSONDecoder().decode(NetworkIntelligenceSettings.self, from: data)
+
+        XCTAssertFalse(settings.isAnomalyDetectionEnabled)
+        XCTAssertEqual(settings.highTrafficThreshold, .mbps25)
+        XCTAssertEqual(settings.hasSeenNotificationOnboarding, NetworkIntelligenceSettings.default.hasSeenNotificationOnboarding)
+        XCTAssertEqual(settings.isSystemNotificationEnabled, NetworkIntelligenceSettings.default.isSystemNotificationEnabled)
+        XCTAssertEqual(settings.isApplicationSpikeAlertEnabled, NetworkIntelligenceSettings.default.isApplicationSpikeAlertEnabled)
+        XCTAssertEqual(settings.isNetworkDropAlertEnabled, NetworkIntelligenceSettings.default.isNetworkDropAlertEnabled)
+        XCTAssertEqual(settings.isProxyAttributionAlertEnabled, NetworkIntelligenceSettings.default.isProxyAttributionAlertEnabled)
+        XCTAssertEqual(settings.isHistoryTrackingEnabled, NetworkIntelligenceSettings.default.isHistoryTrackingEnabled)
+    }
+
+    func testAppPreferencesPersistNetworkIntelligenceSettings() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(defaults: defaults, loginItemManager: FakeLoginItemManager())
+
+        preferences.networkIntelligenceSettings = NetworkIntelligenceSettings(
+            hasSeenNotificationOnboarding: true,
+            isAnomalyDetectionEnabled: false,
+            isSystemNotificationEnabled: true,
+            highTrafficThreshold: .mbps25,
+            isApplicationSpikeAlertEnabled: false,
+            isNetworkDropAlertEnabled: true,
+            isProxyAttributionAlertEnabled: false,
+            isHistoryTrackingEnabled: true
+        )
+
+        let reloaded = AppPreferences(defaults: defaults, loginItemManager: FakeLoginItemManager())
+
+        XCTAssertEqual(reloaded.networkIntelligenceSettings.highTrafficThreshold, .mbps25)
+        XCTAssertTrue(reloaded.networkIntelligenceSettings.hasSeenNotificationOnboarding)
+        XCTAssertFalse(reloaded.networkIntelligenceSettings.isAnomalyDetectionEnabled)
+        XCTAssertTrue(reloaded.networkIntelligenceSettings.isSystemNotificationEnabled)
+        XCTAssertFalse(reloaded.networkIntelligenceSettings.isApplicationSpikeAlertEnabled)
+        XCTAssertTrue(reloaded.networkIntelligenceSettings.isNetworkDropAlertEnabled)
+        XCTAssertFalse(reloaded.networkIntelligenceSettings.isProxyAttributionAlertEnabled)
+        XCTAssertTrue(reloaded.networkIntelligenceSettings.isHistoryTrackingEnabled)
+    }
+
+    func testNetworkAnomalyEventLocalizedTitles() {
+        XCTAssertEqual(NetworkAnomalyKind.highTraffic.title(language: .simplifiedChinese), "高流量")
+        XCTAssertEqual(NetworkAnomalyKind.applicationSpike.title(language: .english), "Application spike")
+        XCTAssertEqual(NetworkAnomalyKind.networkDrop.title(language: .simplifiedChinese), "网络断流")
+        XCTAssertEqual(NetworkAnomalyKind.networkRecovered.title(language: .english), "Network recovered")
+        XCTAssertEqual(NetworkAnomalyKind.proxyAttributionGap.title(language: .simplifiedChinese), "代理归因差异")
+    }
+
+    func testApplicationDailyUsageCodablePreservesRole() throws {
+        let usage = ApplicationDailyUsage(
+            applicationID: "com.example.proxy",
+            displayName: "Example Proxy",
+            processNames: ["Example Proxy", "proxy-helper"],
+            downloadBytes: 4_096,
+            uploadBytes: 2_048,
+            lastSeenAt: Date(timeIntervalSince1970: 1_717_200_000),
+            role: .proxyOrVPN
+        )
+
+        let data = try JSONEncoder().encode(usage)
+        let decoded = try JSONDecoder().decode(ApplicationDailyUsage.self, from: data)
+
+        XCTAssertEqual(decoded, usage)
+        XCTAssertEqual(decoded.role, .proxyOrVPN)
+    }
+
     // MARK: - DockIconVisibility
 
     func testDockIconVisibilityDefaultValueIsVisible() {
