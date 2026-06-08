@@ -44,30 +44,18 @@ enum CustomCharacterImageProcessor {
         motionStyle: CustomCharacterMotionStyle,
         pixelation: CustomCharacterPixelationScale
     ) async throws -> [NSImage] {
-        try await withThrowingTaskGroup(of: NSImage.self) { group in
-            let source = try normalizedImage(from: image)
-            let baseSize = source.size
-            let canvasPadding = canvasPadding(for: motionStyle)
-            let canvasSize = NSSize(
-                width: max(baseSize.width + canvasPadding.width, 1),
-                height: max(baseSize.height + canvasPadding.height, 1)
-            )
+        let source = try normalizedImage(from: image)
+        let baseSize = source.size
+        let canvasPadding = canvasPadding(for: motionStyle)
+        let canvasSize = NSSize(
+            width: max(baseSize.width + canvasPadding.width, 1),
+            height: max(baseSize.height + canvasPadding.height, 1)
+        )
 
-            let rawFrames = (0..<generatedStaticFrameCount).map { index in
-                frame(from: source, canvasSize: canvasSize, motionStyle: motionStyle, index: index)
-            }
-            for frameImage in rawFrames {
-                group.addTask {
-                    try await self.pixelatedAsync(frameImage, scale: pixelation)
-                }
-            }
-            var results: [NSImage] = []
-            results.reserveCapacity(rawFrames.count)
-            for try await image in group {
-                results.append(image)
-            }
-            return results
+        let rawFrames = (0..<generatedStaticFrameCount).map { index in
+            frame(from: source, canvasSize: canvasSize, motionStyle: motionStyle, index: index)
         }
+        return try await pixelatedFramesPreservingOrder(rawFrames, pixelation: pixelation)
     }
 
     static func processedFrameSequence(
@@ -80,19 +68,7 @@ enum CustomCharacterImageProcessor {
         }
         guard !frames.isEmpty else { throw CustomCharacterImageProcessorError.emptyFrameSet }
         let normalized = try normalizeFrameSizes(frames)
-        return try await withThrowingTaskGroup(of: NSImage.self) { group in
-            for frame in normalized {
-                group.addTask {
-                    try await self.pixelatedAsync(frame, scale: pixelation)
-                }
-            }
-            var results: [NSImage] = []
-            results.reserveCapacity(normalized.count)
-            for try await image in group {
-                results.append(image)
-            }
-            return results
-        }
+        return try await pixelatedFramesPreservingOrder(normalized, pixelation: pixelation)
     }
 
     static func processedGIFFrames(
@@ -125,19 +101,7 @@ enum CustomCharacterImageProcessor {
         }
         guard !rawFrames.isEmpty else { throw CustomCharacterImageProcessorError.emptyFrameSet }
         let normalized = try normalizeFrameSizes(rawFrames)
-        return try await withThrowingTaskGroup(of: NSImage.self) { group in
-            for frame in normalized {
-                group.addTask {
-                    try await self.pixelatedAsync(frame, scale: pixelation)
-                }
-            }
-            var results: [NSImage] = []
-            results.reserveCapacity(normalized.count)
-            for try await image in group {
-                results.append(image)
-            }
-            return results
-        }
+        return try await pixelatedFramesPreservingOrder(normalized, pixelation: pixelation)
     }
 
     // MARK: - Persistent Cache
@@ -487,6 +451,25 @@ enum CustomCharacterImageProcessor {
             blue: blue / count,
             alpha: alpha / count
         )
+    }
+
+    private static func pixelatedFramesPreservingOrder(
+        _ frames: [NSImage],
+        pixelation: CustomCharacterPixelationScale
+    ) async throws -> [NSImage] {
+        try await withThrowingTaskGroup(of: (Int, NSImage).self) { group in
+            for (index, frame) in frames.enumerated() {
+                group.addTask {
+                    (index, try await self.pixelatedAsync(frame, scale: pixelation))
+                }
+            }
+
+            var results = frames
+            for try await (index, image) in group {
+                results[index] = image
+            }
+            return results
+        }
     }
 
     private static func pixelatedAsync(_ image: NSImage, scale: CustomCharacterPixelationScale) async throws -> NSImage {

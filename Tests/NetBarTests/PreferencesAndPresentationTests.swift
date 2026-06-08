@@ -1,4 +1,5 @@
 import AppKit
+import Combine
 import XCTest
 @testable import NetBar
 
@@ -387,6 +388,27 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(preferences.dockIconVisibility, .visible)
     }
 
+    func testDockActivationPolicyReflectsPendingPublishedVisibilityChange() {
+        let defaults = isolatedDefaults()
+        let preferences = AppPreferences(
+            defaults: defaults,
+            loginItemManager: FakeLoginItemManager()
+        )
+        var cancellables: Set<AnyCancellable> = []
+        var policiesAppliedFromPublisher: [NSApplication.ActivationPolicy] = []
+
+        preferences.$showsDockIcon
+            .dropFirst()
+            .sink { _ in
+                policiesAppliedFromPublisher.append(preferences.activationPolicy)
+            }
+            .store(in: &cancellables)
+
+        preferences.setDockIconVisibility(.menuBarOnly)
+
+        XCTAssertEqual(policiesAppliedFromPublisher, [.accessory])
+    }
+
     func testResetAppPreferencesRestoresDockIconVisibilityToDefault() {
         let defaults = isolatedDefaults()
         let preferences = AppPreferences(
@@ -537,14 +559,11 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(reloaded.showsDockIcon, "Reset value should persist across re-initialization")
     }
 
-    func testDockIconToggleHasNoDoubleNegative() {
-        // Verify that the toggle label is expressed positively:
-        // "显示 Dock 图标" (Show Dock icon) — ON means show, OFF means hide.
-        // No "隐藏" (hide) in the toggle label to avoid double-negative confusion.
-        let zhLabel = "显示 Dock 图标"
-        let enLabel = "Show Dock icon"
-        XCTAssertFalse(zhLabel.contains("隐藏"), "Chinese toggle label should not contain '隐藏' — avoids double negative")
-        XCTAssertFalse(enLabel.contains("Hide"), "English toggle label should not contain 'Hide' — avoids double negative")
+    func testDockIconVisibilityPickerUsesExplicitModeLabels() {
+        XCTAssertEqual(DockIconVisibility.visible.title(language: .simplifiedChinese), "显示 Dock 图标")
+        XCTAssertEqual(DockIconVisibility.visible.title(language: .english), "Show Dock icon")
+        XCTAssertEqual(DockIconVisibility.menuBarOnly.title(language: .simplifiedChinese), "仅菜单栏")
+        XCTAssertEqual(DockIconVisibility.menuBarOnly.title(language: .english), "Menu bar only")
     }
 
     func testInterfaceIconNamesMatchInterfaceFamilies() {

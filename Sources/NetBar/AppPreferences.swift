@@ -252,7 +252,13 @@ final class MainAppLoginItemManager: LoginItemManaging {
 final class AppPreferences: ObservableObject {
     /// Backing Bool storage — `true` means Dock icon visible, `false` means menu-bar-only.
     /// Prefer using ``dockIconVisibility`` / ``setDockIconVisibility(_:)`` for clearer semantics.
-    @Published var showsDockIcon: Bool { didSet { save() } }
+    @Published var showsDockIcon: Bool {
+        willSet { pendingShowsDockIcon = newValue }
+        didSet {
+            save()
+            pendingShowsDockIcon = nil
+        }
+    }
     @Published var hidesSystemProcesses: Bool { didSet { save() } }
     @Published var applicationSort: ApplicationSortMode { didSet { save() } }
     @Published var language: AppLanguage { didSet { save() } }
@@ -264,6 +270,7 @@ final class AppPreferences: ObservableObject {
 
     private let defaults: UserDefaults
     private let loginItemManager: LoginItemManaging
+    private var pendingShowsDockIcon: Bool?
 
     init(
         defaults: UserDefaults = .standard,
@@ -289,7 +296,7 @@ final class AppPreferences: ObservableObject {
 
     /// The current Dock visibility mode, derived from the backing `showsDockIcon` Bool.
     var dockIconVisibility: DockIconVisibility {
-        DockIconVisibility(showsDockIcon: showsDockIcon)
+        DockIconVisibility(showsDockIcon: effectiveShowsDockIcon)
     }
 
     /// Sets the Dock visibility mode. Centralises the mapping so call sites
@@ -308,6 +315,10 @@ final class AppPreferences: ObservableObject {
     /// tile is absent so the reopen delegate is never called.
     var shouldHandleDockReopen: Bool {
         dockIconVisibility.isDockVisible
+    }
+
+    private var effectiveShowsDockIcon: Bool {
+        pendingShowsDockIcon ?? showsDockIcon
     }
 
     func text(_ simplifiedChinese: String, _ english: String) -> String {

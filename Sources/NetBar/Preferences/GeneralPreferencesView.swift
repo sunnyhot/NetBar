@@ -24,16 +24,21 @@ struct GeneralPreferencesView: View {
                         "Automatically launch NetBar at login"
                     ))
 
-                    Toggle(appPreferences.text("显示 Dock 图标", "Show Dock icon"), isOn: Binding(
-                        get: { appPreferences.showsDockIcon },
-                        set: { appPreferences.showsDockIcon = $0 }
-                    ))
+                    Picker(appPreferences.text("Dock 图标", "Dock icon"), selection: Binding(
+                        get: { appPreferences.dockIconVisibility },
+                        set: { appPreferences.setDockIconVisibility($0) }
+                    )) {
+                        ForEach(DockIconVisibility.allCases) { visibility in
+                            Text(visibility.title(language: appPreferences.resolvedLanguage)).tag(visibility)
+                        }
+                    }
+                    .pickerStyle(.segmented)
                     .help(appPreferences.text(
-                        "开启：NetBar 显示在 Dock 栏，点击可切换回主窗口。\n关闭：NetBar 仅在菜单栏运行，通过菜单栏图标右键打开流量窗口或偏好设置。",
-                        "On: NetBar appears in the Dock — click to switch back to the window.\nOff: NetBar runs in the menu bar only — right-click the menu bar icon to open the traffic window or preferences."
+                        "选择“显示 Dock 图标”时，NetBar 会出现在 Dock 栏；选择“仅菜单栏”时，NetBar 会隐藏 Dock 图标并保留菜单栏入口。",
+                        "Choose Show Dock icon to keep NetBar in the Dock, or Menu bar only to hide the Dock icon while keeping the menu bar item."
                     ))
 
-                    if !appPreferences.showsDockIcon {
+                    if appPreferences.dockIconVisibility == .menuBarOnly {
                         Label(
                             appPreferences.text(
                                 "NetBar 正在以菜单栏模式运行。点击菜单栏图标可查看流量，右键可打开偏好设置",
