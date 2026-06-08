@@ -420,6 +420,248 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(decoded.role, .proxyOrVPN)
     }
 
+    func testNetworkHistoryStoreAccumulatesInterfaceDeltasForToday() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 0) })
+        let first = sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000, timestamp: Date(timeIntervalSince1970: 0))
+        let second = sampleSnapshot(download: 300, upload: 200, received: 1_500, sent: 2_700, timestamp: Date(timeIntervalSince1970: 1))
+
+        store.record(snapshot: first)
+        store.record(snapshot: second)
+
+        XCTAssertEqual(store.summary.today.downloadBytes, 500)
+        XCTAssertEqual(store.summary.today.uploadBytes, 700)
+        XCTAssertEqual(store.summary.today.peakDownloadBytesPerSecond, 300)
+        XCTAssertEqual(store.summary.today.peakUploadBytesPerSecond, 200)
+    }
+
+    func testNetworkHistoryStoreSumsPositiveDeltasPerInterface() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 0) })
+        let first = multiInterfaceSnapshot(
+            timestamp: Date(timeIntervalSince1970: 0),
+            interfaces: [
+                interfaceRate(id: "en0", received: 1_000, sent: 2_000),
+                interfaceRate(id: "en1", received: 5_000, sent: 8_000),
+                interfaceRate(id: "utun0", received: 9_000, sent: 10_000)
+            ]
+        )
+        let second = multiInterfaceSnapshot(
+            timestamp: Date(timeIntervalSince1970: 1),
+            interfaces: [
+                interfaceRate(id: "en0", received: 1_400, sent: 2_600),
+                interfaceRate(id: "en1", received: 100, sent: 50),
+                interfaceRate(id: "utun0", received: 9_500, sent: 10_500)
+            ]
+        )
+
+        store.record(snapshot: first)
+        store.record(snapshot: second)
+
+        XCTAssertEqual(store.summary.today.downloadBytes, 400)
+        XCTAssertEqual(store.summary.today.uploadBytes, 600)
+    }
+
+    func testNetworkHistoryStoreRollsOverAndRetainsSevenDays() throws {
+        let root = try temporaryDirectory()
+        var currentDate = isoDate("2026-06-01T12:00:00Z")
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
+
+        for dayOffset in 0..<9 {
+            currentDate = isoDate("2026-06-\(String(format: "%02d", dayOffset + 1))T12:00:00Z")
+            store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: UInt64(dayOffset * 1_000 + 1_000), sent: UInt64(dayOffset * 1_000 + 2_000), timestamp: currentDate))
+        }
+
+        XCTAssertEqual(store.summary.recentDays.count, 7)
+        XCTAssertEqual(store.summary.today.dateKey, "2026-06-09")
+        XCTAssertEqual(store.summary.recentDays.first?.dateKey, "2026-06-02")
+        XCTAssertEqual(store.summary.recentDays.last?.dateKey, "2026-06-08")
+    }
+
+    func testNetworkHistoryStoreAccumulatesTodayTopApplications() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
+        let apps = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appRate("Safari", download: 1_000, upload: 200),
+                appRate("Chrome", download: 3_000, upload: 500)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        store.record(appTraffic: apps, interval: 2.0)
+
+        XCTAssertEqual(store.summary.todayTopApplications.map(\.displayName), ["Chrome", "Safari"])
+        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 6_000)
+        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 1_000)
+    }
+
+    func testNetworkHistoryStoreUsesApplicationCounterDeltasBeforeIntervalFallback() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
+        let first = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appRate("Safari", download: 0, upload: 0, received: 1_000, sent: 500)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+        let second = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 11),
+            applications: [
+                appRate("Safari", download: 10_000, upload: 8_000, received: 2_500, sent: 900)
+            ],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        store.record(appTraffic: first, interval: 999)
+        store.record(appTraffic: second, interval: 99)
+
+        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 1_500)
+        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 400)
+    }
+
+    func testNetworkHistoryStoreTreatsZeroApplicationCountersAsValidBaseline() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
+        let first = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appRate("Safari", download: 0, upload: 0, received: 0, sent: 0)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+        let second = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 11),
+            applications: [
+                appRate("Safari", download: 10_000, upload: 8_000, received: 1_500, sent: 400)
+            ],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        store.record(appTraffic: first, interval: 999)
+        store.record(appTraffic: second, interval: 99)
+
+        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 1_500)
+        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 400)
+    }
+
+    func testNetworkHistoryStoreDropsMissingApplicationCounterBaselines() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
+        let first = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appRate("Safari", download: 0, upload: 0, received: 5_000, sent: 1_000)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+        let missing = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 11),
+            applications: [],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+        let reappeared = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 12),
+            applications: [
+                appRate("Safari", download: 10, upload: 5, received: 100, sent: 50)
+            ],
+            sampleCount: 3,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+        let next = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 13),
+            applications: [
+                appRate("Safari", download: 10_000, upload: 8_000, received: 400, sent: 170)
+            ],
+            sampleCount: 4,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        store.record(appTraffic: first, interval: 1)
+        store.record(appTraffic: missing, interval: 1)
+        store.record(appTraffic: reappeared, interval: 1)
+        store.record(appTraffic: next, interval: 99)
+
+        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 310)
+        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 125)
+    }
+
+    func testNetworkHistoryStorePersistsAndReloadsNormalizedSummary() throws {
+        let root = try temporaryDirectory()
+        let start = isoDate("2026-06-01T12:00:00Z")
+        let secondTimestamp = isoDate("2026-06-01T12:00:01Z")
+        let reloadTimestamp = isoDate("2026-06-01T13:00:00Z")
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { start })
+        let first = sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000, timestamp: start)
+        let second = sampleSnapshot(download: 300, upload: 200, received: 1_500, sent: 2_700, timestamp: secondTimestamp)
+        let apps = ApplicationTrafficState(
+            timestamp: secondTimestamp,
+            applications: (1...25).map { index in
+                appRate("App\(String(format: "%02d", index))", download: Double(index), upload: 0)
+            },
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        store.record(snapshot: first)
+        store.record(snapshot: second)
+        store.record(appTraffic: apps, interval: 1)
+        let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { reloadTimestamp })
+
+        XCTAssertEqual(reloaded.summary.today.downloadBytes, 500)
+        XCTAssertEqual(reloaded.summary.today.uploadBytes, 700)
+        XCTAssertEqual(reloaded.summary.today.topApplications.count, 20)
+        XCTAssertEqual(reloaded.summary.todayTopApplications.count, 5)
+        XCTAssertEqual(reloaded.summary.todayTopApplications.map(\.displayName), ["App25", "App24", "App23", "App22", "App21"])
+    }
+
+    func testNetworkHistoryStoreRollsPersistedYesterdayIntoRecentDaysOnInit() throws {
+        let root = try temporaryDirectory()
+        var currentDate = isoDate("2026-06-01T12:00:00Z")
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000, timestamp: currentDate))
+        store.record(snapshot: sampleSnapshot(download: 300, upload: 200, received: 1_800, sent: 2_600, timestamp: isoDate("2026-06-01T12:00:01Z")))
+
+        currentDate = isoDate("2026-06-02T12:00:00Z")
+        let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
+
+        XCTAssertEqual(reloaded.summary.today.dateKey, "2026-06-02")
+        XCTAssertEqual(reloaded.summary.today.downloadBytes, 0)
+        XCTAssertEqual(reloaded.summary.today.uploadBytes, 0)
+        XCTAssertEqual(reloaded.summary.recentDays.last?.dateKey, "2026-06-01")
+        XCTAssertEqual(reloaded.summary.recentDays.last?.downloadBytes, 800)
+        XCTAssertEqual(reloaded.summary.recentDays.last?.uploadBytes, 600)
+    }
+
     // MARK: - DockIconVisibility
 
     func testDockIconVisibilityDefaultValueIsVisible() {
@@ -1913,6 +2155,95 @@ final class PreferencesAndPresentationTests: XCTestCase {
             totalReceivedBytes: UInt64(download),
             totalSentBytes: UInt64(upload),
             sampleCount: 2
+        )
+    }
+
+    private func sampleSnapshot(
+        download: Double = 0,
+        upload: Double = 0,
+        received: UInt64,
+        sent: UInt64,
+        timestamp: Date = Date(timeIntervalSince1970: 10)
+    ) -> NetworkSnapshot {
+        NetworkSnapshot(
+            timestamp: timestamp,
+            interfaces: [
+                InterfaceRate(
+                    id: "en0",
+                    name: "en0",
+                    displayName: "Wi-Fi",
+                    downloadBytesPerSecond: download,
+                    uploadBytesPerSecond: upload,
+                    totalReceivedBytes: received,
+                    totalSentBytes: sent,
+                    receivedPackets: 0,
+                    sentPackets: 0,
+                    isPrimary: true
+                )
+            ],
+            downloadBytesPerSecond: download,
+            uploadBytesPerSecond: upload,
+            totalReceivedBytes: received,
+            totalSentBytes: sent,
+            sampleCount: 1
+        )
+    }
+
+    private func multiInterfaceSnapshot(timestamp: Date, interfaces: [InterfaceRate]) -> NetworkSnapshot {
+        NetworkSnapshot(
+            timestamp: timestamp,
+            interfaces: interfaces,
+            downloadBytesPerSecond: interfaces.reduce(0) { $0 + $1.downloadBytesPerSecond },
+            uploadBytesPerSecond: interfaces.reduce(0) { $0 + $1.uploadBytesPerSecond },
+            totalReceivedBytes: interfaces.reduce(UInt64(0)) { $0 + $1.totalReceivedBytes },
+            totalSentBytes: interfaces.reduce(UInt64(0)) { $0 + $1.totalSentBytes },
+            sampleCount: 1
+        )
+    }
+
+    private func interfaceRate(id: String, received: UInt64, sent: UInt64) -> InterfaceRate {
+        InterfaceRate(
+            id: id,
+            name: id,
+            displayName: id,
+            downloadBytesPerSecond: 0,
+            uploadBytesPerSecond: 0,
+            totalReceivedBytes: received,
+            totalSentBytes: sent,
+            receivedPackets: 0,
+            sentPackets: 0,
+            isPrimary: id == "en0"
+        )
+    }
+
+    private func fixedCalendar() -> Calendar {
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = TimeZone(secondsFromGMT: 0)!
+        return calendar
+    }
+
+    private func isoDate(_ text: String) -> Date {
+        ISO8601DateFormatter().date(from: text)!
+    }
+
+    private func appRate(
+        _ name: String,
+        download: Double,
+        upload: Double,
+        received: UInt64 = 0,
+        sent: UInt64 = 0
+    ) -> ApplicationTrafficRate {
+        ApplicationTrafficRate(
+            id: name,
+            displayName: name,
+            processNames: [name],
+            pids: [],
+            downloadBytesPerSecond: download,
+            uploadBytesPerSecond: upload,
+            totalReceivedBytes: received,
+            totalSentBytes: sent,
+            residentMemory: nil,
+            cpuPercentage: nil
         )
     }
 
