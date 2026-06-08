@@ -6,6 +6,7 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var snapshot = NetworkSnapshot.empty
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var systemResources = SystemResourceSnapshot.empty
+    @Published private(set) var intelligenceSummary = NetworkIntelligenceSummary.empty
     @Published private(set) var isRunning = false
 
     /// Controls whether the nettop process is active. Set to true when the
@@ -26,11 +27,14 @@ final class NetworkMonitor: ObservableObject {
     let streamingReader: StreamingNettopReader?
     private let systemResourceReader: SystemResourceReading
     private let resourceReader: ApplicationResourceReading
+    private let historyStore: NetworkHistoryStore
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
     private var previousApplicationSampleDate: Date?
+    private var lastApplicationTrafficDate: Date?
+    private var anomalyDetector = NetworkAnomalyDetector()
     private var previousCPUTickSample: CPUTickSample?
     private var isReadingApplicationTraffic = false
     private var isRefreshing = false
@@ -62,11 +66,14 @@ final class NetworkMonitor: ObservableObject {
         appTrafficReader: ApplicationTrafficReading? = nil,
         systemResourceReader: SystemResourceReading = LiveSystemResourceReader(),
         resourceReader: ApplicationResourceReading? = nil,
+        historyStore: NetworkHistoryStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
         self.systemResourceReader = systemResourceReader
         self.now = now
+        self.historyStore = historyStore ?? NetworkHistoryStore()
+        self.intelligenceSummary = self.historyStore.summary
         if let appTrafficReader {
             self.appTrafficReader = appTrafficReader
             self.streamingReader = nil
@@ -231,6 +238,7 @@ final class NetworkMonitor: ObservableObject {
                 totalSentBytes: externalStats.reduce(0) { $0 + $1.sentBytes },
                 sampleCount: 1
             )
+            recordSnapshotForIntelligence()
             return
         }
 
@@ -292,9 +300,27 @@ final class NetworkMonitor: ObservableObject {
         historyWriteIndex += 1
 
         updateActivityLevel(totalBytesPerSecond: totalDownload + totalUpload)
+        recordSnapshotForIntelligence()
 
         previousStats = currentByName
         previousSampleDate = now
+    }
+
+    func refreshIntelligence(
+        settings: NetworkIntelligenceSettings,
+        language: AppLanguage = .simplifiedChinese
+    ) -> [NetworkAnomalyEvent] {
+        let events = anomalyDetector.detect(
+            snapshot: snapshot,
+            appTraffic: appTraffic,
+            settings: settings,
+            now: now(),
+            language: language
+        )
+        if let latest = events.last {
+            intelligenceSummary.latestEvent = latest
+        }
+        return events
     }
 
     func refreshApplicationTraffic() {
@@ -382,6 +408,7 @@ final class NetworkMonitor: ObservableObject {
                 errorMessage: nil,
                 systemResources: systemSummary
             )
+            recordApplicationTrafficForIntelligence(sampledAt: sampledAt)
             return
         }
 
@@ -421,6 +448,25 @@ final class NetworkMonitor: ObservableObject {
             errorMessage: nil,
             systemResources: systemSummary
         )
+        recordApplicationTrafficForIntelligence(sampledAt: sampledAt)
+    }
+
+    private func recordSnapshotForIntelligence() {
+        historyStore.record(snapshot: snapshot)
+        syncIntelligenceSummaryFromHistory()
+    }
+
+    private func recordApplicationTrafficForIntelligence(sampledAt: Date) {
+        let interval = lastApplicationTrafficDate.map { sampledAt.timeIntervalSince($0) } ?? applicationSampleInterval
+        historyStore.record(appTraffic: appTraffic, interval: max(interval, 0.2))
+        lastApplicationTrafficDate = sampledAt
+        syncIntelligenceSummaryFromHistory()
+    }
+
+    private func syncIntelligenceSummaryFromHistory() {
+        var summary = historyStore.summary
+        summary.latestEvent = intelligenceSummary.latestEvent
+        intelligenceSummary = summary
     }
 
     private func resourceOnlyApplicationRates(

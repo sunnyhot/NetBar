@@ -315,6 +315,144 @@ final class SystemResourceTests: XCTestCase {
 
     // MARK: - NetworkMonitor System Resource Integration
 
+    func testNetworkMonitorUpdatesNetworkIntelligenceSummary() async throws {
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let reader = SequenceNetworkStatsReader(samples: [
+            [
+                InterfaceStats(
+                    name: "en0",
+                    displayName: "Wi-Fi",
+                    receivedBytes: 1_000,
+                    sentBytes: 2_000,
+                    receivedPackets: 1,
+                    sentPackets: 1,
+                    isPrimary: true
+                )
+            ],
+            [
+                InterfaceStats(
+                    name: "en0",
+                    displayName: "Wi-Fi",
+                    receivedBytes: 3_000,
+                    sentBytes: 5_000,
+                    receivedPackets: 2,
+                    sentPackets: 2,
+                    isPrimary: true
+                )
+            ]
+        ])
+        let root = try temporaryDirectoryForSystemTests()
+        let monitor = NetworkMonitor(
+            reader: reader,
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            historyStore: NetworkHistoryStore(rootDirectory: root, now: { currentDate }),
+            now: { currentDate }
+        )
+
+        monitor.refresh()
+        await waitForSnapshotSamples(1, monitor: monitor)
+        currentDate = currentDate.addingTimeInterval(1)
+        monitor.refresh()
+        await waitForSnapshotSamples(2, monitor: monitor)
+
+        XCTAssertEqual(monitor.intelligenceSummary.today.downloadBytes, 2_000)
+        XCTAssertEqual(monitor.intelligenceSummary.today.uploadBytes, 3_000)
+    }
+
+    func testNetworkMonitorRecordsApplicationTrafficInIntelligenceSummary() async throws {
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [
+                ApplicationTrafficStats(
+                    id: "Safari.100",
+                    processName: "Safari",
+                    displayName: "Safari",
+                    pid: 100,
+                    receivedBytes: 1_000,
+                    sentBytes: 500
+                )
+            ], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [
+                ApplicationTrafficStats(
+                    id: "Safari.100",
+                    processName: "Safari",
+                    displayName: "Safari",
+                    pid: 100,
+                    receivedBytes: 4_000,
+                    sentBytes: 2_000
+                )
+            ], errorMessage: nil)
+        ])
+        let root = try temporaryDirectoryForSystemTests()
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [
+                [InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]
+            ]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            historyStore: NetworkHistoryStore(rootDirectory: root, now: { currentDate }),
+            now: { currentDate }
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficSamples(1, monitor: monitor)
+        currentDate = currentDate.addingTimeInterval(5)
+        monitor.refreshApplicationTraffic()
+        await waitForApplicationTrafficSamples(2, monitor: monitor)
+
+        let topApplication = monitor.intelligenceSummary.todayTopApplications.first
+        XCTAssertEqual(topApplication?.displayName, "Safari")
+        XCTAssertEqual(topApplication?.downloadBytes, 3_000)
+        XCTAssertEqual(topApplication?.uploadBytes, 1_500)
+    }
+
+    func testNetworkMonitorRefreshIntelligenceStoresLatestEvent() async throws {
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let reader = SequenceNetworkStatsReader(samples: [
+            [InterfaceStats(name: "en0", receivedBytes: 0, sentBytes: 0, receivedPackets: 1, sentPackets: 1, isPrimary: true)],
+            [InterfaceStats(name: "en0", receivedBytes: 12_000_000, sentBytes: 0, receivedPackets: 2, sentPackets: 2, isPrimary: true)],
+            [InterfaceStats(name: "en0", receivedBytes: 140_000_000, sentBytes: 0, receivedPackets: 3, sentPackets: 3, isPrimary: true)]
+        ])
+        let monitor = NetworkMonitor(
+            reader: reader,
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            historyStore: NetworkHistoryStore(rootDirectory: try temporaryDirectoryForSystemTests(), now: { currentDate }),
+            now: { currentDate }
+        )
+
+        monitor.refresh()
+        await waitForSnapshotSamples(1, monitor: monitor)
+        currentDate = currentDate.addingTimeInterval(1)
+        monitor.refresh()
+        await waitForSnapshotSamples(2, monitor: monitor)
+        XCTAssertTrue(monitor.refreshIntelligence(settings: .default).isEmpty)
+
+        currentDate = currentDate.addingTimeInterval(11)
+        monitor.refresh()
+        await waitForSnapshotSamples(3, monitor: monitor)
+        let events = monitor.refreshIntelligence(settings: .default)
+
+        XCTAssertEqual(events.map(\.kind), [.highTraffic])
+        XCTAssertEqual(monitor.intelligenceSummary.latestEvent?.kind, .highTraffic)
+    }
+
     func testNetworkMonitorRefreshesSystemResources() async {
         let mock = MockSystemResourceReader(
             memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
@@ -830,6 +968,24 @@ final class SystemResourceTests: XCTestCase {
         while monitor.appTraffic.sampleCount < count && Date() < deadline {
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
+    }
+
+    private func waitForSnapshotSamples(
+        _ count: Int,
+        monitor: NetworkMonitor,
+        timeout: TimeInterval = 2.0
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while monitor.snapshot.sampleCount < count && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    private func temporaryDirectoryForSystemTests() throws -> URL {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NetBarSystemResourceTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        return directory
     }
 
     private func makeExecutableScript(_ contents: String) throws -> URL {
