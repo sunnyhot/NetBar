@@ -23,6 +23,25 @@ struct MenuBarPreferencesView: View {
                     selectedCharacterAsset: characterSection.selectedCharacterAsset()
                 )
 
+                PreferenceSection(
+                    title: appPreferences.text("预设", "Presets"),
+                    systemImage: "wand.and.stars"
+                ) {
+                    Picker(
+                        appPreferences.text("菜单栏预设", "Menu bar preset"),
+                        selection: Binding<MenuBarPreset?>(
+                            get: { MenuBarPreset.matching(settings: settings) },
+                            set: { preset in preset?.apply(to: settings) }
+                        )
+                    ) {
+                        Text(appPreferences.text("自定义", "Custom")).tag(Optional<MenuBarPreset>.none)
+                        ForEach(MenuBarPreset.allCases) { preset in
+                            Text(preset.title(language: appPreferences.resolvedLanguage)).tag(Optional(preset))
+                        }
+                    }
+                    .pickerStyle(.menu)
+                }
+
                 CollapsiblePreferenceSection(
                     title: appPreferences.text("显示内容", "Display"),
                     systemImage: "textformat.size",

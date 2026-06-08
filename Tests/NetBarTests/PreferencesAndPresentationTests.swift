@@ -98,6 +98,31 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(MenuBarPreferenceGroup.animation.title(language: .english), "Animation & Rotation")
     }
 
+    func testMenuBarPresetAppliesTotalTrafficMode() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+
+        MenuBarPreset.totalTraffic.apply(to: settings)
+
+        XCTAssertEqual(settings.trafficDisplayMode, .total)
+        XCTAssertFalse(settings.showsArrows)
+    }
+
+    func testMenuBarPresetDetectsCustomAfterManualEdit() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        MenuBarPreset.upDown.apply(to: settings)
+
+        XCTAssertEqual(MenuBarPreset.matching(settings: settings), .upDown)
+
+        settings.fontSize = settings.fontSize + 1
+
+        XCTAssertNil(MenuBarPreset.matching(settings: settings))
+    }
+
+    func testMenuBarPresetTitlesAreLocalized() {
+        XCTAssertEqual(MenuBarPreset.minimal.title(language: .simplifiedChinese), "极简")
+        XCTAssertEqual(MenuBarPreset.petMode.title(language: .english), "Pet Mode")
+    }
+
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true
