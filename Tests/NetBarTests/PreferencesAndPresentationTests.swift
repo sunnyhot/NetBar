@@ -402,6 +402,299 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(NetworkAnomalyKind.proxyAttributionGap.title(language: .simplifiedChinese), "代理归因差异")
     }
 
+    func testNetworkAnomalyDetectorEmitsHighTrafficAfterSustainedThreshold() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let start = Date(timeIntervalSince1970: 100)
+
+        XCTAssertTrue(detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start), appTraffic: .empty, settings: settings, now: start).isEmpty)
+
+        let events = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(11)
+        )
+
+        XCTAssertEqual(events.map(\.kind), [.highTraffic])
+    }
+
+    func testNetworkAnomalyDetectorClearsHighTrafficTimerWhenDisabled() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        var disabledSettings = settings
+        disabledSettings.isAnomalyDetectionEnabled = false
+        let start = Date(timeIntervalSince1970: 100)
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start), appTraffic: .empty, settings: settings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(5)), appTraffic: .empty, settings: disabledSettings, now: start.addingTimeInterval(5))
+
+        let staleWindow = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(11)
+        )
+
+        XCTAssertTrue(staleWindow.isEmpty)
+
+        let restartedWindow = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(21)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(21)
+        )
+
+        XCTAssertEqual(restartedWindow.map(\.kind), [.highTraffic])
+    }
+
+    func testNetworkAnomalyDetectorUsesRequestedLanguageForEventPresentation() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let start = Date(timeIntervalSince1970: 100)
+
+        _ = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start),
+            appTraffic: .empty,
+            settings: settings,
+            now: start,
+            language: .english
+        )
+        let events = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(11),
+            language: .english
+        )
+
+        XCTAssertEqual(events.first?.title, "High traffic")
+        XCTAssertEqual(events.first?.message, "Current total speed is about 11.0 MB/s.")
+    }
+
+    func testNetworkAnomalyDetectorEmitsApplicationSpikeForDominantApp() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let start = Date(timeIntervalSince1970: 100)
+        let state = ApplicationTrafficState(
+            timestamp: start,
+            applications: [
+                appRate("VideoSync", download: 6_000_000, upload: 500_000),
+                appRate("Mail", download: 300_000, upload: 20_000)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start), appTraffic: state, settings: settings, now: start)
+        let events = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(6)), appTraffic: state, settings: settings, now: start.addingTimeInterval(6))
+
+        XCTAssertEqual(events.first?.kind, .applicationSpike)
+        XCTAssertEqual(events.first?.applicationName, "VideoSync")
+    }
+
+    func testNetworkAnomalyDetectorClearsApplicationSpikeTimerWhenAlertDisabled() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        var disabledSettings = settings
+        disabledSettings.isApplicationSpikeAlertEnabled = false
+        let start = Date(timeIntervalSince1970: 100)
+        let state = ApplicationTrafficState(
+            timestamp: start,
+            applications: [
+                appRate("VideoSync", download: 6_000_000, upload: 500_000),
+                appRate("Mail", download: 300_000, upload: 20_000)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start), appTraffic: state, settings: settings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(1)), appTraffic: state, settings: disabledSettings, now: start.addingTimeInterval(1))
+
+        let staleWindow = detector.detect(
+            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(6)),
+            appTraffic: state,
+            settings: settings,
+            now: start.addingTimeInterval(6)
+        )
+
+        XCTAssertTrue(staleWindow.isEmpty)
+
+        let restartedWindow = detector.detect(
+            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(12)),
+            appTraffic: state,
+            settings: settings,
+            now: start.addingTimeInterval(12)
+        )
+
+        XCTAssertEqual(restartedWindow.map(\.kind), [.applicationSpike])
+    }
+
+    func testNetworkAnomalyDetectorRequiresContinuousApplicationSpikeForSameDominantApp() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let start = Date(timeIntervalSince1970: 100)
+        let spikingState = ApplicationTrafficState(
+            timestamp: start,
+            applications: [
+                appRate("VideoSync", download: 6_000_000, upload: 500_000),
+                appRate("Mail", download: 300_000, upload: 20_000)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start), appTraffic: spikingState, settings: settings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(1))
+
+        let interrupted = detector.detect(
+            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(10)),
+            appTraffic: spikingState,
+            settings: settings,
+            now: start.addingTimeInterval(10)
+        )
+
+        XCTAssertTrue(interrupted.isEmpty)
+
+        let sustained = detector.detect(
+            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(16)),
+            appTraffic: spikingState,
+            settings: settings,
+            now: start.addingTimeInterval(16)
+        )
+
+        XCTAssertEqual(sustained.map(\.kind), [.applicationSpike])
+    }
+
+    func testNetworkAnomalyDetectorEmitsDropAndRecoveredEvents() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let start = Date(timeIntervalSince1970: 100)
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start), appTraffic: .empty, settings: settings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(1))
+        let drop = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(10)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(10))
+
+        XCTAssertEqual(drop.map(\.kind), [.networkDrop])
+
+        XCTAssertTrue(detector.detect(snapshot: sampleSnapshot(download: 50_000, upload: 10_000, timestamp: start.addingTimeInterval(11)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(11)).isEmpty)
+        let recovered = detector.detect(snapshot: sampleSnapshot(download: 50_000, upload: 10_000, timestamp: start.addingTimeInterval(14)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(14))
+
+        XCTAssertEqual(recovered.map(\.kind), [.networkRecovered])
+    }
+
+    func testNetworkAnomalyDetectorClearsDropTimerWhenAlertDisabled() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        var disabledSettings = settings
+        disabledSettings.isNetworkDropAlertEnabled = false
+        let start = Date(timeIntervalSince1970: 100)
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start), appTraffic: .empty, settings: settings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(1))
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(5)), appTraffic: .empty, settings: disabledSettings, now: start.addingTimeInterval(5))
+
+        let staleWindow = detector.detect(
+            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(10)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(10)
+        )
+
+        XCTAssertTrue(staleWindow.isEmpty)
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start.addingTimeInterval(12)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(12))
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(13)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(13))
+        let restartedWindow = detector.detect(
+            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(22)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(22)
+        )
+
+        XCTAssertEqual(restartedWindow.map(\.kind), [.networkDrop])
+    }
+
+    func testNetworkAnomalyDetectorIgnoresDropBaselineCollectedWhileAlertDisabled() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        var disabledSettings = settings
+        disabledSettings.isNetworkDropAlertEnabled = false
+        let start = Date(timeIntervalSince1970: 100)
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start), appTraffic: .empty, settings: disabledSettings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: disabledSettings, now: start.addingTimeInterval(1))
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(10)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(10))
+
+        let staleBaseline = detector.detect(
+            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(18)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(18)
+        )
+
+        XCTAssertTrue(staleBaseline.isEmpty)
+
+        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start.addingTimeInterval(20)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(20))
+        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(21)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(21))
+        let freshBaseline = detector.detect(
+            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(30)),
+            appTraffic: .empty,
+            settings: settings,
+            now: start.addingTimeInterval(30)
+        )
+
+        XCTAssertEqual(freshBaseline.map(\.kind), [.networkDrop])
+    }
+
+    func testNetworkAnomalyDetectorEmitsProxyAttributionGap() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let now = Date(timeIntervalSince1970: 100)
+        let appTraffic = ApplicationTrafficState(
+            timestamp: now,
+            applications: [appRate("ClashX", download: 100_000, upload: 20_000)],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let events = detector.detect(snapshot: sampleSnapshot(download: 2_000_000, upload: 500_000, timestamp: now), appTraffic: appTraffic, settings: settings, now: now)
+
+        XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
+    }
+
+    func testNetworkAnomalyDetectorProxyGapUsesRawCoverageBeforeRounding() {
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let now = Date(timeIntervalSince1970: 100)
+        let appTraffic = ApplicationTrafficState(
+            timestamp: now,
+            applications: [appRate("ClashX", download: 970_000, upload: 20_000)],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let events = detector.detect(
+            snapshot: sampleSnapshot(download: 2_000_000, upload: 500_000, timestamp: now),
+            appTraffic: appTraffic,
+            settings: settings,
+            now: now
+        )
+
+        XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
+    }
+
     func testApplicationDailyUsageCodablePreservesRole() throws {
         let usage = ApplicationDailyUsage(
             applicationID: "com.example.proxy",
@@ -2161,8 +2454,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
     private func sampleSnapshot(
         download: Double = 0,
         upload: Double = 0,
-        received: UInt64,
-        sent: UInt64,
+        received: UInt64 = 0,
+        sent: UInt64 = 0,
         timestamp: Date = Date(timeIntervalSince1970: 10)
     ) -> NetworkSnapshot {
         NetworkSnapshot(
