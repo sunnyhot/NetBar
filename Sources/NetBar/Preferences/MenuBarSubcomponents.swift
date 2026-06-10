@@ -62,6 +62,7 @@ struct CharacterGridCard: View {
     let character: RunCatCharacter
     let isSelected: Bool
     let frameIndex: Int
+    let playbackDetail: String?
 
     var body: some View {
         VStack(spacing: 4) {
@@ -75,6 +76,14 @@ struct CharacterGridCard: View {
                 .font(.system(size: 10))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)
+
+            if let playbackDetail {
+                Text(playbackDetail)
+                    .font(.system(size: 8, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.75)
+            }
         }
         .frame(maxWidth: .infinity)
         .padding(.vertical, 6)
@@ -94,6 +103,7 @@ struct CharacterGridCard: View {
 
 struct CharacterChoiceLabel<Icon: View>: View {
     let title: String
+    var detail: String?
     let isSelected: Bool
     @ViewBuilder var icon: Icon
 
@@ -103,14 +113,23 @@ struct CharacterChoiceLabel<Icon: View>: View {
                 .fill(isSelected ? Color.accentColor : Color.clear)
                 .frame(width: 6, height: 6)
             icon
-            Text(title)
-                .font(.system(size: 12))
-                .lineLimit(1)
-                .minimumScaleFactor(0.82)
+            VStack(alignment: .leading, spacing: 1) {
+                Text(title)
+                    .font(.system(size: 12))
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.82)
+                if let detail {
+                    Text(detail)
+                        .font(.system(size: 8, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.75)
+                }
+            }
         }
         .padding(.horizontal, 6)
         .padding(.vertical, 3)
-        .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
+        .frame(maxWidth: .infinity, minHeight: detail == nil ? 26 : 34, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 5)
                 .fill(isSelected ? Color.accentColor.opacity(0.15) : Color.clear)
@@ -367,6 +386,8 @@ struct AnimatedPreviewSection: View {
 struct AnimatedCharacterCatalog: View {
     @ObservedObject var settings: StatusBarSettings
     let characterPickerFrameTick: Int?
+    let playbackCounts: [String: UInt64]
+    let language: AppLanguage
 
     @State private var frameTick = 0
 
@@ -389,7 +410,11 @@ struct AnimatedCharacterCatalog: View {
                                 CharacterGridCard(
                                     character: character,
                                     isSelected: settings.catCharacter == character.id,
-                                    frameIndex: frameTick
+                                    frameIndex: frameTick,
+                                    playbackDetail: CharacterPlaybackPresentation.todayPlayCountText(
+                                        playbackCounts[character.id] ?? 0,
+                                        language: language
+                                    )
                                 )
                             }
                             .buttonStyle(.plain)

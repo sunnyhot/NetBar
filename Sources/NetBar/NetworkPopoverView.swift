@@ -3,6 +3,7 @@ import SwiftUI
 struct NetworkPopoverView: View {
     @ObservedObject var monitor: NetworkMonitor
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
     let openPreferences: () -> Void
     @State private var appSearchText = ""
     @State private var historyWindow: TrafficHistoryWindow = .seconds90
@@ -46,7 +47,8 @@ struct NetworkPopoverView: View {
 
                     TodayNetworkSummary(
                         summary: monitor.intelligenceSummary.today,
-                        appPreferences: appPreferences
+                        appPreferences: appPreferences,
+                        customCharacterStore: customCharacterStore
                     )
 
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
@@ -237,7 +239,11 @@ struct NetworkDailySummaryCard: Equatable, Identifiable {
 }
 
 enum NetworkDailySummaryPresentation {
-    static func cards(for summary: NetworkDailySummary, language: AppLanguage) -> [NetworkDailySummaryCard] {
+    static func cards(
+        for summary: NetworkDailySummary,
+        language: AppLanguage,
+        customCharacters: [CustomCharacter] = []
+    ) -> [NetworkDailySummaryCard] {
         [
             NetworkDailySummaryCard(
                 id: "down",
@@ -262,7 +268,19 @@ enum NetworkDailySummaryPresentation {
             NetworkDailySummaryCard(
                 id: "animation",
                 title: language.text("动画播放", "Anim Plays"),
-                value: "\(summary.animationPlaybackCount)"
+                value: CharacterPlaybackPresentation.playCountText(
+                    summary.animationPlaybackCount,
+                    language: language
+                )
+            ),
+            NetworkDailySummaryCard(
+                id: "favoriteCharacter",
+                title: language.text("最爱角色", "Favorite"),
+                value: CharacterPlaybackPresentation.favoriteText(
+                    for: summary,
+                    customCharacters: customCharacters,
+                    language: language
+                )
             )
         ]
     }
@@ -329,13 +347,21 @@ private struct NetworkIntelligenceStatusCard: View {
 private struct TodayNetworkSummary: View {
     let summary: NetworkDailySummary
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
 
     private var cards: [NetworkDailySummaryCard] {
         NetworkDailySummaryPresentation.cards(
             for: summary,
-            language: appPreferences.resolvedLanguage
+            language: appPreferences.resolvedLanguage,
+            customCharacters: customCharacterStore.characters
         )
     }
+
+    private let columns = [
+        GridItem(.flexible(minimum: 96), spacing: 8),
+        GridItem(.flexible(minimum: 96), spacing: 8),
+        GridItem(.flexible(minimum: 96), spacing: 8)
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -344,7 +370,7 @@ private struct TodayNetworkSummary: View {
                 subtitle: appPreferences.text("本地累计估算", "Local estimate")
             )
 
-            HStack(spacing: 8) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(cards) { card in
                     DailySummaryCell(card: card, tone: tone(for: card.id))
                 }
@@ -360,6 +386,8 @@ private struct TodayNetworkSummary: View {
             return .upload
         case "peak":
             return .warning
+        case "favoriteCharacter":
+            return .success
         default:
             return .neutral
         }

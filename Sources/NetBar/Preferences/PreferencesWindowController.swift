@@ -6,6 +6,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
     private let customCharacterStore: CustomCharacterStore
+    private let historyStore: NetworkHistoryStore
     private let updater: AppUpdater
     private let notificationController: NetworkNotificationController
     private let clearNetworkHistory: () -> Void
@@ -15,6 +16,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         settings: StatusBarSettings,
         appPreferences: AppPreferences,
         customCharacterStore: CustomCharacterStore,
+        historyStore: NetworkHistoryStore,
         updater: AppUpdater,
         notificationController: NetworkNotificationController,
         clearNetworkHistory: @escaping () -> Void
@@ -22,6 +24,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         self.settings = settings
         self.appPreferences = appPreferences
         self.customCharacterStore = customCharacterStore
+        self.historyStore = historyStore
         self.updater = updater
         self.notificationController = notificationController
         self.clearNetworkHistory = clearNetworkHistory
@@ -55,6 +58,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
                 settings: settings,
                 appPreferences: appPreferences,
                 customCharacterStore: customCharacterStore,
+                historyStore: historyStore,
                 updater: updater,
                 notificationController: notificationController,
                 clearNetworkHistory: clearNetworkHistory
@@ -71,6 +75,7 @@ private struct PreferencesView: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
+    @ObservedObject var historyStore: NetworkHistoryStore
     @ObservedObject var updater: AppUpdater
     @ObservedObject var notificationController: NetworkNotificationController
     let clearNetworkHistory: () -> Void
@@ -90,7 +95,8 @@ private struct PreferencesView: View {
                 MenuBarPreferencesView(
                     settings: settings,
                     appPreferences: appPreferences,
-                    customCharacterStore: customCharacterStore
+                    customCharacterStore: customCharacterStore,
+                    historyStore: historyStore
                 )
                     .tabItem {
                         Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")

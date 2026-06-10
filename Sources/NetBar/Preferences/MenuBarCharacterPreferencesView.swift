@@ -6,6 +6,7 @@ struct MenuBarCharacterSection: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
+    @ObservedObject var historyStore: NetworkHistoryStore
 
     private func applyCatColor(_ color: Color) {
         let newColor = PersistedColor(color: color)
@@ -17,6 +18,10 @@ struct MenuBarCharacterSection: View {
 
     private var selectedCustomCharacter: CustomCharacter? {
         customCharacterStore.character(id: settings.catCharacter)
+    }
+
+    private var todayPlaybackCounts: [String: UInt64] {
+        historyStore.summary.today.animationPlaybackCountsByCharacter
     }
 
     func selectedCharacterAsset() -> CharacterAsset {
@@ -134,7 +139,9 @@ struct MenuBarCharacterSection: View {
 
                 AnimatedCharacterCatalog(
                     settings: settings,
-                    characterPickerFrameTick: nil
+                    characterPickerFrameTick: nil,
+                    playbackCounts: todayPlaybackCounts,
+                    language: appPreferences.resolvedLanguage
                 )
 
                 Divider()
@@ -194,6 +201,10 @@ struct MenuBarCharacterSection: View {
                         }) {
                         CharacterChoiceLabel(
                             title: character.displayName,
+                            detail: CharacterPlaybackPresentation.todayPlayCountText(
+                                todayPlaybackCounts[character.id] ?? 0,
+                                language: appPreferences.resolvedLanguage
+                            ),
                             isSelected: settings.catCharacter == character.id
                         ) {
                             Image(systemName: customCharacterIconName(for: character))

@@ -140,7 +140,7 @@ final class StatusBarController {
     private var lastPolledMouseLocation: CGPoint?
     private var renderCoalesceTimer: Timer?
     private var needsRender = false
-    private var pendingAnimationPlaybackCount: UInt64 = 0
+    private var pendingAnimationPlaybackCountsByCharacter: [String: UInt64] = [:]
     private var animationPlaybackFlushTimer: Timer?
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
@@ -186,6 +186,7 @@ final class StatusBarController {
         self.detailsWindowController = DetailsWindowController(
             monitor: monitor,
             appPreferences: appPreferences,
+            customCharacterStore: customCharacterStore,
             openPreferences: openPreferences
         )
 
@@ -341,8 +342,8 @@ final class StatusBarController {
                     self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
-                catAnimation?.onPlaybackComplete = { [weak self] in
-                    self?.recordAnimationPlaybackCompleted()
+                catAnimation?.onPlaybackComplete = { [weak self] characterID in
+                    self?.recordAnimationPlaybackCompleted(characterID: characterID)
                 }
                 currentCatCharacter = character
             } else if character != currentCatCharacter {
@@ -360,8 +361,8 @@ final class StatusBarController {
                     self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
-                catAnimation?.onPlaybackComplete = { [weak self] in
-                    self?.recordAnimationPlaybackCompleted()
+                catAnimation?.onPlaybackComplete = { [weak self] characterID in
+                    self?.recordAnimationPlaybackCompleted(characterID: characterID)
                 }
                 currentCatCharacter = character
             } else {
@@ -387,8 +388,8 @@ final class StatusBarController {
         }
     }
 
-    private func recordAnimationPlaybackCompleted() {
-        pendingAnimationPlaybackCount += 1
+    private func recordAnimationPlaybackCompleted(characterID: String) {
+        pendingAnimationPlaybackCountsByCharacter[characterID, default: 0] += 1
         guard animationPlaybackFlushTimer == nil else { return }
         let timer = Timer(timeInterval: 1.0, repeats: false) { [weak self] _ in
             Task { @MainActor in
@@ -402,9 +403,12 @@ final class StatusBarController {
     private func flushAnimationPlaybackCount() {
         animationPlaybackFlushTimer?.invalidate()
         animationPlaybackFlushTimer = nil
-        guard pendingAnimationPlaybackCount > 0 else { return }
-        monitor.recordAnimationPlayback(count: pendingAnimationPlaybackCount)
-        pendingAnimationPlaybackCount = 0
+        guard !pendingAnimationPlaybackCountsByCharacter.isEmpty else { return }
+        let counts = pendingAnimationPlaybackCountsByCharacter
+        pendingAnimationPlaybackCountsByCharacter = [:]
+        for (characterID, count) in counts {
+            monitor.recordAnimationPlayback(count: count, characterID: characterID)
+        }
     }
 
     // MARK: - System Metrics Integration

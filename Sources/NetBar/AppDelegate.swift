@@ -16,6 +16,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings: settings,
         appPreferences: appPreferences,
         customCharacterStore: customCharacterStore,
+        historyStore: networkHistoryStore,
         updater: updater,
         notificationController: notificationController,
         clearNetworkHistory: { [weak self] in

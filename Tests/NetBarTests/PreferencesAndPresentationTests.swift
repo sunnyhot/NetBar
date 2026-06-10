@@ -835,15 +835,20 @@ final class PreferencesAndPresentationTests: XCTestCase {
             sampleCount: 20,
             activeSeconds: 80,
             animationPlaybackCount: 42,
+            animationPlaybackCountsByCharacter: [
+                "cat": 11,
+                "cat_b": 31
+            ],
             topApplications: []
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
 
-        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active", "Anim Plays"])
-        XCTAssertEqual(cards.map(\.id), ["down", "up", "peak", "active", "animation"])
+        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active", "Anim Plays", "Favorite"])
+        XCTAssertEqual(cards.map(\.id), ["down", "up", "peak", "active", "animation", "favoriteCharacter"])
         XCTAssertEqual(cards.first { $0.id == "active" }?.value, "1m")
-        XCTAssertEqual(cards.first { $0.id == "animation" }?.value, "42")
+        XCTAssertEqual(cards.first { $0.id == "animation" }?.value, "42 plays")
+        XCTAssertEqual(cards.first { $0.id == "favoriteCharacter" }?.value, "Cat β · 31 plays")
     }
 
     func testApplicationDailyUsageCodablePreservesRole() throws {
@@ -884,17 +889,22 @@ final class PreferencesAndPresentationTests: XCTestCase {
         var currentDate = isoDate("2026-06-08T12:00:00Z")
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
 
-        store.recordAnimationPlayback(count: 2, at: currentDate)
-        store.recordAnimationPlayback(count: 3, at: currentDate)
+        store.recordAnimationPlayback(count: 2, characterID: "cat", at: currentDate)
+        store.recordAnimationPlayback(count: 3, characterID: "dog", at: currentDate)
 
         XCTAssertEqual(store.summary.today.animationPlaybackCount, 5)
+        XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 2)
+        XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.today.favoriteAnimationCharacterID, "dog")
 
         currentDate = isoDate("2026-06-09T00:00:01Z")
-        store.recordAnimationPlayback(count: 1, at: currentDate)
+        store.recordAnimationPlayback(count: 1, characterID: "cat", at: currentDate)
 
         XCTAssertEqual(store.summary.recentDays.last?.animationPlaybackCount, 5)
+        XCTAssertEqual(store.summary.recentDays.last?.animationPlaybackCountsByCharacter["dog"], 3)
         XCTAssertEqual(store.summary.today.dateKey, "2026-06-09")
         XCTAssertEqual(store.summary.today.animationPlaybackCount, 1)
+        XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 1)
     }
 
     func testNetworkHistoryStoreSumsPositiveDeltasPerInterface() throws {
@@ -2122,7 +2132,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             character: CharacterAsset(custom: character),
             onFrameChange: { _ in }
         )
-        animation.onPlaybackComplete = {
+        animation.onPlaybackComplete = { characterID in
+            XCTAssertEqual(characterID, "custom.loop")
             completedPlaybackCount += 1
         }
 

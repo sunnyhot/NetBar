@@ -124,10 +124,11 @@ final class NetworkHistoryStore: ObservableObject {
         publishAndSave(realtimeTopApplications: Array(realtimeTop.prefix(5)))
     }
 
-    func recordAnimationPlayback(count: UInt64, at date: Date) {
+    func recordAnimationPlayback(count: UInt64, characterID: String, at date: Date) {
         guard count > 0 else { return }
         rolloverIfNeeded(for: date)
         state.today.animationPlaybackCount += count
+        state.today.animationPlaybackCountsByCharacter[characterID, default: 0] += count
         publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
     }
 

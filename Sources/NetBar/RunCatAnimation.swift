@@ -30,6 +30,10 @@ struct RunCatCharacter: Equatable, Identifiable {
         nameZh
     }
 
+    func displayName(language: AppLanguage) -> String {
+        language == .simplifiedChinese ? nameZh : nameEn
+    }
+
     static let allCharacters: [RunCatCharacter] = [
         // Default (free) runners
         RunCatCharacter(id: "cat", nameZh: "猫咪 α", nameEn: "Cat α", nameJa: "ネコ α",
@@ -188,7 +192,7 @@ final class RunCatAnimation {
     private(set) var character: AnimatedCharacter
     private var speedMultiplier: Double
     private let onFrameChange: (Int) -> Void
-    var onPlaybackComplete: (() -> Void)?
+    var onPlaybackComplete: ((String) -> Void)?
     var onCharacterChange: ((RunCatCharacter) -> Void)?
 
     private var timer: Timer?
@@ -361,7 +365,7 @@ final class RunCatAnimation {
         currentFrame = (currentFrame + 1) % frameCount
         onFrameChange(currentFrame)
         if frameCount > 1 && previousFrame == frameCount - 1 && currentFrame == 0 {
-            onPlaybackComplete?()
+            onPlaybackComplete?(character.id)
         }
         checkIdleTimeout()
     }

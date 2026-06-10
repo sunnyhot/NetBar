@@ -209,10 +209,20 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
     var sampleCount: Int
     var activeSeconds: TimeInterval
     var animationPlaybackCount: UInt64
+    var animationPlaybackCountsByCharacter: [String: UInt64]
     var topApplications: [ApplicationDailyUsage]
 
     var id: String { dateKey }
     var totalBytes: UInt64 { downloadBytes + uploadBytes }
+    var favoriteAnimationCharacterID: String? {
+        animationPlaybackCountsByCharacter
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
+            }
+            .first?.key
+    }
 
     init(
         dateKey: String,
@@ -223,6 +233,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         sampleCount: Int,
         activeSeconds: TimeInterval,
         animationPlaybackCount: UInt64 = 0,
+        animationPlaybackCountsByCharacter: [String: UInt64] = [:],
         topApplications: [ApplicationDailyUsage]
     ) {
         self.dateKey = dateKey
@@ -233,6 +244,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         self.sampleCount = sampleCount
         self.activeSeconds = activeSeconds
         self.animationPlaybackCount = animationPlaybackCount
+        self.animationPlaybackCountsByCharacter = animationPlaybackCountsByCharacter
         self.topApplications = topApplications
     }
 
@@ -247,6 +259,10 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         sampleCount = try container.decode(Int.self, forKey: .sampleCount)
         activeSeconds = try container.decode(TimeInterval.self, forKey: .activeSeconds)
         animationPlaybackCount = try container.decodeIfPresent(UInt64.self, forKey: .animationPlaybackCount) ?? 0
+        animationPlaybackCountsByCharacter = try container.decodeIfPresent(
+            [String: UInt64].self,
+            forKey: .animationPlaybackCountsByCharacter
+        ) ?? [:]
         topApplications = try container.decode([ApplicationDailyUsage].self, forKey: .topApplications)
     }
 
@@ -261,6 +277,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         try container.encode(sampleCount, forKey: .sampleCount)
         try container.encode(activeSeconds, forKey: .activeSeconds)
         try container.encode(animationPlaybackCount, forKey: .animationPlaybackCount)
+        try container.encode(animationPlaybackCountsByCharacter, forKey: .animationPlaybackCountsByCharacter)
         try container.encode(topApplications, forKey: .topApplications)
     }
 
@@ -274,6 +291,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
             sampleCount: 0,
             activeSeconds: 0,
             animationPlaybackCount: 0,
+            animationPlaybackCountsByCharacter: [:],
             topApplications: []
         )
     }
@@ -287,6 +305,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         case sampleCount
         case activeSeconds
         case animationPlaybackCount
+        case animationPlaybackCountsByCharacter
         case topApplications
     }
 }
