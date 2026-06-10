@@ -30,12 +30,138 @@ struct GitHubReleaseAsset: Decodable, Equatable {
     }
 }
 
+/// Manifest model for the static latest.json uploaded as a Release asset.
+/// The App fetches this instead of calling the GitHub REST API to avoid rate limits.
+struct ReleaseManifest: Decodable, Equatable {
+    let version: String
+    let tag: String
+    let asset: String
+    let assetURL: String
+    let sha256: String
+    let notes: String?
+    let htmlURL: String?
+
+    enum CodingKeys: String, CodingKey {
+        case version
+        case tag
+        case asset
+        case assetURL = "asset_url"
+        case sha256
+        case notes
+        case htmlURL = "html_url"
+    }
+}
+
 struct AvailableUpdate: Equatable {
     let release: GitHubRelease
     let asset: GitHubReleaseAsset
 
     var versionText: String {
         release.tagName.trimmingCharacters(in: CharacterSet(charactersIn: "vV"))
+    }
+}
+
+struct UpdateReleaseFetcher {
+    typealias DataLoader = (URLRequest) async throws -> (Data, URLResponse)
+
+    let repository: String
+    let currentVersion: String
+    let loadData: DataLoader
+
+    init(
+        repository: String,
+        currentVersion: String,
+        loadData: @escaping DataLoader = { request in
+            let configuration = URLSessionConfiguration.ephemeral
+            configuration.requestCachePolicy = .reloadIgnoringLocalAndRemoteCacheData
+            configuration.urlCache = nil
+            return try await URLSession(configuration: configuration).data(for: request)
+        }
+    ) {
+        self.repository = repository
+        self.currentVersion = currentVersion
+        self.loadData = loadData
+    }
+
+    func fetchLatestRelease() async throws -> GitHubRelease {
+        do {
+            return try await fetchManifestRelease()
+        } catch {
+            guard isTransientFetchError(error) else { throw error }
+            return try await fetchGitHubAPIRelease()
+        }
+    }
+
+    private func fetchManifestRelease() async throws -> GitHubRelease {
+        guard let url = URL(string: "https://github.com/\(repository)/releases/latest/download/latest.json") else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        let (data, response) = try await loadData(manifestRequest(url: url))
+        try validateHTTPResponse(response)
+        let manifest = try JSONDecoder().decode(ReleaseManifest.self, from: data)
+
+        let assetURL = URL(string: manifest.assetURL)
+            ?? URL(string: "https://github.com/\(repository)/releases/download/\(manifest.tag)/\(manifest.asset)")!
+        let htmlURL = URL(string: manifest.htmlURL ?? "")
+            ?? URL(string: "https://github.com/\(repository)/releases/tag/\(manifest.tag)")!
+
+        let releaseAsset = GitHubReleaseAsset(
+            name: manifest.asset,
+            size: 0,
+            browserDownloadURL: assetURL
+        )
+        return GitHubRelease(
+            tagName: manifest.tag,
+            name: nil,
+            body: manifest.notes,
+            htmlURL: htmlURL,
+            assets: [releaseAsset]
+        )
+    }
+
+    private func fetchGitHubAPIRelease() async throws -> GitHubRelease {
+        guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
+            throw UpdateError.invalidUpdateURL
+        }
+
+        let (data, response) = try await loadData(apiRequest(url: url))
+        try validateHTTPResponse(response)
+        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+    }
+
+    private func manifestRequest(url: URL) -> URLRequest {
+        var request = URLRequest(url: url, cachePolicy: .reloadIgnoringLocalAndRemoteCacheData)
+        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+        request.setValue("no-cache", forHTTPHeaderField: "Cache-Control")
+        request.setValue("no-cache", forHTTPHeaderField: "Pragma")
+        return request
+    }
+
+    private func apiRequest(url: URL) -> URLRequest {
+        var request = manifestRequest(url: url)
+        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        return request
+    }
+
+    private func validateHTTPResponse(_ response: URLResponse) throws {
+        guard let httpResponse = response as? HTTPURLResponse else { return }
+        guard (200..<300).contains(httpResponse.statusCode) else {
+            throw UpdateError.httpStatus(httpResponse.statusCode)
+        }
+    }
+
+    private func isTransientFetchError(_ error: Error) -> Bool {
+        if case UpdateError.httpStatus(let status) = error {
+            return (500..<600).contains(status)
+        }
+        guard let urlError = error as? URLError else { return false }
+        switch urlError.code {
+        case .timedOut, .cannotFindHost, .cannotConnectToHost, .networkConnectionLost, .notConnectedToInternet:
+            return true
+        default:
+            return false
+        }
     }
 }
 
@@ -127,7 +253,7 @@ struct UpdateDialogView: View {
     }
 
     private func changelogSection(_ body: String) -> some View {
-        GroupBox {
+        GroupBox(appPreferences.text("更新内容", "What's New")) {
             ScrollView {
                 Text(body)
                     .font(.system(.caption, design: .monospaced))
@@ -210,6 +336,7 @@ final class AppUpdater: ObservableObject {
     private let currentVersion: String
     private let currentBundleIdentifier: String
     private let appPreferences: AppPreferences
+    private let releaseFetcher: UpdateReleaseFetcher
     private var automaticTimer: Timer?
     private var preparedAppURL: URL?
     private var updateWindow: NSWindow?
@@ -220,12 +347,14 @@ final class AppUpdater: ObservableObject {
         assetName = bundle.object(forInfoDictionaryKey: "NBUpdateAssetName") as? String ?? "NetBar.app.zip"
         currentVersion = bundle.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0"
         currentBundleIdentifier = bundle.bundleIdentifier ?? "local.codex.NetBar"
+        releaseFetcher = UpdateReleaseFetcher(repository: repository, currentVersion: currentVersion)
         automaticallyChecksForUpdates = defaults.object(forKey: Keys.automaticallyChecksForUpdates) as? Bool ?? true
         self.appPreferences = appPreferences
     }
 
     var currentVersionText: String {
-        currentVersion
+        let trimmed = currentVersion.hasPrefix("v") ? String(currentVersion.dropFirst()) : currentVersion
+        return "v\(trimmed)"
     }
 
     var releasePageURL: URL? {
@@ -452,17 +581,7 @@ final class AppUpdater: ObservableObject {
     }
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
-        guard let url = URL(string: "https://api.github.com/repos/\(repository)/releases/latest") else {
-            throw UpdateError.invalidUpdateURL
-        }
-
-        var request = URLRequest(url: url)
-        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
-        request.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
-
-        let (data, response) = try await URLSession.shared.data(for: request)
-        try validateHTTPResponse(response)
-        return try JSONDecoder().decode(GitHubRelease.self, from: data)
+        try await releaseFetcher.fetchLatestRelease()
     }
 
     private func downloadWithProgress(asset: GitHubReleaseAsset) async throws -> URL {
@@ -732,7 +851,7 @@ enum UpdateError: LocalizedError {
         case .invalidUpdateURL:
             return "更新地址无效"
         case .releaseFetchFailed:
-            return "获取 GitHub 最新版本信息失败"
+            return "获取更新信息失败"
         case .httpStatus(let status):
             if status == 403 {
                 return "GitHub 请求受限（HTTP 403），稍后会自动重试"

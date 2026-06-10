@@ -1,4 +1,4 @@
-# CLAUDE.md — NetBar
+# AGENTS.md — NetBar
 
 ## 项目概览
 

@@ -1,5 +1,209 @@
 # Changelog
 
+## v0.38.1 (2026-06-08)
+
+### Bug Fix — 更新检查 504 兜底
+
+- 修复 Swift URLSession 访问 GitHub Release 下载端点可能持续返回 HTTP 504，导致无法发现新版本的问题
+- 更新检查遇到 GitHub Release 资产 5xx 或网络瞬断时，会退回 GitHub Releases API 获取最新版本信息
+- 更新请求改用临时 URLSession 并禁用缓存，避免旧的错误响应影响后续手动检查
+
+## v0.38.0 (2026-06-08)
+
+### Enhancement — 网络智能提醒与历史统计
+
+- 新增异常检测：高流量、应用突增、断流/恢复、代理/VPN 归因差异
+- 新增首次通知引导和可控的 macOS 系统通知
+- 新增今日估算、最近 7 天汇总、实时 Top 和今日应用 Top
+- 新增菜单栏内置预设：极简、上下行、总流量、应用关注、宠物模式
+- 宠物会在网络异常时给出轻量解释，并根据今日网络活动调整状态
+
+## v0.37.1 (2026-06-08)
+
+### Bug Fix — Dock 隐藏与角色帧顺序稳定性
+
+- 修复切换到“仅菜单栏”后 Dock 图标可能无法立即隐藏的问题
+- 将 Dock 设置改为明确的“显示 Dock 图标 / 仅菜单栏”模式选择，避免开关语义混淆
+- 修复自定义角色帧序列并发处理后顺序不稳定的问题，避免动画帧和测试随线程调度随机乱序
+- 新增 Dock activation policy 发布时序回归测试
+
+## v0.37.0 (2026-06-03)
+
+### Enhancement — 应用流量归因与监控视图升级
+
+详情弹框的应用流量展示进一步对齐常见 macOS 监控软件：既显示当前活跃应用，也解释为什么应用汇总和接口总流量可能不一致。
+
+- 新增应用级归因卡片，展示接口总速率、应用汇总速率和归因覆盖率
+- 自动标记代理/VPN、子进程和系统服务，帮助识别流量被代理进程或 Helper 进程承接的情况
+- 实时流量列表继续隐藏没有上下行速率的应用，避免 `0 B/s` 进程干扰判断
+- 趋势图支持 90 秒、5 分钟、15 分钟窗口切换，历史缓存扩展到 15 分钟
+- 菜单栏新增内容模式：上下行、仅下载、仅上传、总流量，可在偏好设置中切换
+- 新增归因、历史窗口和菜单栏内容模式的回归测试
+
+## v0.36.7 (2026-06-03)
+
+### Bug Fix — 应用实时流量不再空列表
+
+修复详情弹框中系统总流量有数据，但应用实时流量列表长期显示“暂无应用流量”的问题。
+
+- 应用流量采样改为通过 macOS `script` 给 `nettop` 分配伪终端，避免 `nettop` 写普通 pipe 时长时间缓冲不输出
+- 读取层改为后台 POSIX 流式读取，应用行会在 `nettop` 输出后立即进入解析
+- 解析层兼容 `script` 输出中的 CRLF 和终端退格控制字符，避免产生 `^D` 等假应用
+- 详情弹框可见时应用流量改为 1 秒采样，实时模式更接近常见监控软件的刷新节奏
+- 新增回归测试，验证终端背书的 `nettop` 输出能在短时间内读到应用 CSV
+
+## v0.36.6 (2026-06-03)
+
+### Bug Fix — 实时流量应用列表口径
+
+修正详情弹框中实时流量模式的应用列表展示口径，避免没有实时上下行的应用干扰判断。
+
+- 实时流量模式只显示当前存在下载或上传速率的应用
+- `0 B/s` 的资源进程不再出现在实时流量列表中
+- 应用级汇总改为按当前可见应用计算，和列表口径保持一致
+- 内存占用、CPU 占用模式继续显示无网络流量但有资源数据的应用
+
+### Enhancement — 升级弹窗展示真实更新内容
+
+升级弹窗和 GitHub Release 现在会展示本版本的实际更新内容，而不是泛泛的版本占位文案。
+
+- Release workflow 从 `CHANGELOG.md` 自动抽取当前 tag 对应的更新内容
+- `latest.json.notes` 写入真实更新内容，App 检查更新时会直接展示
+- GitHub Release 正文同步使用同一份更新内容
+- 如果 changelog 缺少对应版本内容，Release workflow 会失败，避免发布空更新说明
+
+## v0.36.5 (2026-06-03)
+
+### Bug Fix — 应用流量弹框永久读取中
+
+彻底修复详情弹框中应用流量区域可能一直显示“正在读取应用流量”的问题。
+
+- `ps` 资源读取改为边运行边读取 stdout，避免进程输出较多时 pipe 塞满导致采样任务卡死
+- 给 `ps` 读取增加超时保护，异常情况下不再阻塞后续应用流量刷新
+- 应用流量空结果完成后立即退出 loading 状态，后续后台重试不会让弹框重新卡在“获取数据中”
+- 关闭弹框或暂停采样时同步清理应用流量 refreshing 状态
+
+## v0.36.4 (2026-06-02)
+
+### UI — 应用指标切换精简
+
+精简详情弹框中的应用指标下拉菜单，只保留用户常用的三种展示方式。
+
+- 下拉菜单仅显示 `实时流量`、`内存占用`、`CPU 占用`
+- 切换到哪个指标，应用级汇总和每一行应用数据就只显示对应指标
+- 旧版本保存的下载、上传、累计流量、应用名称排序会自动回退到 `实时流量`
+
+## v0.36.3 (2026-06-02)
+
+### Bug Fix — 应用资源数据与流量汇总
+
+修复详情弹框中选择“内存占用”或“CPU 占用”时，应用列表无法显示资源数据的问题。
+
+- 将 `ps` 读取到的进程内存/CPU 数据合并进应用列表，即使 `nettop` 暂时没有应用流量行也能展示
+- 避免同一 PID 同时出现在 `nettop` 和 `ps` 时重复计入应用级流量汇总
+- 应用流量采样时间改用 `NetworkMonitor.now`，让速率计算和测试注入保持一致
+
+## v0.34.6 (2026-05-23)
+
+### Enhancement — 规范版本号显示格式
+
+统一 About 页面和设置页的版本号为语义化 `v{major.minor.patch}` 格式，从 Info.plist 动态读取。
+
+- 修改 About 页 fallback 版本号从硬编码 `0.33.0` 改为 `0.0.0`
+- 给 AppUpdater 的 `currentVersionText` 添加 `v` 前缀显示
+
+### 涉及子 issue
+
+- [LUC-224](mention://issue/837789ec-8957-47bc-bf90-e623afb8c02b) 规范 About/设置页版本号为动态语义化显示
+
+## v0.34.5 (2026-05-22)
+
+### Bug Fix — CI 测试修复
+
+修复 CI 中两个预已存在的测试失败，使 release workflow 能正常通过。
+
+- 修正 `testDetailsWindowAutoDismissInterval` 期望值 10→30（匹配实际 autoDismissInterval）
+- 修正 `testNetworkTotalsExcludeVirtualProxyInterfaces` 为 async 测试（refresh() 内部是 Task.detached 异步执行）
+
+### 涉及子 issue
+
+- [LUC-192](mention://issue/7cfdc145-9449-401b-bf0d-85bda02f9f17) 角色眼睛状态Bug：鼠标点击任意区域后眼睛闭合，松开后未恢复睁开
+
+## v0.34.3 (2026-05-22)
+
+### Bug Fix — 角色眼睛点击后不恢复睁开
+
+修复角色眼睛在鼠标点击任意区域后闭合，松开后无法恢复睁开状态的 bug。
+
+- 拆分 Down/Up monitor installer，使 mouseUp 事件被正确监听
+- 移除 toggleDetailsWindow 中多余的 triggerGooglyEyesBlink() 调用
+
+### 涉及子 issue
+
+- [LUC-193] 修复 googly eyes mouseUp 事件监听缺失
+
+
+## v0.34.2 (2026-05-21)
+
+### Bug Fix — 开机自启动 Dock 图标问题
+
+修复"开机自启动 + Dock 不显示"配置下，Dock 图标残留和点击弹出不可操作窗口的两个 bug。
+
+- 修复 `applicationShouldHandleReopen`：只在 `showsDockIcon == true` 时才弹出窗口
+- 延迟重申 activation policy：确保开机自启动场景下 Dock 图标正确隐藏
+
+### 涉及子 issue
+
+- [LUC-191] 修复开机自启动后 Dock 图标残留 + 点击弹出不可关闭窗口
+
+
+## v0.34.1 (2026-05-21)
+
+### Bug Fix — Googly Eyes Click Interaction
+
+Fixes the googly eyes character interaction so the eye open/close state correctly tracks the mouse button state.
+
+- **mouseDown/mouseUp tracking** — Replace the hardcoded 160ms blink-reset timer with proper mouseDown → close eyes, mouseUp → open eyes event handling
+- **Remove blinkResetTask** — Eliminate the `blinkResetTask` timer that caused eyes to automatically reopen regardless of mouse button state
+- **Dual-callback GooglyEyesClickMonitor** — Refactor `GooglyEyesClickMonitor` to support separate `onMouseDown` and `onMouseUp` callbacks with 4 event monitors (globalDown + localDown + globalUp + localUp)
+- **New `endGooglyEyesBlink()` method** — Clean eye-opening method called on mouseUp, replacing timer-based reset
+- **Test updates** — Update tests to verify mouseDown/mouseUp event separation and 4-monitor installation/removal
+
+## v0.34.0 (2026-05-21)
+
+### UI — Preferences Window Refactor
+
+Settings page restructuring: split the monolithic PreferencesWindowController into modular files and redesign the UI.
+
+- **File splitting** — Split `PreferencesWindowController.swift` (1277 lines) into 11 focused files under `Sources/NetBar/Preferences/`
+- **UI redesign** — Redesigned preferences views with collapsible sections and improved layout
+- **Animation interaction** — Improved menu bar animation preferences with conditional animations
+- **Character grid** — New `CharacterGridCard` and `ColorSwatch` components for character selection
+
+## v0.33.1 (2026-05-21)
+
+### Bug Fixes — Popover Speed Display & Interaction
+
+Fixes for three user-reported issues with the network speed popover.
+
+- **App-level speed summary row** — Add a summary row in the application traffic list showing aggregated app-level download/upload speeds, so users can compare against the interface-level total in the header
+- **Interface-level explanation text** — Add subtle explanation text below the header speed cards clarifying that the total speed is measured at the interface level and may differ from app-level totals
+- **Auto-dismiss logic fix** — Popover no longer auto-dismisses while the user is actively interacting with it; auto-close timer now only activates after the user leaves the window
+- **Right-aligned speed values** — Fix inconsistent alignment of speed values in the application traffic list using fixed-width trailing alignment
+
+
+## v0.33.0 (2026-05-20)
+
+### Performance — Cache & Power Optimization
+
+Targeted caching and power-management optimizations to reduce CPU, energy, and IPC overhead.
+
+- **Display name cache** — Cache `NSRunningApplication` display name lookups by PID, eliminating repeated system IPC calls on every 5-second nettop sampling cycle
+- **System process classification cache** — Cache `isLikelySystemProcess()` results by application ID, avoiding repeated string normalization and set lookups on every SwiftUI layout pass
+- **App icon cache** — Cache resolved application icons by PID, preventing repeated disk I/O and IPC from SwiftUI view body evaluations when the popover is visible
+- **Screen lock full stop** — Stop all network monitoring timers and nettop processes when the screen is locked; resume automatically on wake for zero CPU/energy footprint during lock
+
+
 ## v0.32.0 (2026-05-19)
 
 ### Battery Optimization — Adaptive Power Management

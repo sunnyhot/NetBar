@@ -5,6 +5,7 @@ struct NetworkPopoverView: View {
     @ObservedObject var appPreferences: AppPreferences
     let openPreferences: () -> Void
     @State private var appSearchText = ""
+    @State private var historyWindow: TrafficHistoryWindow = .seconds90
 
     var body: some View {
         VStack(spacing: 0) {
@@ -18,26 +19,55 @@ struct NetworkPopoverView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    NetworkIntelligenceStatusCard(
+                        presentation: NetworkIntelligenceStatusPresentation(
+                            event: monitor.intelligenceSummary.latestEvent,
+                            language: appPreferences.resolvedLanguage
+                        ),
+                        appPreferences: appPreferences,
+                        openPreferences: openPreferences
+                    )
+                    .padding(.top, 16)
+
                     if !appPreferences.hasCompletedOnboarding {
                         FirstLaunchGuide(
                             appPreferences: appPreferences,
                             openPreferences: openPreferences,
                             completeOnboarding: appPreferences.completeOnboarding
                         )
-                        .padding(.top, 16)
                     } else {
-                        TrafficChart(points: monitor.recentHistory)
+                        TrafficChart(
+                            points: historyWindow.points(from: monitor.recentHistory),
+                            selectedWindow: $historyWindow,
+                            appPreferences: appPreferences
+                        )
                             .frame(height: 132)
-                            .padding(.top, 16)
                     }
+
+                    TodayNetworkSummary(
+                        summary: monitor.intelligenceSummary.today,
+                        appPreferences: appPreferences
+                    )
 
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
 
+                    ApplicationTopSection(
+                        realtimeApplications: monitor.intelligenceSummary.realtimeTopApplications,
+                        todayApplications: monitor.intelligenceSummary.todayTopApplications,
+                        appPreferences: appPreferences
+                    )
+
                     ApplicationTrafficList(
+                        snapshot: monitor.snapshot,
                         appTraffic: monitor.appTraffic,
                         preferences: appPreferences,
                         searchText: $appSearchText,
                         retry: monitor.refreshApplicationTraffic
+                    )
+
+                    SevenDaySummarySection(
+                        summaries: monitor.intelligenceSummary.recentDays,
+                        appPreferences: appPreferences
                     )
 
                     InterfaceList(
@@ -107,6 +137,11 @@ private struct HeaderView: View {
                     symbol: "arrow.up"
                 )
             }
+
+            Text(appPreferences.text("接口级总速度，可能与应用级汇总存在差异", "Interface-level totals; may differ from app-level summary"))
+                .font(.system(size: 9, weight: .medium))
+                .foregroundStyle(.quaternary)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 }
@@ -153,6 +188,331 @@ private struct FirstLaunchGuide: View {
             }
         }
         .netBarCard(cornerRadius: 14, padding: 14, isProminent: true)
+    }
+}
+
+// MARK: - Network Intelligence
+
+enum NetworkIntelligenceTone: Equatable {
+    case normal
+    case attention
+    case critical
+}
+
+struct NetworkIntelligenceStatusPresentation: Equatable {
+    let title: String
+    let message: String
+    let tone: NetworkIntelligenceTone
+    let symbolName: String
+
+    init(event: NetworkAnomalyEvent?, language: AppLanguage) {
+        guard let event else {
+            title = language.text("网络状态正常", "Network status normal")
+            message = language.text("没有检测到需要注意的网络异常。", "No network anomalies need attention.")
+            tone = .normal
+            symbolName = "checkmark.seal.fill"
+            return
+        }
+
+        title = event.title
+        message = event.message
+        switch event.severity {
+        case .info:
+            tone = .normal
+            symbolName = "info.circle.fill"
+        case .warning:
+            tone = .attention
+            symbolName = "exclamationmark.circle.fill"
+        case .critical:
+            tone = .critical
+            symbolName = "exclamationmark.triangle.fill"
+        }
+    }
+}
+
+struct NetworkDailySummaryCard: Equatable, Identifiable {
+    let id: String
+    let title: String
+    let value: String
+}
+
+enum NetworkDailySummaryPresentation {
+    static func cards(for summary: NetworkDailySummary, language: AppLanguage) -> [NetworkDailySummaryCard] {
+        [
+            NetworkDailySummaryCard(
+                id: "down",
+                title: language.text("今日下载", "Today Down"),
+                value: ByteFormat.bytes(summary.downloadBytes)
+            ),
+            NetworkDailySummaryCard(
+                id: "up",
+                title: language.text("今日上传", "Today Up"),
+                value: ByteFormat.bytes(summary.uploadBytes)
+            ),
+            NetworkDailySummaryCard(
+                id: "peak",
+                title: language.text("今日峰值", "Peak"),
+                value: ByteFormat.speed(max(summary.peakDownloadBytesPerSecond, summary.peakUploadBytesPerSecond))
+            ),
+            NetworkDailySummaryCard(
+                id: "active",
+                title: language.text("活跃时长", "Active"),
+                value: duration(summary.activeSeconds)
+            )
+        ]
+    }
+
+    static func duration(_ seconds: TimeInterval) -> String {
+        let minutes = Int(seconds / 60)
+        if minutes < 1 { return "<1m" }
+        if minutes < 60 { return "\(minutes)m" }
+        return "\(minutes / 60)h \(minutes % 60)m"
+    }
+}
+
+private struct NetworkIntelligenceStatusCard: View {
+    let presentation: NetworkIntelligenceStatusPresentation
+    @ObservedObject var appPreferences: AppPreferences
+    let openPreferences: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 11) {
+            Image(systemName: presentation.symbolName)
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 28, height: 28)
+                .background(tint.opacity(0.1), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 3) {
+                Text(presentation.title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(.primary)
+                Text(presentation.message)
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            Spacer(minLength: 8)
+
+            Button { openPreferences() } label: {
+                Image(systemName: "slider.horizontal.3")
+            }
+            .buttonStyle(NetBarIconButtonStyle())
+            .help(appPreferences.text("调整智能检测", "Adjust Intelligence"))
+        }
+        .netBarCard(cornerRadius: 12, padding: 11, isProminent: presentation.tone != .normal)
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .strokeBorder(tint.opacity(0.16), lineWidth: 0.7)
+        )
+    }
+
+    private var tint: Color {
+        switch presentation.tone {
+        case .normal:
+            return .green
+        case .attention:
+            return .orange
+        case .critical:
+            return .red
+        }
+    }
+}
+
+private struct TodayNetworkSummary: View {
+    let summary: NetworkDailySummary
+    @ObservedObject var appPreferences: AppPreferences
+
+    private var cards: [NetworkDailySummaryCard] {
+        NetworkDailySummaryPresentation.cards(
+            for: summary,
+            language: appPreferences.resolvedLanguage
+        )
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            NetBarSectionHeader(
+                title: appPreferences.text("今日统计", "Today"),
+                subtitle: appPreferences.text("本地累计估算", "Local estimate")
+            )
+
+            HStack(spacing: 8) {
+                ForEach(cards) { card in
+                    DailySummaryCell(card: card, tone: tone(for: card.id))
+                }
+            }
+        }
+    }
+
+    private func tone(for id: String) -> NetBarTone {
+        switch id {
+        case "down":
+            return .download
+        case "up":
+            return .upload
+        case "peak":
+            return .warning
+        default:
+            return .neutral
+        }
+    }
+}
+
+private struct DailySummaryCell: View {
+    let card: NetworkDailySummaryCard
+    let tone: NetBarTone
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text(card.title)
+                .font(.system(size: 9, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .lineLimit(1)
+            Text(card.value)
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.65)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .netBarCard(cornerRadius: 10, padding: 9)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(tone.color.opacity(0.12), lineWidth: 0.6)
+        )
+    }
+}
+
+private struct ApplicationTopSection: View {
+    let realtimeApplications: [ApplicationTrafficRate]
+    let todayApplications: [ApplicationDailyUsage]
+    @ObservedObject var appPreferences: AppPreferences
+
+    var body: some View {
+        if !realtimeApplications.isEmpty || !todayApplications.isEmpty {
+            VStack(alignment: .leading, spacing: 9) {
+                NetBarSectionHeader(
+                    title: appPreferences.text("应用 Top", "App Top"),
+                    subtitle: appPreferences.text("实时活跃与今日累计", "Realtime and today")
+                )
+
+                if !realtimeApplications.isEmpty {
+                    TopSubsectionTitle(title: appPreferences.text("当前最活跃", "Most Active Now"))
+                    VStack(spacing: 4) {
+                        ForEach(Array(realtimeApplications.prefix(3))) { application in
+                            ApplicationTrafficRow(
+                                application: application,
+                                role: ApplicationTrafficPresentation.attributionRole(for: application),
+                                language: appPreferences.resolvedLanguage,
+                                displayMode: .activity
+                            )
+                        }
+                    }
+                }
+
+                if !todayApplications.isEmpty {
+                    TopSubsectionTitle(title: appPreferences.text("今日累计", "Today Total"))
+                    VStack(spacing: 4) {
+                        ForEach(Array(todayApplications.prefix(5))) { application in
+                            DailyApplicationUsageRow(
+                                application: application,
+                                language: appPreferences.resolvedLanguage
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct TopSubsectionTitle: View {
+    let title: String
+
+    var body: some View {
+        Text(title)
+            .font(.system(size: 9, weight: .bold))
+            .foregroundStyle(.tertiary)
+            .padding(.horizontal, 8)
+    }
+}
+
+private struct DailyApplicationUsageRow: View {
+    let application: ApplicationDailyUsage
+    let language: AppLanguage
+
+    var body: some View {
+        HStack(spacing: 8) {
+            AppBadge(title: application.displayName, pids: [])
+
+            VStack(alignment: .leading, spacing: 2) {
+                HStack(spacing: 5) {
+                    Text(application.displayName)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1)
+                    AttributionRoleBadge(role: application.role, language: language)
+                }
+                Text(application.processNames.prefix(2).joined(separator: ", "))
+                    .font(.system(size: 9, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            HStack(spacing: 6) {
+                MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(application.downloadBytes), tint: .blue, fixedWidth: 92)
+                MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(application.uploadBytes), tint: .orange, fixedWidth: 92)
+            }
+        }
+        .netBarCard(cornerRadius: 10, padding: 6)
+    }
+}
+
+private struct SevenDaySummarySection: View {
+    let summaries: [NetworkDailySummary]
+    @ObservedObject var appPreferences: AppPreferences
+
+    private var visibleSummaries: [NetworkDailySummary] {
+        Array(summaries.suffix(7).reversed())
+    }
+
+    var body: some View {
+        if !visibleSummaries.isEmpty {
+            VStack(alignment: .leading, spacing: 8) {
+                NetBarSectionHeader(
+                    title: appPreferences.text("最近 7 天", "Recent 7 Days"),
+                    subtitle: appPreferences.text("按日期查看累计流量", "Daily accumulated traffic")
+                )
+
+                VStack(spacing: 4) {
+                    ForEach(visibleSummaries) { summary in
+                        SevenDaySummaryRow(summary: summary)
+                    }
+                }
+            }
+        }
+    }
+}
+
+private struct SevenDaySummaryRow: View {
+    let summary: NetworkDailySummary
+
+    var body: some View {
+        HStack(spacing: 8) {
+            Text(summary.dateKey)
+                .font(.system(size: 10, weight: .bold, design: .monospaced))
+                .foregroundStyle(.secondary)
+                .frame(width: 88, alignment: .leading)
+
+            MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(summary.downloadBytes), tint: .blue)
+            MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(summary.uploadBytes), tint: .orange)
+            CompactMetric(symbol: "clock", value: NetworkDailySummaryPresentation.duration(summary.activeSeconds), tint: .secondary)
+        }
+        .netBarCard(cornerRadius: 10, padding: 7)
     }
 }
 
@@ -262,6 +622,7 @@ private struct SummaryCell: View {
 // MARK: - Application Traffic List
 
 private struct ApplicationTrafficList: View {
+    let snapshot: NetworkSnapshot
     let appTraffic: ApplicationTrafficState
     @ObservedObject var preferences: AppPreferences
     @Binding var searchText: String
@@ -292,33 +653,72 @@ private struct ApplicationTrafficList: View {
                     action: retry
                 )
             } else {
-                if shouldShowControls {
-                    HStack(spacing: 8) {
-                        TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
-                            .textFieldStyle(.roundedBorder)
-                            .font(.system(size: 12))
+                // Sort & search controls — always visible in the detail popup
+                AppTrafficControls(
+                    preferences: preferences,
+                    searchText: $searchText,
+                    appTraffic: appTraffic
+                )
 
-                        Picker(preferences.text("排序", "Sort"), selection: $preferences.applicationSort) {
-                            ForEach(ApplicationSortMode.allCases) { sortMode in
-                                Text(sortMode.title(language: preferences.resolvedLanguage)).tag(sortMode)
+                if appTraffic.sampleCount > 0 {
+                    AppTrafficAttributionCard(
+                        summary: ApplicationTrafficPresentation.attributionSummary(
+                            snapshot: snapshot,
+                            applications: appTraffic.applications
+                        ),
+                        preferences: preferences,
+                        sampleCount: appTraffic.sampleCount,
+                        applicationCount: visibleApplications.count
+                    )
+                }
+
+                if !visibleApplications.isEmpty {
+                    let summaryMetrics = ApplicationTrafficPresentation.summaryMetrics(
+                        for: visibleApplications,
+                        displayMode: preferences.applicationSort
+                    )
+
+                    HStack(spacing: 8) {
+                        Text(preferences.text("应用级汇总", "App-level Total"))
+                            .font(.system(size: 9, weight: .bold))
+                            .foregroundStyle(.tertiary)
+
+                        Spacer()
+
+                        HStack(spacing: 8) {
+                            ForEach(summaryMetrics) { metric in
+                                CompactMetric(metric: metric)
                             }
                         }
-                        .labelsHidden()
-                        .frame(width: 126)
                     }
-                    .netBarCard(cornerRadius: 11, padding: 8)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                }
+
+                // System resource summary card
+                let sys = appTraffic.systemResources
+                if sys.totalMemory > 0 {
+                    SystemResourceCard(
+                        summary: sys,
+                        appPreferences: preferences
+                    )
                 }
 
                 if visibleApplications.isEmpty {
                     AppTrafficNotice(
-                        symbol: appTraffic.isRefreshing ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
-                        title: appTraffic.isRefreshing ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
+                        symbol: isInitialLoading ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
+                        title: isInitialLoading ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
                         message: emptyMessage
                     )
                 } else {
                     VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
-                            ApplicationTrafficRow(application: application)
+                            ApplicationTrafficRow(
+                                application: application,
+                                role: ApplicationTrafficPresentation.attributionRole(for: application),
+                                language: preferences.resolvedLanguage,
+                                displayMode: preferences.applicationSort
+                            )
                         }
                     }
                 }
@@ -332,12 +732,25 @@ private struct ApplicationTrafficList: View {
             : preferences.text("没有匹配的应用", "No Matching Apps")
     }
 
+    private var isInitialLoading: Bool {
+        appTraffic.isRefreshing && appTraffic.sampleCount == 0
+    }
+
+
+    /// Always show controls (search + sort picker) when:
+    /// - there is application data, OR
+    /// - user is searching, OR
+    /// - initial loading is done (so the sort picker is always accessible after startup).
+    /// This ensures the sort picker is never hidden after the first load,
+    /// so users can always switch between traffic/memory/CPU sort modes.
     private var shouldShowControls: Bool {
-        !appTraffic.applications.isEmpty || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        !appTraffic.applications.isEmpty
+            || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !appTraffic.isRefreshing && appTraffic.errorMessage == nil
     }
 
     private var emptyMessage: String {
-        if appTraffic.isRefreshing {
+        if isInitialLoading {
             return preferences.text(
                 "应用级数据来自 macOS nettop，首次采样后会显示实时速率。",
                 "Application-level data comes from macOS nettop. Live rates appear after the first sample."
@@ -353,6 +766,148 @@ private struct ApplicationTrafficList: View {
             "保持 NetBar 运行几秒后会显示有网络活动的应用。代理或 VPN 可能会把流量归到代理进程下。",
             "Keep NetBar running for a few seconds to show apps with network activity. Proxies and VPNs may attribute traffic to the proxy process."
         )
+    }
+}
+
+private struct AppTrafficAttributionCard: View {
+    let summary: ApplicationAttributionSummary
+    @ObservedObject var preferences: AppPreferences
+    let sampleCount: Int
+    let applicationCount: Int
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: symbol)
+                .font(.system(size: 15, weight: .bold))
+                .foregroundStyle(tint)
+                .frame(width: 24, height: 24)
+
+            VStack(alignment: .leading, spacing: 4) {
+                HStack(spacing: 6) {
+                    Text(title)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text(detail)
+                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.8)
+                }
+
+                if !message.isEmpty {
+                    Text(message)
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            Spacer(minLength: 8)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .netBarCard(cornerRadius: 11, padding: 9)
+    }
+
+    private var title: String {
+        guard let coverage = summary.coveragePercentage else {
+            return preferences.text("归因待采样", "Attribution pending")
+        }
+        return "\(preferences.text("应用级归因", "App attribution")) \(coverage)%"
+    }
+
+    private var detail: String {
+        "\(preferences.text("接口", "Interface")) \(ByteFormat.speed(summary.interfaceBytesPerSecond)) · \(preferences.text("应用", "Apps")) \(ByteFormat.speed(summary.applicationBytesPerSecond))"
+    }
+
+    private var message: String {
+        var parts: [String] = []
+        if summary.status == .partial {
+            parts.append(preferences.text("总流量与应用汇总存在差异", "Interface and app totals differ"))
+        }
+        if let proxy = summary.proxyCandidateNames.first {
+            parts.append(preferences.text("代理/VPN：\(proxy)", "Proxy/VPN: \(proxy)"))
+        } else if let helper = summary.helperCandidateNames.first {
+            parts.append(preferences.text("子进程：\(helper)", "Helper: \(helper)"))
+        }
+        parts.append("\(preferences.text("采样", "Samples")) \(sampleCount) · \(preferences.text("应用行", "Rows")) \(applicationCount)")
+        return parts.joined(separator: " · ")
+    }
+
+    private var symbol: String {
+        switch summary.status {
+        case .idle:
+            return "circle.dotted"
+        case .covered:
+            return "checkmark.seal"
+        case .partial:
+            return "point.3.connected.trianglepath.dotted"
+        }
+    }
+
+    private var tint: Color {
+        switch summary.status {
+        case .idle:
+            return .secondary
+        case .covered:
+            return .green
+        case .partial:
+            return .orange
+        }
+    }
+}
+
+// MARK: - Application Traffic Controls (always visible)
+
+private struct AppTrafficControls: View {
+    @ObservedObject var preferences: AppPreferences
+    @Binding var searchText: String
+    let appTraffic: ApplicationTrafficState
+
+    var body: some View {
+        HStack(spacing: 8) {
+            TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
+                .textFieldStyle(.roundedBorder)
+                .font(.system(size: 12))
+
+            Menu {
+                ForEach(ApplicationSortMode.displayModes) { sortMode in
+                    Button {
+                        preferences.applicationSort = sortMode
+                    } label: {
+                        HStack {
+                            Text(sortMode.title(language: preferences.resolvedLanguage))
+                            if preferences.applicationSort == sortMode {
+                                Spacer()
+                                Image(systemName: "checkmark")
+                                    .foregroundStyle(.secondary)
+                                    .font(.system(size: 10, weight: .semibold))
+                            }
+                        }
+                    }
+                }
+            } label: {
+                HStack(spacing: 4) {
+                    Image(systemName: "arrow.up.arrow.down")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text(preferences.applicationSort.title(language: preferences.resolvedLanguage))
+                        .font(.system(size: 11, weight: .medium))
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(Color.primary.opacity(0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
+                )
+            }
+            .fixedSize()
+        }
+        .netBarCard(cornerRadius: 11, padding: 8)
     }
 }
 
@@ -393,6 +948,9 @@ private struct AppTrafficNotice: View {
 
 private struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
+    let role: ApplicationAttributionRole
+    let language: AppLanguage
+    let displayMode: ApplicationSortMode
     @State private var isHovering = false
 
     var body: some View {
@@ -400,10 +958,13 @@ private struct ApplicationTrafficRow: View {
             AppBadge(title: application.displayName, pids: application.pids)
 
             VStack(alignment: .leading, spacing: 1) {
-                Text(application.displayName)
-                    .font(.system(size: 11, weight: .bold))
-                    .lineLimit(1)
-                    .truncationMode(.tail)
+                HStack(spacing: 5) {
+                    Text(application.displayName)
+                        .font(.system(size: 11, weight: .bold))
+                        .lineLimit(1)
+                        .truncationMode(.tail)
+                    AttributionRoleBadge(role: role, language: language)
+                }
 
                 Text(detailSubtitle)
                     .font(.system(size: 9, weight: .medium, design: .monospaced))
@@ -413,17 +974,10 @@ private struct ApplicationTrafficRow: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            HStack(spacing: 8) {
-                CompactMetric(
-                    symbol: "arrow.down",
-                    value: ByteFormat.speed(application.downloadBytesPerSecond),
-                    tint: .blue
-                )
-                CompactMetric(
-                    symbol: "arrow.up",
-                    value: ByteFormat.speed(application.uploadBytesPerSecond),
-                    tint: .orange
-                )
+            HStack(spacing: 6) {
+                ForEach(ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: displayMode)) { metric in
+                    CompactMetric(metric: metric)
+                }
             }
         }
         .netBarCard(cornerRadius: 10, padding: 6)
@@ -447,10 +1001,51 @@ private struct ApplicationTrafficRow: View {
     }
 }
 
+private struct AttributionRoleBadge: View {
+    let role: ApplicationAttributionRole
+    let language: AppLanguage
+
+    var body: some View {
+        Text(role.title(language: language))
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(tint)
+            .padding(.horizontal, 4)
+            .padding(.vertical, 2)
+            .background(tint.opacity(0.1), in: Capsule())
+            .lineLimit(1)
+            .fixedSize()
+    }
+
+    private var tint: Color {
+        switch role {
+        case .application:
+            return .secondary
+        case .proxyOrVPN:
+            return .orange
+        case .helper:
+            return .blue
+        case .systemService:
+            return .gray
+        }
+    }
+}
+
 private struct CompactMetric: View {
     let symbol: String
     let value: String
     let tint: Color
+
+    init(symbol: String, value: String, tint: Color) {
+        self.symbol = symbol
+        self.value = value
+        self.tint = tint
+    }
+
+    init(metric: ApplicationTrafficMetric) {
+        self.symbol = metric.symbol
+        self.value = metric.value
+        self.tint = metric.tint
+    }
 
     var body: some View {
         Label(value, systemImage: symbol)
@@ -459,8 +1054,31 @@ private struct CompactMetric: View {
             .foregroundStyle(tint)
             .lineLimit(1)
             .minimumScaleFactor(0.7)
+            .frame(minWidth: 72, alignment: .trailing)
     }
 }
+
+private extension ApplicationTrafficMetric {
+    var symbol: String {
+        switch kind {
+        case .download: return "arrow.down"
+        case .upload: return "arrow.up"
+        case .memory: return "memorychip"
+        case .cpu: return "cpu"
+        }
+    }
+
+    var tint: Color {
+        switch kind {
+        case .download: return .blue
+        case .upload: return .orange
+        case .memory: return .purple
+        case .cpu: return .red
+        }
+    }
+}
+
+private let appIconCache = NSCache<NSNumber, NSImage>()
 
 private struct AppBadge: View {
     let title: String
@@ -468,8 +1086,14 @@ private struct AppBadge: View {
 
     private var appIcon: NSImage? {
         for pid in pids {
-            if let app = NSRunningApplication(processIdentifier: pid) {
-                return app.icon
+            let key = NSNumber(value: pid)
+            if let cached = appIconCache.object(forKey: key) {
+                return cached
+            }
+            if let app = NSRunningApplication(processIdentifier: pid),
+               let icon = app.icon {
+                appIconCache.setObject(icon, forKey: key)
+                return icon
             }
         }
         return nil
@@ -639,6 +1263,95 @@ private struct InterfaceRow: View {
     }
 }
 
+// MARK: - System Resource Card
+
+private struct SystemResourceCard: View {
+    let summary: SystemResourceSummary
+    @ObservedObject var appPreferences: AppPreferences
+
+    var body: some View {
+        HStack(spacing: 12) {
+            // Memory usage
+            HStack(spacing: 8) {
+                NetBarIconTile(systemName: "memorychip", tone: .purple, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appPreferences.text("内存", "Memory"))
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                    HStack(spacing: 4) {
+                        Text(ByteFormat.bytes(Double(summary.usedMemory)))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        if let pct = summary.memoryUsagePercentage {
+                            Text(String(format: "%.0f%%", pct))
+                                .font(.system(size: 9, weight: .medium, design: .rounded))
+                                .foregroundStyle(.secondary)
+                        }
+                    }
+                    // Memory bar
+                    GeometryReader { geo in
+                        let pct = summary.memoryUsagePercentage ?? 0
+                        ZStack(alignment: .leading) {
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.primary.opacity(0.06))
+                            RoundedRectangle(cornerRadius: 2)
+                                .fill(Color.purple.opacity(0.45))
+                                .frame(width: geo.size.width * min(pct / 100.0, 1.0))
+                        }
+                    }
+                    .frame(height: 4)
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // CPU usage
+            HStack(spacing: 8) {
+                NetBarIconTile(systemName: "cpu", tone: .danger, size: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("CPU")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundStyle(.tertiary)
+                    if let cpu = summary.cpuUsage {
+                        Text(String(format: "%.1f%%", cpu))
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .lineLimit(1)
+                            .minimumScaleFactor(0.7)
+                        GeometryReader { geo in
+                            ZStack(alignment: .leading) {
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.primary.opacity(0.06))
+                                RoundedRectangle(cornerRadius: 2)
+                                    .fill(Color.orange.opacity(0.45))
+                                    .frame(width: geo.size.width * min(cpu / 100.0, 1.0))
+                            }
+                        }
+                        .frame(height: 4)
+                    } else {
+                        Text("--")
+                            .font(.system(size: 11, weight: .bold, design: .rounded))
+                            .foregroundStyle(.tertiary)
+                        Spacer().frame(height: 4)
+                    }
+                }
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            // Process count
+            VStack(alignment: .center, spacing: 2) {
+                Text(appPreferences.text("进程", "Procs"))
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                Text("\(summary.processCount)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(.secondary)
+            }
+            .frame(width: 52)
+        }
+        .netBarCard(cornerRadius: 12, padding: 10)
+    }
+}
+
 // MARK: - Metric Pill
 
 private struct MetricPill: View {
@@ -721,14 +1434,32 @@ private struct FooterView: View {
 
 private struct TrafficChart: View {
     let points: [RatePoint]
+    @Binding var selectedWindow: TrafficHistoryWindow
+    @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            NetBarSectionHeader(
-                title: "最近 90 秒",
-                subtitle: "下载 / 上传实时趋势",
-                trailing: "\(points.count) pts"
-            )
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(appPreferences.text("最近 \(selectedWindow.title(language: appPreferences.resolvedLanguage))", "Last \(selectedWindow.title(language: appPreferences.resolvedLanguage))"))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.primary)
+                    Text(appPreferences.text("下载 / 上传实时趋势", "Download / upload trend"))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                }
+
+                Spacer(minLength: 8)
+
+                Picker("", selection: $selectedWindow) {
+                    ForEach(TrafficHistoryWindow.allCases) { window in
+                        Text(window.title(language: appPreferences.resolvedLanguage)).tag(window)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.segmented)
+                .frame(width: 150)
+            }
 
             GeometryReader { geometry in
                 ZStack {
@@ -738,8 +1469,11 @@ private struct TrafficChart: View {
                     VStack {
                         Spacer()
                         HStack(spacing: 10) {
-                            LegendDot(title: "下载", color: .blue)
-                            LegendDot(title: "上传", color: .orange)
+                            LegendDot(title: appPreferences.text("下载", "Down"), color: .blue)
+                            LegendDot(title: appPreferences.text("上传", "Up"), color: .orange)
+                            Text("\(points.count) pts")
+                                .font(.system(size: 10, weight: .medium, design: .monospaced))
+                                .foregroundStyle(.tertiary)
                         }
                         .padding(.horizontal, 10)
                         .padding(.bottom, 8)

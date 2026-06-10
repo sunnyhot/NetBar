@@ -20,26 +20,28 @@
     20|| `Resources/Info.plist` | 33 | Bundle ID `local.codex.NetBar`，版本 0.15.0 (build 22) |
     21|| `.gitignore` | 6 | 忽略 .build/ build/ dist/ 和 AppIcon 中间文件 |
     22|
-    23|### Sources/NetBar — 核心源码（16 个文件）
-    24|
-    25|| 文件 | 行数 | 职责 |
-    26||---|---|---|
-    27|| `Main.swift` | 14 | `@main` 入口：创建 AppDelegate 并启动 NSApplication.run() |
-    28|| `AppDelegate.swift` | 150 | NSApplicationDelegate：初始化 StatusBarController/PreferencesWindowController，配置主菜单（中英双语），管理 Dock 图标/外观/语言偏好 |
-    29|| `AppPreferences.swift` | 170 | 全局偏好管理（ObservableObject）：Dock 图标、隐藏系统进程、排序模式、语言、外观、开机启动、onboarding 状态 |
-    30|| `Formatters.swift` | 30 | `ByteFormat` 工具：速度/字节数/包数格式化 |
-    31|| `InterfaceStats.swift` | 75 | 数据模型：InterfaceStats/InterfaceRate/NetworkSnapshot/ApplicationTrafficStats 等 |
-    32|| `NetworkStatsReader.swift` | 85 | 网络接口读取（getifaddrs + if_data），识别主接口（SCDynamicStore） |
-    33|| `ApplicationTrafficReader.swift` | 100 | 应用流量读取（`/usr/bin/nettop -P -L 1 -x`），解析 CSV 输出 |
-    34|| `ApplicationTrafficPresentation.swift` | 100 | 应用列表展示逻辑：过滤系统进程、搜索、5 种排序模式 |
-    35|| `NetworkMonitor.swift` | 270 | **核心监控引擎**：1s 定时采样接口速率，5s 定时采样应用流量，维护 90s 历史记录 |
-    36|| `StatusBarController.swift` | 205 | 状态栏控制器：NSStatusItem，渲染自定义图像，左键详情窗口，右键菜单 |
-    37|| `StatusBarStyle.swift` | 1370 | **最大文件**：CoreGraphics 渲染引擎，StatusBarSettings + StatusBarDisplayRenderer |
-    38|| `DetailsWindowController.swift` | 140 | 详情窗口：NSWindow 创建/定位，嵌入 SwiftUI NetworkPopoverView |
-    39|| `NetworkPopoverView.swift` | 690 | SwiftUI 详情视图：总览、90s 趋势图、接口明细、应用级流量列表 |
-    40|| `PreferencesWindowController.swift` | 920 | 偏好设置窗口 UI（含 GitHub 地址 + 更新弹窗） |
-    41|| `RunCatAnimation.swift` | 260 | RunCat 动画系统：20+ 角色定义，FPS 随网速变化 2-24fps |
-    42|| `AppUpdater.swift` | 505 | 自动更新：GitHub Releases API 检查/下载/解压/codesign 验证/自替换安装 |
+### Sources/NetBar — 核心源码（39 个文件）
+
+| 文件 | 行数 | 职责 |
+|---|---|---|
+| `Main.swift` | 14 | `@main` 入口：创建 AppDelegate 并启动 NSApplication.run() |
+| `AppDelegate.swift` | 166 | NSApplicationDelegate：初始化 StatusBarController/PreferencesWindowController，配置主菜单（中英双语），管理 Dock 图标/外观/语言偏好 |
+| `AppPreferences.swift` | 339 | 全局偏好管理（ObservableObject）：Dock 图标、隐藏系统进程、排序模式、语言、外观、开机启动、onboarding 状态 |
+| `Formatters.swift` | 76 | `ByteFormat` 工具：速度/字节数/包数格式化 + `SystemResourceFormat`：内存/CPU/热状态格式化 |
+| `InterfaceStats.swift` | 115 | 数据模型：InterfaceStats/InterfaceRate/NetworkSnapshot/ApplicationTrafficRate（含 residentMemory/cpuPercentage）/ApplicationTrafficState 等 |
+| `NetworkStatsReader.swift` | 89 | 网络接口读取（getifaddrs + if_data），识别主接口（SCDynamicStore） |
+| `ApplicationTrafficReader.swift` | 118 | 应用流量读取（`/usr/bin/nettop -P -L 1 -x`），解析 CSV 输出 |
+| `SystemResourceReader.swift` | 229 | 系统资源读取层：MemoryUsage/CPUUsage/ThermalInfo/CPUTickSample/SystemResourceSnapshot 模型 + SystemResourceReading 协议 + LiveSystemResourceReader (Mach host_statistics) |
+| `ApplicationResourceReader.swift` | 208 | 每应用资源读取：ProcessResourceUsage 模型 + ApplicationResourceReading 协议 + PSApplicationResourceReader (`ps aux`) + SystemResourceReader + SystemResourceSummary |
+| `ApplicationTrafficPresentation.swift` | 129 | 应用列表展示逻辑：过滤系统进程、搜索、5 种排序模式 |
+| `NetworkMonitor.swift` | 497 | **核心监控引擎**：1s 定时采样接口速率，5s 定时采样应用流量（含每应用内存/CPU），汇总系统资源，维护 90s 历史记录 |
+| `StatusBarController.swift` | 425 | 状态栏控制器：NSStatusItem，渲染自定义图像，左键详情窗口，右键菜单 |
+| `StatusBarStyle.swift` | 1609 | **最大文件**：CoreGraphics 渲染引擎，StatusBarSettings + StatusBarDisplayRenderer |
+| `DetailsWindowController.swift` | 378 | 详情窗口：NSWindow 创建/定位，嵌入 SwiftUI NetworkPopoverView |
+| `NetworkPopoverView.swift` | 1001 | SwiftUI 详情视图：总览、90s 趋势图、接口明细、应用级流量列表 + SystemResourceCard（内存/CPU/进程数） |
+| `PreferencesWindowController.swift` | 1277 | 偏好设置窗口 UI（含 GitHub 地址 + 更新弹窗） |
+| `RunCatAnimation.swift` | 314 | RunCat 动画系统：20+ 角色定义，FPS 随网速变化 2-24fps |
+| `AppUpdater.swift` | 674 | 自动更新：GitHub Releases API 检查/下载/解压/codesign 验证/自替换安装 |
     43|
     44|### Scripts
     45|| 文件 | 行数 | 职责 |
@@ -51,9 +53,10 @@
     51|### Tests
     52|| 文件 | 行数 | 职责 |
     53||---|---|---|
-    54|| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 210 | 偏好和展示逻辑测试 |
-    55|
-    56|## 构建命令
+| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 2131 | 偏好和展示逻辑测试 |
+| `Tests/NetBarTests/SystemResourceTests.swift` | 393 | 系统资源模型、格式化、每应用资源、NetworkMonitor 集成测试 |
+
+## 构建命令
     57|
     58|```bash
     59|./Scripts/build-app.sh          # → build/NetBar.app
@@ -69,18 +72,20 @@
     69|```
     70|Main.swift (@main)
     71|  └─ AppDelegate
-    72|       ├─ NetworkMonitor (核心引擎, 1s/5s 定时采样)
-    73|       │    ├─ SystemNetworkStatsReader (getifaddrs, 协议可注入)
-    74|       │    └─ NettopApplicationTrafficReader (nettop, 协议可注入)
-    75|       ├─ StatusBarController (NSStatusItem + CoreGraphics 渲染)
-    76|       │    ├─ StatusBarSettings + StatusBarDisplayRenderer
-    77|       │    └─ RunCatAnimation (角色动画)
-    78|       ├─ DetailsWindowController → NetworkPopoverView (SwiftUI)
-    79|       ├─ PreferencesWindowController (设置 UI)
-    80|       └─ AppUpdater (GitHub Releases 自更新)
-    81|```
-    82|
-    83|**数据流**: `getifaddrs/nettop` → `Reader协议` → `NetworkMonitor.@Published` → `Combine.sink` → `StatusBarController` → `NSStatusItem.image`
+       ├─ NetworkMonitor (核心引擎, 1s/5s 定时采样)
+       │    ├─ SystemNetworkStatsReader (getifaddrs, 协议可注入)
+       │    ├─ NettopApplicationTrafficReader (nettop, 协议可注入)
+       │    ├─ ApplicationResourceReading (ps aux, 协议可注入) — 每应用内存/CPU
+       │    └─ SystemResourceReading (Mach API, 协议可注入) — 系统内存/CPU/热状态
+       ├─ StatusBarController (NSStatusItem + CoreGraphics 渲染)
+       │    ├─ StatusBarSettings + StatusBarDisplayRenderer
+       │    └─ RunCatAnimation (角色动画)
+       ├─ DetailsWindowController → NetworkPopoverView (SwiftUI)
+       ├─ PreferencesWindowController (设置 UI)
+       └─ AppUpdater (GitHub Releases 自更新)
+```
+
+**数据流**: `getifaddrs/nettop/ps` → `Reader协议` → `NetworkMonitor.@Published` → `Combine.sink` → `StatusBarController` → `NSStatusItem.image`
     84|
     85|## 关键约定
     86|

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import Foundation
 
 struct ApplicationTrafficReadResult {
@@ -13,8 +14,8 @@ protocol ApplicationTrafficReading: Sendable {
 // MARK: - Streaming nettop reader (persistent process)
 
 final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendable {
-    private let executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-    private let fallback = NettopApplicationTrafficReader()
+    private let executableURL: URL
+    private let arguments: [String]
 
     private var process: Process?
     private var outputPipe: Pipe?
@@ -25,13 +26,27 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     private var restartAttempts = 0
     private let maxRestartAttempts = 3
 
-    private static let arguments = [
+    private static let nettopArguments = [
         "-P",
         "-L", "0",
         "-x",
         "-t", "external",
         "-J", "bytes_in,bytes_out"
     ]
+
+    private static let defaultArguments = [
+        "-q",
+        "/dev/null",
+        "/usr/bin/nettop"
+    ] + StreamingNettopReader.nettopArguments
+
+    init(
+        executableURL: URL = URL(fileURLWithPath: "/usr/bin/script"),
+        arguments: [String] = StreamingNettopReader.defaultArguments
+    ) {
+        self.executableURL = executableURL
+        self.arguments = arguments
+    }
 
     func start() {
         lock.lock()
@@ -46,7 +61,7 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
         isRunning = false
         process?.terminate()
         process = nil
-        outputPipe = nil
+        closeOutputHandleLocked()
         latestStats.removeAll(keepingCapacity: true)
         partialLine.removeAll(keepingCapacity: true)
     }
@@ -61,49 +76,68 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
         }
 
-        return fallback.readApplications()
+        return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
     }
 
     private func launchProcess() {
         let process = Process()
-        let pipe = Pipe()
+        let outputPipe = Pipe()
 
         process.executableURL = executableURL
-        process.arguments = Self.arguments
-        process.standardOutput = pipe
+        process.arguments = arguments
+        // nettop buffers CSV output heavily when stdout is a regular Pipe.
+        // macOS' script command allocates a pseudo-terminal for nettop, making
+        // it flush lines immediately like common realtime traffic monitors.
+        process.standardOutput = outputPipe
+        process.standardError = FileHandle.nullDevice
+        process.standardInput = FileHandle.nullDevice
 
         process.terminationHandler = { [weak self] _ in
             self?.handleProcessTermination()
         }
 
-        pipe.fileHandleForReading.readabilityHandler = { [weak self] handle in
-            let data = handle.availableData
-            guard !data.isEmpty else { return }
-            let text = String(data: data, encoding: .utf8) ?? ""
-            self?.appendOutput(text)
-        }
-
         do {
             try process.run()
             self.process = process
-            self.outputPipe = pipe
+            self.outputPipe = outputPipe
             self.isRunning = true
             restartAttempts = 0
+            startOutputReader(outputPipe)
         } catch {
+            try? outputPipe.fileHandleForReading.close()
             self.process = nil
             self.outputPipe = nil
+        }
+    }
+
+    private func startOutputReader(_ outputPipe: Pipe) {
+        DispatchQueue.global(qos: .utility).async { [weak self, outputPipe] in
+            let handle = outputPipe.fileHandleForReading
+            let fileDescriptor = handle.fileDescriptor
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+            while true {
+                let bytesRead = Darwin.read(fileDescriptor, &buffer, buffer.count)
+                guard bytesRead > 0 else { break }
+                let data = Data(buffer.prefix(bytesRead))
+                let text = String(data: data, encoding: .utf8) ?? ""
+                self?.appendOutput(text)
+            }
         }
     }
 
     private func appendOutput(_ text: String) {
         lock.lock()
         defer { lock.unlock() }
+        guard isRunning else { return }
 
-        let combined = partialLine + text
+        let normalizedText = text
+            .replacingOccurrences(of: "\r\n", with: "\n")
+            .replacingOccurrences(of: "\r", with: "\n")
+        let combined = partialLine + normalizedText
         let lines = combined.split(separator: "\n", omittingEmptySubsequences: false)
 
         // If text doesn't end with newline, last element is incomplete
-        let hasTrailingNewline = text.last == "\n"
+        let hasTrailingNewline = normalizedText.last == "\n"
         let completeLineCount = hasTrailingNewline ? lines.count : lines.count - 1
 
         for i in 0..<completeLineCount {
@@ -132,6 +166,7 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             lock.unlock()
             return
         }
+        closeOutputHandleLocked()
         latestStats.removeAll(keepingCapacity: true)
         partialLine.removeAll(keepingCapacity: true)
         lock.unlock()
@@ -142,6 +177,10 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             launchProcess()
             lock.unlock()
         }
+    }
+
+    private func closeOutputHandleLocked() {
+        outputPipe = nil
     }
 
     deinit {
@@ -174,7 +213,22 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
 
         do {
             try process.run()
-            process.waitUntilExit()
+            // Add a 10-second timeout to prevent waitUntilExit() from hanging
+            // indefinitely on some macOS versions, which would leave
+            // isReadingApplicationTraffic stuck at true forever.
+            let semaphore = DispatchSemaphore(value: 0)
+            DispatchQueue.global().async {
+                process.waitUntilExit()
+                semaphore.signal()
+            }
+            let timeoutResult = semaphore.wait(timeout: .now() + 10.0)
+            if timeoutResult == .timedOut {
+                process.terminate()
+                return ApplicationTrafficReadResult(
+                    stats: [],
+                    errorMessage: "nettop 读取超时（10秒）"
+                )
+            }
         } catch {
             return ApplicationTrafficReadResult(
                 stats: [],
@@ -207,6 +261,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
     }
 
     fileprivate static func parseLinePublic(_ line: String) -> ApplicationTrafficStats? {
+        let line = stripControlCharacters(from: line)
         guard !line.hasPrefix(",") else { return nil }
 
         let columns = line.split(separator: ",", omittingEmptySubsequences: false).map(String.init)
@@ -232,6 +287,23 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         )
     }
 
+    private static func stripControlCharacters(from line: String) -> String {
+        var scalars: [UnicodeScalar] = []
+        for scalar in line.unicodeScalars {
+            switch scalar.value {
+            case 8:
+                if !scalars.isEmpty {
+                    scalars.removeLast()
+                }
+            case 0..<32:
+                continue
+            default:
+                scalars.append(scalar)
+            }
+        }
+        return String(String.UnicodeScalarView(scalars))
+    }
+
     fileprivate static func parseProcessToken(_ token: String) -> (name: String, pid: Int32?) {
         guard
             let dotIndex = token.lastIndex(of: "."),
@@ -245,15 +317,25 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         return (name, Int32(pidText))
     }
 
+    private static let displayNameCache = NSCache<NSNumber, NSString>()
+
     fileprivate static func displayNamePublic(for pid: Int32?, fallback: String) -> String {
+        guard let pid else { return fallback }
+
+        let key = NSNumber(value: pid)
+        if let cached = displayNameCache.object(forKey: key) {
+            return cached as String
+        }
+
         guard
-            let pid,
             let runningApplication = NSRunningApplication(processIdentifier: pid),
             let localizedName = runningApplication.localizedName,
             !localizedName.isEmpty
         else {
             return fallback
         }
+
+        displayNameCache.setObject(localizedName as NSString, forKey: key)
         return localizedName
     }
 }

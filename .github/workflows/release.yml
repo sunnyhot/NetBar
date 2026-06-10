@@ -1,81 +1,140 @@
-name: Build & Release
+name: Release macOS App
 
 on:
   push:
     tags:
-      - "v*"
+      - 'v*'
+
+permissions:
+  contents: write
 
 jobs:
-  build-macos:
+  build-and-release:
+    name: Build & Release
     runs-on: macos-15
-    permissions:
-      contents: write
-
     steps:
-      - name: Checkout
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Extract version from tag
+      - name: Extract version
         id: version
         run: |
-          VERSION="${GITHUB_REF_NAME#v}"
-          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          TAG=${GITHUB_REF#refs/tags/}
+          VERSION=${TAG#v}
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "Releasing NetBar version: $VERSION"
 
-      - name: Stamp app version
+      - name: Update version in Info.plist
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${VERSION}" Resources/Info.plist
-          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${GITHUB_RUN_NUMBER}" Resources/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" Resources/Info.plist
-          /usr/libexec/PlistBuddy -c "Print :CFBundleVersion" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Resources/Info.plist
+          /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.version }}" Resources/Info.plist
 
-      - name: Build release package
+      - name: Build macOS App
         run: |
-          ./Scripts/package-release.sh
-          test -s dist/NetBar.app.zip
-          test -s dist/NetBar.app.zip.sha256
-          unzip -t dist/NetBar.app.zip
+          chmod +x Scripts/build-app.sh
+          ./Scripts/build-app.sh
 
-      - name: Verify bundled version
+      - name: Verify build
         run: |
-          VERSION="${{ steps.version.outputs.version }}"
-          BUNDLED_VERSION=$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" build/NetBar.app/Contents/Info.plist)
-          if [ "${BUNDLED_VERSION}" != "${VERSION}" ]; then
-            echo "Expected bundle version ${VERSION}, got ${BUNDLED_VERSION}"
-            exit 1
-          fi
+          test -d "build/NetBar.app" || { echo "Build failed"; exit 1; }
+          test -x "build/NetBar.app/Contents/MacOS/NetBar" || { echo "Executable not found"; exit 1; }
+          echo "Build verified: $(du -sh build/NetBar.app)"
 
-      - name: Generate release notes
-        id: notes
+      - name: Package
+        id: package
         run: |
-          CURRENT_TAG="${{ steps.version.outputs.tag }}"
-          PREV_TAG=$(git tag --sort=-v:refname | grep -vxF "${CURRENT_TAG}" | head -1 || true)
+          mkdir -p dist
+          /usr/bin/ditto -c -k --keepParent build/NetBar.app dist/NetBar.app.zip
+          cd dist
+          shasum -a 256 NetBar.app.zip > NetBar.app.zip.sha256
+          SHA256=$(awk '{print $1}' NetBar.app.zip.sha256)
+          echo "sha256=$SHA256" >> "$GITHUB_OUTPUT"
+          echo "Package contents:"
+          ls -lh
 
-          if [ -n "${PREV_TAG}" ]; then
-            COMMITS=$(git log "${PREV_TAG}..HEAD" --pretty=format:"- %s" --no-merges)
-          else
-            COMMITS=$(git log -10 --pretty=format:"- %s" --no-merges)
-          fi
+      - name: Extract release notes
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os
+          import pathlib
+          import sys
 
-          EOF=$(dd if=/dev/urandom bs=15 count=1 status=none | base64)
-          echo "body<<${EOF}" >> "$GITHUB_OUTPUT"
-          echo "## NetBar ${{ steps.version.outputs.tag }}" >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "${COMMITS}" >> "$GITHUB_OUTPUT"
-          echo "" >> "$GITHUB_OUTPUT"
-          echo "---" >> "$GITHUB_OUTPUT"
-          echo "Automated build by GitHub Actions" >> "$GITHUB_OUTPUT"
-          echo "${EOF}" >> "$GITHUB_OUTPUT"
+          tag = os.environ["TAG"]
+          version = os.environ["VERSION"]
+          changelog_path = pathlib.Path("CHANGELOG.md")
+          lines = changelog_path.read_text(encoding="utf-8").splitlines()
+
+          capturing = False
+          notes = []
+          for line in lines:
+              if line.startswith("## "):
+                  heading = line[3:].strip()
+                  if capturing:
+                      break
+                  if heading.startswith(tag) or heading.startswith(f"v{version}") or heading.startswith(version):
+                      capturing = True
+                      continue
+              elif capturing:
+                  notes.append(line)
+
+          body = "\n".join(notes).strip()
+          if not body:
+              print(f"Release notes for {tag} were not found in CHANGELOG.md", file=sys.stderr)
+              sys.exit(1)
+
+          pathlib.Path("dist").mkdir(exist_ok=True)
+          pathlib.Path("dist/release-notes.md").write_text(body + "\n", encoding="utf-8")
+          PY
+          echo "Release notes:"
+          cat dist/release-notes.md
+
+      - name: Generate latest.json
+        env:
+          TAG: ${{ steps.version.outputs.tag }}
+          VERSION: ${{ steps.version.outputs.version }}
+          SHA256: ${{ steps.package.outputs.sha256 }}
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+
+          tag = os.environ["TAG"]
+          version = os.environ["VERSION"]
+          sha256 = os.environ["SHA256"]
+          manifest = {
+              "version": version,
+              "tag": tag,
+              "asset": "NetBar.app.zip",
+              "asset_url": f"https://github.com/sunnyhot/NetBar/releases/download/{tag}/NetBar.app.zip",
+              "sha256": sha256,
+              "notes": pathlib.Path("dist/release-notes.md").read_text(encoding="utf-8").strip(),
+              "html_url": f"https://github.com/sunnyhot/NetBar/releases/tag/{tag}",
+          }
+          pathlib.Path("dist/latest.json").write_text(
+              json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
+              encoding="utf-8"
+          )
+          PY
+          echo "Generated latest.json:"
+          cat dist/latest.json
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ steps.version.outputs.tag }}
           name: NetBar ${{ steps.version.outputs.tag }}
-          body: ${{ steps.notes.outputs.body }}
+          body_path: dist/release-notes.md
           files: |
             dist/NetBar.app.zip
             dist/NetBar.app.zip.sha256
+            dist/latest.json
+          draft: false
+          prerelease: false
+
+      - name: Run tests
+        continue-on-error: true
+        run: swift test

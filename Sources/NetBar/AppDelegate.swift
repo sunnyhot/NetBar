@@ -8,26 +8,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let appPreferences = AppPreferences()
     private let customCharacterStore = CustomCharacterStore()
     private let powerObserver = SystemPowerObserver()
+    private let networkHistoryStore = NetworkHistoryStore()
+    private let notificationController = NetworkNotificationController()
+    private let petController = PetController()
     private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
         appPreferences: appPreferences,
         customCharacterStore: customCharacterStore,
-        updater: updater
+        updater: updater,
+        notificationController: notificationController,
+        clearNetworkHistory: { [weak self] in
+            self?.statusBarController?.clearNetworkHistory()
+        }
     )
     private var cancellables: Set<AnyCancellable> = []
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Startup sequence (order matters):
+        // 1. Appearance — sets NSApp.appearance so all subsequent windows inherit it
+        // 2. Main menu — builds the app menu bar before any window appears
+        // 3. Activation policy — controls Dock visibility (.regular) vs menu-bar-only (.accessory)
+        // 4. Preference observers — react to runtime setting changes
+        // 5. Status bar controller — creates the menu bar item
         applyAppAppearance()
         configureMainMenu()
         applyActivationPolicy()
         configurePreferenceObservers()
         statusBarController = StatusBarController(
-            monitor: NetworkMonitor(),
+            monitor: NetworkMonitor(historyStore: networkHistoryStore),
             settings: settings,
             appPreferences: appPreferences,
             customCharacterStore: customCharacterStore,
             powerObserver: powerObserver,
+            notificationController: notificationController,
+            petController: petController,
             openPreferences: { [weak self] in
                 self?.showPreferences(nil)
             },
@@ -37,6 +52,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         )
         updater.startAutomaticChecks()
 
+        // 延迟重申 activation policy，确保开机自启动场景下 Dock 图标正确隐藏
+        if !appPreferences.dockIconVisibility.isDockVisible {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                self?.applyActivationPolicy()
+            }
+        }
+
         guard !appPreferences.hasCompletedOnboarding else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
             self?.statusBarController?.showDetailsWindow()
@@ -44,7 +66,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        statusBarController?.showDetailsWindow()
+        if appPreferences.shouldHandleDockReopen {
+            statusBarController?.showDetailsWindow()
+        }
         return false
     }
 
@@ -55,7 +79,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     @objc private func showAbout(_ sender: Any?) {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .applicationName: "NetBar",
-            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.32.3",
+            .applicationVersion: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0.0.0",
             .credits: NSAttributedString(
                 string: "A local menu bar network monitor for macOS.",
                 attributes: [.font: NSFont.systemFont(ofSize: 12)]
@@ -101,7 +125,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func applyActivationPolicy() {
-        NSApplication.shared.setActivationPolicy(appPreferences.showsDockIcon ? .regular : .accessory)
+        NSApplication.shared.setActivationPolicy(appPreferences.activationPolicy)
     }
 
     private func applyAppAppearance() {

@@ -519,6 +519,28 @@ enum StatusBarOrder: String, CaseIterable, Identifiable {
     }
 }
 
+enum StatusBarTrafficDisplayMode: String, CaseIterable, Identifiable {
+    case upDown
+    case downloadOnly
+    case uploadOnly
+    case total
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .upDown:
+            return language.text("上下行", "Up / Down")
+        case .downloadOnly:
+            return language.text("仅下载", "Download")
+        case .uploadOnly:
+            return language.text("仅上传", "Upload")
+        case .total:
+            return language.text("总流量", "Total")
+        }
+    }
+}
+
 enum StatusBarAlignment: String, CaseIterable, Identifiable {
     case leading
     case center
@@ -591,6 +613,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var itemWidth: Double { didSet { save() } }
     @Published var usesAutomaticWidth: Bool { didSet { save() } }
     @Published var lineSpacing: Double { didSet { save() } }
+    @Published var trafficDisplayMode: StatusBarTrafficDisplayMode { didSet { save() } }
     @Published var order: StatusBarOrder { didSet { save() } }
     @Published var alignment: StatusBarAlignment { didSet { save() } }
     @Published var showsArrows: Bool { didSet { save() } }
@@ -612,6 +635,7 @@ final class StatusBarSettings: ObservableObject {
     @Published var catRotationIntervalMinutes: Double { didSet { save() } }
     @Published var catRotationPool: String { didSet { save() } }  // comma-separated character IDs
     @Published var catHeadSwing: Bool { didSet { save() } }  // horizontally flip alternate frames for head-bobbing effect
+    @Published var catAnimationSpeedSource: String { didSet { save() } }  // AnimationSpeedSource raw value
 
     private let defaults: UserDefaults
 
@@ -621,6 +645,7 @@ final class StatusBarSettings: ObservableObject {
         itemWidth = defaults.object(forKey: Keys.itemWidth) as? Double ?? Defaults.itemWidth
         usesAutomaticWidth = defaults.object(forKey: Keys.usesAutomaticWidth) as? Bool ?? Defaults.usesAutomaticWidth
         lineSpacing = defaults.object(forKey: Keys.lineSpacing) as? Double ?? Defaults.lineSpacing
+        trafficDisplayMode = StatusBarTrafficDisplayMode(rawValue: defaults.string(forKey: Keys.trafficDisplayMode) ?? "") ?? Defaults.trafficDisplayMode
         order = StatusBarOrder(rawValue: defaults.string(forKey: Keys.order) ?? "") ?? Defaults.order
         alignment = StatusBarAlignment(rawValue: defaults.string(forKey: Keys.alignment) ?? "") ?? Defaults.alignment
         showsArrows = defaults.object(forKey: Keys.showsArrows) as? Bool ?? Defaults.showsArrows
@@ -642,6 +667,7 @@ final class StatusBarSettings: ObservableObject {
         catRotationIntervalMinutes = defaults.object(forKey: Keys.catRotationIntervalMinutes) as? Double ?? Defaults.catRotationIntervalMinutes
         catRotationPool = defaults.string(forKey: Keys.catRotationPool) ?? Defaults.catRotationPool
         catHeadSwing = defaults.object(forKey: Keys.catHeadSwing) as? Bool ?? Defaults.catHeadSwing
+        catAnimationSpeedSource = defaults.string(forKey: Keys.catAnimationSpeedSource) ?? Defaults.catAnimationSpeedSource
     }
 
     var clampedFontSize: CGFloat {
@@ -660,6 +686,11 @@ final class StatusBarSettings: ObservableObject {
         CGFloat(catScale.clamped(to: 0.7...1.3))
     }
 
+    /// The resolved animation speed source, falling back to `.networkSpeed` for invalid raw values.
+    var resolvedAnimationSpeedSource: AnimationSpeedSource {
+        AnimationSpeedSource(rawValue: catAnimationSpeedSource) ?? .networkSpeed
+    }
+
     var fontWeight: NSFont.Weight {
         isBold ? .semibold : .medium
     }
@@ -673,6 +704,7 @@ final class StatusBarSettings: ObservableObject {
         itemWidth = Defaults.itemWidth
         usesAutomaticWidth = Defaults.usesAutomaticWidth
         lineSpacing = Defaults.lineSpacing
+        trafficDisplayMode = Defaults.trafficDisplayMode
         order = Defaults.order
         alignment = Defaults.alignment
         showsArrows = Defaults.showsArrows
@@ -694,6 +726,7 @@ final class StatusBarSettings: ObservableObject {
         catRotationIntervalMinutes = Defaults.catRotationIntervalMinutes
         catRotationPool = Defaults.catRotationPool
         catHeadSwing = Defaults.catHeadSwing
+        catAnimationSpeedSource = Defaults.catAnimationSpeedSource
     }
 
     private func save() {
@@ -701,6 +734,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(itemWidth, forKey: Keys.itemWidth)
         defaults.set(usesAutomaticWidth, forKey: Keys.usesAutomaticWidth)
         defaults.set(lineSpacing, forKey: Keys.lineSpacing)
+        defaults.set(trafficDisplayMode.rawValue, forKey: Keys.trafficDisplayMode)
         defaults.set(order.rawValue, forKey: Keys.order)
         defaults.set(alignment.rawValue, forKey: Keys.alignment)
         defaults.set(showsArrows, forKey: Keys.showsArrows)
@@ -722,6 +756,7 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(catRotationIntervalMinutes, forKey: Keys.catRotationIntervalMinutes)
         defaults.set(catRotationPool, forKey: Keys.catRotationPool)
         defaults.set(catHeadSwing, forKey: Keys.catHeadSwing)
+        defaults.set(catAnimationSpeedSource, forKey: Keys.catAnimationSpeedSource)
     }
 
     private func save(_ color: PersistedColor, prefix: String) {
@@ -749,6 +784,7 @@ final class StatusBarSettings: ObservableObject {
         static let itemWidth = 96.0
         static let usesAutomaticWidth = true
         static let lineSpacing = -2.0
+        static let trafficDisplayMode = StatusBarTrafficDisplayMode.upDown
         static let order = StatusBarOrder.uploadFirst
         static let alignment = StatusBarAlignment.leading
         static let showsArrows = true
@@ -770,6 +806,7 @@ final class StatusBarSettings: ObservableObject {
         static let catRotationIntervalMinutes = 5.0
         static let catRotationPool = ""  // empty = all characters
         static let catHeadSwing = false
+        static let catAnimationSpeedSource = AnimationSpeedSource.networkSpeed.rawValue
     }
 
     private enum Keys {
@@ -777,6 +814,7 @@ final class StatusBarSettings: ObservableObject {
         static let itemWidth = "statusBar.itemWidth"
         static let usesAutomaticWidth = "statusBar.usesAutomaticWidth"
         static let lineSpacing = "statusBar.lineSpacing"
+        static let trafficDisplayMode = "statusBar.trafficDisplayMode"
         static let order = "statusBar.order"
         static let alignment = "statusBar.alignment"
         static let showsArrows = "statusBar.showsArrows"
@@ -798,6 +836,7 @@ final class StatusBarSettings: ObservableObject {
         static let catRotationIntervalMinutes = "statusBar.catRotationIntervalMinutes"
         static let catRotationPool = "statusBar.catRotationPool"
         static let catHeadSwing = "statusBar.catHeadSwing"
+        static let catAnimationSpeedSource = "statusBar.catAnimationSpeedSource"
     }
 }
 
@@ -819,6 +858,7 @@ struct StatusBarRenderSignature: Equatable {
     let itemWidth: Double
     let usesAutomaticWidth: Bool
     let lineSpacing: Double
+    let trafficDisplayMode: StatusBarTrafficDisplayMode
     let order: StatusBarOrder
     let alignment: StatusBarAlignment
     let showsArrows: Bool
@@ -980,6 +1020,7 @@ enum StatusBarDisplayRenderer {
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
             lineSpacing: settings.lineSpacing,
+            trafficDisplayMode: settings.trafficDisplayMode,
             order: settings.order,
             alignment: settings.alignment,
             showsArrows: settings.showsArrows,
@@ -1509,7 +1550,23 @@ enum StatusBarDisplayRenderer {
         )
         let upload = line(prefix: "↑", value: ByteFormat.speed(snapshot.uploadBytesPerSecond), settings: settings)
         let download = line(prefix: "↓", value: ByteFormat.speed(snapshot.downloadBytesPerSecond), settings: settings)
-        let lines = settings.order == .uploadFirst ? [upload, download] : [download, upload]
+        let total = line(
+            prefix: "↕",
+            value: ByteFormat.speed(snapshot.uploadBytesPerSecond + snapshot.downloadBytesPerSecond),
+            settings: settings
+        )
+        let lines: [String] = {
+            switch settings.trafficDisplayMode {
+            case .upDown:
+                return settings.order == .uploadFirst ? [upload, download] : [download, upload]
+            case .downloadOnly:
+                return [download]
+            case .uploadOnly:
+                return [upload]
+            case .total:
+                return [total]
+            }
+        }()
         let horizontalPadding: CGFloat = settings.showsBackground ? 8 : 2
         let measuredWidth = lines
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
@@ -1550,7 +1607,16 @@ enum StatusBarDisplayRenderer {
         guard settings.showsArrows else { return values }
 
         return values.flatMap { value in
-            ["↑ \(value)", "↓ \(value)"]
+            switch settings.trafficDisplayMode {
+            case .upDown:
+                return ["↑ \(value)", "↓ \(value)"]
+            case .downloadOnly:
+                return ["↓ \(value)"]
+            case .uploadOnly:
+                return ["↑ \(value)"]
+            case .total:
+                return ["↕ \(value)"]
+            }
         }
     }
 

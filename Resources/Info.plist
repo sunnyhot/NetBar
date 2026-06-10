@@ -2,31 +2,31 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CFBundleDevelopmentRegion</key>
-    <string>en</string>
-    <key>CFBundleExecutable</key>
-    <string>NetBar</string>
-    <key>CFBundleIdentifier</key>
-    <string>local.codex.NetBar</string>
-    <key>CFBundleIconFile</key>
-    <string>AppIcon</string>
-    <key>CFBundleInfoDictionaryVersion</key>
-    <string>6.0</string>
-    <key>CFBundleName</key>
-    <string>NetBar</string>
-    <key>CFBundlePackageType</key>
-    <string>APPL</string>
-    <key>CFBundleShortVersionString</key>
-    <string>0.32.3</string>
-    <key>CFBundleVersion</key>
-    <string>51</string>
-    <key>LSMinimumSystemVersion</key>
-    <string>13.0</string>
-    <key>NBUpdateAssetName</key>
-    <string>NetBar.app.zip</string>
-    <key>NBUpdateRepository</key>
-    <string>sunnyhot/NetBar</string>
-    <key>NSHumanReadableCopyright</key>
-    <string>Created locally with Codex</string>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>en</string>
+	<key>CFBundleExecutable</key>
+	<string>NetBar</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.codex.NetBar</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>NetBar</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.38.1</string>
+	<key>CFBundleVersion</key>
+	<string>0.38.1</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NBUpdateAssetName</key>
+	<string>NetBar.app.zip</string>
+	<key>NBUpdateRepository</key>
+	<string>sunnyhot/NetBar</string>
+	<key>NSHumanReadableCopyright</key>
+	<string>Created locally with Codex</string>
 </dict>
 </plist>

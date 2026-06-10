@@ -5,6 +5,8 @@ import SwiftUI
 final class NetworkMonitor: ObservableObject {
     @Published private(set) var snapshot = NetworkSnapshot.empty
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
+    @Published private(set) var systemResources = SystemResourceSnapshot.empty
+    @Published private(set) var intelligenceSummary = NetworkIntelligenceSummary.empty
     @Published private(set) var isRunning = false
 
     /// Controls whether the nettop process is active. Set to true when the
@@ -22,22 +24,33 @@ final class NetworkMonitor: ObservableObject {
 
     private let reader: NetworkStatsReading
     private let appTrafficReader: ApplicationTrafficReading
-    private let streamingReader: StreamingNettopReader?
+    let streamingReader: StreamingNettopReader?
+    private let systemResourceReader: SystemResourceReading
+    private let resourceReader: ApplicationResourceReading
+    private let historyStore: NetworkHistoryStore
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
     private var previousApplicationSampleDate: Date?
+    private var lastApplicationTrafficDate: Date?
+    private var anomalyDetector = NetworkAnomalyDetector()
+    private var previousCPUTickSample: CPUTickSample?
     private var isReadingApplicationTraffic = false
     private var isRefreshing = false
     private var shouldSampleApplicationTraffic = false
     private var timer: Timer?
     private var applicationTimer: Timer?
+    private var systemResourceTimer: Timer?
+    private var isRefreshingSystemResources = false
     private var powerSaveMode = false
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
-    private let historyCapacity = 90
+    private let historyCapacity = 900
     private var activityLevel: NetworkActivityLevel = .idle
+    private var applicationSampleInterval: TimeInterval {
+        powerSaveMode ? 5.0 : 1.0
+    }
 
     var recentHistory: [RatePoint] {
         guard !historyBuffer.isEmpty else { return [] }
@@ -51,10 +64,16 @@ final class NetworkMonitor: ObservableObject {
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
         appTrafficReader: ApplicationTrafficReading? = nil,
+        systemResourceReader: SystemResourceReading = LiveSystemResourceReader(),
+        resourceReader: ApplicationResourceReading? = nil,
+        historyStore: NetworkHistoryStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
+        self.systemResourceReader = systemResourceReader
         self.now = now
+        self.historyStore = historyStore ?? NetworkHistoryStore()
+        self.intelligenceSummary = self.historyStore.summary
         if let appTrafficReader {
             self.appTrafficReader = appTrafficReader
             self.streamingReader = nil
@@ -63,17 +82,30 @@ final class NetworkMonitor: ObservableObject {
             self.appTrafficReader = streaming
             self.streamingReader = streaming
         }
+        self.resourceReader = resourceReader ?? PSApplicationResourceReader()
     }
 
     func start() {
         guard !isRunning else { return }
         isRunning = true
         refresh()
-        refreshApplicationTraffic()
+        // Only start app-traffic sampling if the detail popover is visible.
+        // When the popover opens later, resumeApplicationTrafficSampling()
+        // handles the first read + timer creation.
+        if shouldSampleApplicationTraffic {
+            refreshApplicationTraffic()
+            applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
+                Task { @MainActor in
+                    self?.refreshApplicationTraffic()
+                }
+            }
+        }
+        refreshSystemResources()
         scheduleNextSample()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
+        systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.refreshApplicationTraffic()
+                self?.refreshSystemResources()
             }
         }
     }
@@ -81,9 +113,12 @@ final class NetworkMonitor: ObservableObject {
     func resumeApplicationTrafficSampling() {
         guard !shouldSampleApplicationTraffic else { return }
         shouldSampleApplicationTraffic = true
+        // Invalidate any stale timer before creating a new one
+        applicationTimer?.invalidate()
+        applicationTimer = nil
         streamingReader?.start()
         refreshApplicationTraffic()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
             }
@@ -95,11 +130,19 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer?.invalidate()
         applicationTimer = nil
         streamingReader?.stop()
+        // Reset reading state in case an in-flight Task is still executing
+        // reader.readApplications(). Without this, isReadingApplicationTraffic
+        // stays true if the streaming reader was stopped mid-read, blocking
+        // all subsequent refreshApplicationTraffic() calls.
+        isReadingApplicationTraffic = false
+        appTraffic.isRefreshing = false
     }
 
     func stop() {
         timer?.invalidate()
         timer = nil
+        systemResourceTimer?.invalidate()
+        systemResourceTimer = nil
         pauseApplicationTrafficSampling()
         isRunning = false
     }
@@ -112,7 +155,7 @@ final class NetworkMonitor: ObservableObject {
     private func rescheduleTimers() {
         guard isRunning else { return }
         let interval: TimeInterval = powerSaveMode ? 2.0 : 1.0
-        let appInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
+        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
 
         timer?.invalidate()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
@@ -122,9 +165,16 @@ final class NetworkMonitor: ObservableObject {
         }
 
         applicationTimer?.invalidate()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: appInterval, repeats: true) { [weak self] _ in
+        applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
+            }
+        }
+
+        systemResourceTimer?.invalidate()
+        systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
+            Task { @MainActor in
+                self?.refreshSystemResources()
             }
         }
     }
@@ -188,6 +238,7 @@ final class NetworkMonitor: ObservableObject {
                 totalSentBytes: externalStats.reduce(0) { $0 + $1.sentBytes },
                 sampleCount: 1
             )
+            recordSnapshotForIntelligence()
             return
         }
 
@@ -249,9 +300,33 @@ final class NetworkMonitor: ObservableObject {
         historyWriteIndex += 1
 
         updateActivityLevel(totalBytesPerSecond: totalDownload + totalUpload)
+        recordSnapshotForIntelligence()
 
         previousStats = currentByName
         previousSampleDate = now
+    }
+
+    func refreshIntelligence(
+        settings: NetworkIntelligenceSettings,
+        language: AppLanguage = .simplifiedChinese
+    ) -> [NetworkAnomalyEvent] {
+        let events = anomalyDetector.detect(
+            snapshot: snapshot,
+            appTraffic: appTraffic,
+            settings: settings,
+            now: now(),
+            language: language
+        )
+        if let latest = events.last {
+            intelligenceSummary.latestEvent = latest
+        }
+        return events
+    }
+
+    func clearNetworkHistory() {
+        historyStore.clear()
+        intelligenceSummary = historyStore.summary
+        lastApplicationTrafficDate = nil
     }
 
     func refreshApplicationTraffic() {
@@ -262,16 +337,31 @@ final class NetworkMonitor: ObservableObject {
         appTraffic.isRefreshing = true
 
         let reader = appTrafficReader
-        Task { [weak self, reader] in
-            let (result, sampledAt) = await Task.detached(priority: .utility) { [reader] in
-                (reader.readApplications(), Date())
+        let resourceReader = self.resourceReader
+        let systemResourceReader = self.systemResourceReader
+        Task { [weak self, reader, resourceReader, systemResourceReader] in
+            let (result, resourceUsages, systemSummary) = await Task.detached(priority: .utility) { [reader, resourceReader, systemResourceReader] in
+                let trafficResult = reader.readApplications()
+                let resourceUsages = resourceReader.readProcessResources()
+                let processCount = resourceUsages.count
+                let systemSummary = systemResourceReader.readSystemSummary(processCount: processCount)
+                return (trafficResult, resourceUsages, systemSummary)
             }.value
 
-            self?.applyApplicationTraffic(result, sampledAt: sampledAt)
+            guard let self else {
+                // If monitor is deallocated, ensure we don't leave isRefreshing stuck
+                return
+            }
+            self.applyApplicationTraffic(result, resourceUsages: resourceUsages, systemSummary: systemSummary, sampledAt: self.now())
         }
     }
 
-    private func applyApplicationTraffic(_ result: ApplicationTrafficReadResult, sampledAt: Date) {
+    private func applyApplicationTraffic(
+        _ result: ApplicationTrafficReadResult,
+        resourceUsages: [ProcessResourceUsage],
+        systemSummary: SystemResourceSummary,
+        sampledAt: Date
+    ) {
         defer { isReadingApplicationTraffic = false }
 
         guard result.errorMessage == nil else {
@@ -280,41 +370,61 @@ final class NetworkMonitor: ObservableObject {
                 applications: appTraffic.applications,
                 sampleCount: appTraffic.sampleCount,
                 isRefreshing: false,
-                errorMessage: result.errorMessage
+                errorMessage: result.errorMessage,
+                systemResources: systemSummary
             )
             return
+        }
+
+        // Build a pid-based lookup for resource data
+        var resourceByPID: [Int32: ProcessResourceUsage] = [:]
+        for usage in resourceUsages {
+            resourceByPID[usage.pid] = usage
         }
 
         let currentByID = Dictionary(result.stats.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         guard let previousDate = previousApplicationSampleDate else {
             previousApplicationStats = currentByID
             previousApplicationSampleDate = sampledAt
+            let trafficPIDs = Set(result.stats.compactMap(\.pid))
+            let processRates = result.stats.map { stat in
+                let res = stat.pid.flatMap { resourceByPID[$0] }
+                return ApplicationTrafficRate(
+                    id: stat.id,
+                    displayName: stat.displayName,
+                    processNames: [stat.processName],
+                    pids: stat.pid.map { [$0] } ?? [],
+                    downloadBytesPerSecond: 0,
+                    uploadBytesPerSecond: 0,
+                    totalReceivedBytes: stat.receivedBytes,
+                    totalSentBytes: stat.sentBytes,
+                    residentMemory: res?.residentMemory,
+                    cpuPercentage: res?.cpuPercentage
+                )
+            } + resourceOnlyApplicationRates(
+                from: resourceUsages,
+                excluding: trafficPIDs
+            )
+            let applications = groupApplications(processRates, resourceByPID: resourceByPID)
             appTraffic = ApplicationTrafficState(
                 timestamp: sampledAt,
-                applications: groupApplications(result.stats.map { stat in
-                    ApplicationTrafficRate(
-                        id: stat.displayName,
-                        displayName: stat.displayName,
-                        processNames: [stat.processName],
-                        pids: stat.pid.map { [$0] } ?? [],
-                        downloadBytesPerSecond: 0,
-                        uploadBytesPerSecond: 0,
-                        totalReceivedBytes: stat.receivedBytes,
-                        totalSentBytes: stat.sentBytes
-                    )
-                }),
+                applications: applications,
                 sampleCount: 1,
                 isRefreshing: false,
-                errorMessage: nil
+                errorMessage: nil,
+                systemResources: systemSummary
             )
+            recordApplicationTrafficForIntelligence(sampledAt: sampledAt)
             return
         }
 
         let interval = max(sampledAt.timeIntervalSince(previousDate), 0.2)
+        let trafficPIDs = Set(result.stats.compactMap(\.pid))
         let processRates = result.stats.map { current -> ApplicationTrafficRate in
             let previous = previousApplicationStats[current.id]
             let receivedDelta = Self.positiveDelta(current.receivedBytes, previous?.receivedBytes)
             let sentDelta = Self.positiveDelta(current.sentBytes, previous?.sentBytes)
+            let res = current.pid.flatMap { resourceByPID[$0] }
 
             return ApplicationTrafficRate(
                 id: current.id,
@@ -324,22 +434,71 @@ final class NetworkMonitor: ObservableObject {
                 downloadBytesPerSecond: Double(receivedDelta) / interval,
                 uploadBytesPerSecond: Double(sentDelta) / interval,
                 totalReceivedBytes: current.receivedBytes,
-                totalSentBytes: current.sentBytes
+                totalSentBytes: current.sentBytes,
+                residentMemory: res?.residentMemory,
+                cpuPercentage: res?.cpuPercentage
             )
-        }
+        } + resourceOnlyApplicationRates(
+            from: resourceUsages,
+            excluding: trafficPIDs
+        )
 
         previousApplicationStats = currentByID
         previousApplicationSampleDate = sampledAt
+        let applications = groupApplications(processRates, resourceByPID: resourceByPID)
         appTraffic = ApplicationTrafficState(
             timestamp: sampledAt,
-            applications: groupApplications(processRates),
+            applications: applications,
             sampleCount: appTraffic.sampleCount + 1,
             isRefreshing: false,
-            errorMessage: nil
+            errorMessage: nil,
+            systemResources: systemSummary
         )
+        recordApplicationTrafficForIntelligence(sampledAt: sampledAt)
     }
 
-    private func groupApplications(_ processRates: [ApplicationTrafficRate]) -> [ApplicationTrafficRate] {
+    private func recordSnapshotForIntelligence() {
+        historyStore.record(snapshot: snapshot)
+        syncIntelligenceSummaryFromHistory()
+    }
+
+    private func recordApplicationTrafficForIntelligence(sampledAt: Date) {
+        let interval = lastApplicationTrafficDate.map { sampledAt.timeIntervalSince($0) } ?? applicationSampleInterval
+        historyStore.record(appTraffic: appTraffic, interval: max(interval, 0.2))
+        lastApplicationTrafficDate = sampledAt
+        syncIntelligenceSummaryFromHistory()
+    }
+
+    private func syncIntelligenceSummaryFromHistory() {
+        var summary = historyStore.summary
+        summary.latestEvent = intelligenceSummary.latestEvent
+        intelligenceSummary = summary
+    }
+
+    private func resourceOnlyApplicationRates(
+        from resourceUsages: [ProcessResourceUsage],
+        excluding trafficPIDs: Set<Int32>
+    ) -> [ApplicationTrafficRate] {
+        resourceUsages.compactMap { usage in
+            guard !trafficPIDs.contains(usage.pid) else { return nil }
+            guard usage.residentMemory != nil || usage.cpuPercentage != nil else { return nil }
+
+            return ApplicationTrafficRate(
+                id: "\(usage.processName).\(usage.pid)",
+                displayName: usage.displayName,
+                processNames: [usage.processName],
+                pids: [usage.pid],
+                downloadBytesPerSecond: 0,
+                uploadBytesPerSecond: 0,
+                totalReceivedBytes: 0,
+                totalSentBytes: 0,
+                residentMemory: usage.residentMemory,
+                cpuPercentage: usage.cpuPercentage
+            )
+        }
+    }
+
+    private func groupApplications(_ processRates: [ApplicationTrafficRate], resourceByPID: [Int32: ProcessResourceUsage]) -> [ApplicationTrafficRate] {
         let grouped = Dictionary(grouping: processRates) { $0.displayName }
 
         return grouped.map { displayName, rates in
@@ -352,6 +511,12 @@ final class NetworkMonitor: ObservableObject {
             let download = rates.reduce(0) { $0 + $1.downloadBytesPerSecond }
             let upload = rates.reduce(0) { $0 + $1.uploadBytesPerSecond }
 
+            // Aggregate memory and CPU across all PIDs of this group
+            let memoryValues = pids.compactMap { resourceByPID[$0]?.residentMemory }
+            let cpuValues = pids.compactMap { resourceByPID[$0]?.cpuPercentage }
+            let totalMemory: UInt64? = memoryValues.isEmpty ? nil : memoryValues.reduce(0, +)
+            let totalCPU: Double? = cpuValues.isEmpty ? nil : cpuValues.reduce(0, +)
+
             return ApplicationTrafficRate(
                 id: displayName,
                 displayName: displayName,
@@ -360,10 +525,14 @@ final class NetworkMonitor: ObservableObject {
                 downloadBytesPerSecond: download,
                 uploadBytesPerSecond: upload,
                 totalReceivedBytes: totalReceived,
-                totalSentBytes: totalSent
+                totalSentBytes: totalSent,
+                residentMemory: totalMemory,
+                cpuPercentage: totalCPU
             )
         }
-        .filter { $0.totalReceivedBytes > 0 || $0.totalSentBytes > 0 }
+        // Keep apps with network traffic OR resource data (memory/CPU),
+        // so memory/CPU sort modes show meaningful results even for idle apps.
+        .filter { $0.totalReceivedBytes > 0 || $0.totalSentBytes > 0 || $0.residentMemory != nil || $0.cpuPercentage != nil }
         .sorted { lhs, rhs in
             let lhsTraffic = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
             let rhsTraffic = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond
@@ -379,6 +548,70 @@ final class NetworkMonitor: ObservableObject {
 
             return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
         }
+    }
+
+    func refreshSystemResources() {
+        guard !isRefreshingSystemResources else { return }
+        isRefreshingSystemResources = true
+
+        let reader = systemResourceReader
+        let capturedPreviousCPU = previousCPUTickSample
+
+        Task { [weak self] in
+            let (memory, cpuSample, thermal) = await Task.detached(priority: .utility) { [reader] in
+                let memory = reader.readMemoryUsage()
+                let cpuSample = reader.readCPUTicks()
+                let thermal = reader.readThermalState()
+                return (memory, cpuSample, thermal)
+            }.value
+
+            guard let self else { return }
+            self.applySystemResources(
+                memory: memory,
+                cpuSample: cpuSample,
+                thermal: thermal,
+                previousCPU: capturedPreviousCPU
+            )
+            self.isRefreshingSystemResources = false
+        }
+    }
+
+    private func applySystemResources(
+        memory: MemoryUsage,
+        cpuSample: CPUTickSample,
+        thermal: ThermalInfo,
+        previousCPU: CPUTickSample?
+    ) {
+        // Compute CPU usage from delta between current and previous tick samples
+        let cpu: CPUUsage
+        if let previous = previousCPU {
+            let totalDelta = cpuSample.total > previous.total ? cpuSample.total - previous.total : 0
+            let userDelta = cpuSample.user > previous.user ? cpuSample.user - previous.user : 0
+            let systemDelta = cpuSample.system > previous.system ? cpuSample.system - previous.system : 0
+            let idleDelta = cpuSample.idle > previous.idle ? cpuSample.idle - previous.idle : 0
+            cpu = CPUUsage(
+                totalTicks: totalDelta,
+                userTicks: userDelta,
+                systemTicks: systemDelta,
+                idleTicks: idleDelta
+            )
+        } else {
+            // First sample: we have no delta, report zero usage
+            cpu = CPUUsage(
+                totalTicks: cpuSample.total,
+                userTicks: cpuSample.user,
+                systemTicks: cpuSample.system,
+                idleTicks: cpuSample.idle
+            )
+        }
+
+        systemResources = SystemResourceSnapshot(
+            memory: memory,
+            cpu: cpu,
+            thermal: thermal
+        )
+
+        previousCPUTickSample = cpuSample
     }
 
     private static func positiveDelta(_ current: UInt64, _ previous: UInt64?) -> UInt64 {

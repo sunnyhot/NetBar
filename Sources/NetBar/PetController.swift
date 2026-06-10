@@ -61,6 +61,39 @@ final class PetController: ObservableObject {
         markStateUpdatedAndSave(at: date)
     }
 
+    func observe(anomaly event: NetworkAnomalyEvent) {
+        guard settings.isEnabled else { return }
+        let date = now()
+        clearExpiredActiveSkillIfNeeded(at: date)
+        state.mood = mood(for: event)
+        if !settings.isQuietModeEnabled {
+            emitCue(
+                kind: .networkIntelligence,
+                title: event.kind.title(language: petLanguage),
+                message: petMessage(for: event),
+                animationHint: animationHint(for: event)
+            )
+        }
+        markStateUpdatedAndSave(at: date)
+    }
+
+    func observe(todaySummary summary: NetworkDailySummary) {
+        guard settings.isEnabled else { return }
+        let date = now()
+        clearExpiredActiveSkillIfNeeded(at: date)
+        if summary.totalBytes >= 10_000_000_000
+            || summary.peakDownloadBytesPerSecond + summary.peakUploadBytesPerSecond >= settings.highTrafficThresholdBytesPerSecond {
+            state.mood = .excited
+        } else if summary.activeSeconds < 60 {
+            state.mood = .sleepy
+        } else if summary.topApplications.isEmpty {
+            state.mood = .happy
+        } else {
+            state.mood = .focused
+        }
+        markStateUpdatedAndSave(at: date)
+    }
+
     func tick() {
         guard settings.isEnabled else { return }
         let date = now()
@@ -233,6 +266,84 @@ final class PetController: ObservableObject {
             return simplifiedChinese
         case .professional:
             return english
+        }
+    }
+
+    private var petLanguage: AppLanguage {
+        switch settings.personality {
+        case .healing, .playful:
+            return .simplifiedChinese
+        case .professional:
+            return .english
+        }
+    }
+
+    private func mood(for event: NetworkAnomalyEvent) -> PetMood {
+        switch event.kind {
+        case .highTraffic:
+            return .excited
+        case .applicationSpike, .proxyAttributionGap:
+            return event.severity == .critical ? .worried : .focused
+        case .networkDrop:
+            return .worried
+        case .networkRecovered:
+            return .happy
+        }
+    }
+
+    private func animationHint(for event: NetworkAnomalyEvent) -> PetAnimationHint {
+        switch event.kind {
+        case .highTraffic:
+            return .happyHop
+        case .applicationSpike, .proxyAttributionGap:
+            return .focused
+        case .networkDrop:
+            return .worried
+        case .networkRecovered:
+            return .sparkle
+        }
+    }
+
+    private func petMessage(for event: NetworkAnomalyEvent) -> String {
+        switch event.kind {
+        case .highTraffic:
+            if let bytesPerSecond = event.bytesPerSecond {
+                return text(
+                    "总流量升高到约 \(ByteFormat.speed(bytesPerSecond))，我帮你盯着。",
+                    "Total traffic is up to about \(ByteFormat.speed(bytesPerSecond)). I am watching it."
+                )
+            }
+            return text(
+                "总流量有点高，我帮你盯着。",
+                "Total traffic is running high. I am watching it."
+            )
+        case .applicationSpike:
+            let applicationName = event.applicationName ?? text("某个应用", "An app")
+            if let bytesPerSecond = event.bytesPerSecond {
+                return text(
+                    "\(applicationName) 突然忙起来，约 \(ByteFormat.speed(bytesPerSecond))。",
+                    "\(applicationName) suddenly got busy at about \(ByteFormat.speed(bytesPerSecond))."
+                )
+            }
+            return text(
+                "\(applicationName) 突然忙起来了。",
+                "\(applicationName) suddenly got busy."
+            )
+        case .networkDrop:
+            return text(
+                "网络像是安静下来了，可能有断流。",
+                "Network traffic went quiet. There may be a drop."
+            )
+        case .networkRecovered:
+            return text(
+                "网络恢复了，呼吸又顺了。",
+                "Network traffic recovered."
+            )
+        case .proxyAttributionGap:
+            return text(
+                "系统总流量和应用列表有差距，可能是代理或系统进程。",
+                "Total traffic differs from app attribution. It may be proxy or system traffic."
+            )
         }
     }
 
