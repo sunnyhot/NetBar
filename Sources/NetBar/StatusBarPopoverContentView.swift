@@ -6,6 +6,10 @@ struct StatusBarPopoverContentView: View {
     let openMainWindow: () -> Void
     let openPreferences: () -> Void
 
+    private var activeInterfaces: [InterfaceRate] {
+        monitor.snapshot.interfaces.filter(\.hasTraffic)
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             // Total speed header
@@ -14,7 +18,7 @@ struct StatusBarPopoverContentView: View {
             Divider().opacity(0.55)
 
             // Per-interface speed list
-            if !monitor.snapshot.interfaces.isEmpty {
+            if !activeInterfaces.isEmpty {
                 interfaceListSection
                 Divider()
             }
@@ -82,7 +86,7 @@ struct StatusBarPopoverContentView: View {
             .padding(.bottom, 6)
 
             // Interface rows
-            ForEach(monitor.snapshot.interfaces) { interface in
+            ForEach(activeInterfaces) { interface in
                 InterfaceSpeedRow(interface: interface, appPreferences: appPreferences)
             }
         }

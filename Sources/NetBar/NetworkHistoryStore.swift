@@ -124,6 +124,13 @@ final class NetworkHistoryStore: ObservableObject {
         publishAndSave(realtimeTopApplications: Array(realtimeTop.prefix(5)))
     }
 
+    func recordAnimationPlayback(count: UInt64, at date: Date) {
+        guard count > 0 else { return }
+        rolloverIfNeeded(for: date)
+        state.today.animationPlaybackCount += count
+        publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
+    }
+
     func clear() {
         state = PersistedNetworkHistory(today: .empty(dateKey: Self.dateKey(for: now(), calendar: calendar)), recentDays: [])
         lastSnapshot = nil

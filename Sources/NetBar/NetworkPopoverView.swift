@@ -258,6 +258,11 @@ enum NetworkDailySummaryPresentation {
                 id: "active",
                 title: language.text("活跃时长", "Active"),
                 value: duration(summary.activeSeconds)
+            ),
+            NetworkDailySummaryCard(
+                id: "animation",
+                title: language.text("动画播放", "Anim Plays"),
+                value: "\(summary.animationPlaybackCount)"
             )
         ]
     }
@@ -1135,6 +1140,10 @@ private struct InterfaceList: View {
     @ObservedObject var appPreferences: AppPreferences
     let refresh: () -> Void
 
+    private var activeInterfaces: [InterfaceRate] {
+        interfaces.filter(\.hasTraffic)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             NetBarSectionHeader(
@@ -1142,11 +1151,15 @@ private struct InterfaceList: View {
                 subtitle: appPreferences.text("活动接口与累计包量", "Active interfaces and cumulative packets")
             )
 
-            if interfaces.isEmpty {
-                EmptyInterfacesView(appPreferences: appPreferences, refresh: refresh)
+            if activeInterfaces.isEmpty {
+                EmptyInterfacesView(
+                    hasKnownInterfaces: !interfaces.isEmpty,
+                    appPreferences: appPreferences,
+                    refresh: refresh
+                )
             } else {
                 VStack(spacing: 6) {
-                    ForEach(interfaces) { item in
+                    ForEach(activeInterfaces) { item in
                         InterfaceRow(interface: item)
                     }
                 }
@@ -1156,6 +1169,7 @@ private struct InterfaceList: View {
 }
 
 private struct EmptyInterfacesView: View {
+    let hasKnownInterfaces: Bool
     @ObservedObject var appPreferences: AppPreferences
     let refresh: () -> Void
 
@@ -1164,9 +1178,9 @@ private struct EmptyInterfacesView: View {
             Image(systemName: "network.slash")
                 .font(.system(size: 24, weight: .medium))
                 .foregroundStyle(.tertiary)
-            Text(appPreferences.text("暂无网络接口", "No Network Interfaces"))
+            Text(title)
                 .font(.system(size: 12, weight: .bold))
-            Text(appPreferences.text("请确认网络连接可用。", "Check that a network connection is available."))
+            Text(message)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Button { refresh() } label: {
@@ -1176,6 +1190,18 @@ private struct EmptyInterfacesView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 120)
         .netBarCard(cornerRadius: 12, padding: 12)
+    }
+
+    private var title: String {
+        hasKnownInterfaces
+            ? appPreferences.text("暂无活动接口", "No Active Interfaces")
+            : appPreferences.text("暂无网络接口", "No Network Interfaces")
+    }
+
+    private var message: String {
+        hasKnownInterfaces
+            ? appPreferences.text("检测到流量后会自动显示。", "Interfaces appear when traffic is detected.")
+            : appPreferences.text("请确认网络连接可用。", "Check that a network connection is available.")
     }
 }
 

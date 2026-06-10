@@ -41,6 +41,10 @@ struct InterfaceRate: Identifiable, Equatable {
     let receivedPackets: UInt64
     let sentPackets: UInt64
     let isPrimary: Bool
+
+    var hasTraffic: Bool {
+        downloadBytesPerSecond > 0 || uploadBytesPerSecond > 0
+    }
 }
 
 struct NetworkSnapshot: Equatable {

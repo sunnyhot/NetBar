@@ -140,6 +140,8 @@ final class StatusBarController {
     private var lastPolledMouseLocation: CGPoint?
     private var renderCoalesceTimer: Timer?
     private var needsRender = false
+    private var pendingAnimationPlaybackCount: UInt64 = 0
+    private var animationPlaybackFlushTimer: Timer?
     private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
     private static let renderedImageCacheLimit = 12
     private var renderCoalesceInterval: TimeInterval = 1.0 / 15.0
@@ -203,6 +205,7 @@ final class StatusBarController {
             NSEvent.removeMonitor(local)
         }
         renderCoalesceTimer?.invalidate()
+        animationPlaybackFlushTimer?.invalidate()
     }
 
     private func configureStatusItem() {
@@ -275,6 +278,7 @@ final class StatusBarController {
             .sink { [weak self] isLocked in
                 guard let self else { return }
                 if isLocked {
+                    self.flushAnimationPlaybackCount()
                     self.catAnimation?.pauseForScreenLock()
                     self.pauseGooglyEyesTracking()
                     self.systemMetricsSampler.stop()
@@ -337,6 +341,9 @@ final class StatusBarController {
                     self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
                 }
+                catAnimation?.onPlaybackComplete = { [weak self] in
+                    self?.recordAnimationPlaybackCompleted()
+                }
                 currentCatCharacter = character
             } else if character != currentCatCharacter {
                 // Character changed, recreate animation
@@ -352,6 +359,9 @@ final class StatusBarController {
                 catAnimation?.onCharacterChange = { [weak self] newCharacter in
                     self?.currentCatCharacter = CharacterAsset(builtIn: newCharacter)
                     self?.settings.catCharacter = newCharacter.id
+                }
+                catAnimation?.onPlaybackComplete = { [weak self] in
+                    self?.recordAnimationPlaybackCompleted()
                 }
                 currentCatCharacter = character
             } else {
@@ -372,8 +382,29 @@ final class StatusBarController {
             catAnimation?.setActive(false)
             catAnimation = nil
             currentCatFrameIndex = nil
+            flushAnimationPlaybackCount()
             configureGooglyEyesTracking()
         }
+    }
+
+    private func recordAnimationPlaybackCompleted() {
+        pendingAnimationPlaybackCount += 1
+        guard animationPlaybackFlushTimer == nil else { return }
+        let timer = Timer(timeInterval: 1.0, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.flushAnimationPlaybackCount()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        animationPlaybackFlushTimer = timer
+    }
+
+    private func flushAnimationPlaybackCount() {
+        animationPlaybackFlushTimer?.invalidate()
+        animationPlaybackFlushTimer = nil
+        guard pendingAnimationPlaybackCount > 0 else { return }
+        monitor.recordAnimationPlayback(count: pendingAnimationPlaybackCount)
+        pendingAnimationPlaybackCount = 0
     }
 
     // MARK: - System Metrics Integration

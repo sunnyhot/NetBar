@@ -329,6 +329,11 @@ final class NetworkMonitor: ObservableObject {
         lastApplicationTrafficDate = nil
     }
 
+    func recordAnimationPlayback(count: UInt64 = 1) {
+        historyStore.recordAnimationPlayback(count: count, at: now())
+        syncIntelligenceSummaryFromHistory()
+    }
+
     func refreshApplicationTraffic() {
         guard !isReadingApplicationTraffic else { return }
         guard shouldSampleApplicationTraffic else { return }
