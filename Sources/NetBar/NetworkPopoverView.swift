@@ -46,7 +46,7 @@ struct NetworkPopoverView: View {
                     }
 
                     TodayNetworkSummary(
-                        summary: monitor.intelligenceSummary.today,
+                        summary: monitor.intelligenceSummary,
                         appPreferences: appPreferences,
                         customCharacterStore: customCharacterStore
                     )
@@ -240,36 +240,37 @@ struct NetworkDailySummaryCard: Equatable, Identifiable {
 
 enum NetworkDailySummaryPresentation {
     static func cards(
-        for summary: NetworkDailySummary,
+        for summary: NetworkIntelligenceSummary,
         language: AppLanguage,
         customCharacters: [CustomCharacter] = []
     ) -> [NetworkDailySummaryCard] {
-        [
+        let today = summary.today
+        return [
             NetworkDailySummaryCard(
                 id: "down",
                 title: language.text("今日下载", "Today Down"),
-                value: ByteFormat.bytes(summary.downloadBytes)
+                value: ByteFormat.bytes(today.downloadBytes)
             ),
             NetworkDailySummaryCard(
                 id: "up",
                 title: language.text("今日上传", "Today Up"),
-                value: ByteFormat.bytes(summary.uploadBytes)
+                value: ByteFormat.bytes(today.uploadBytes)
             ),
             NetworkDailySummaryCard(
                 id: "peak",
                 title: language.text("今日峰值", "Peak"),
-                value: ByteFormat.speed(max(summary.peakDownloadBytesPerSecond, summary.peakUploadBytesPerSecond))
+                value: ByteFormat.speed(max(today.peakDownloadBytesPerSecond, today.peakUploadBytesPerSecond))
             ),
             NetworkDailySummaryCard(
                 id: "active",
                 title: language.text("活跃时长", "Active"),
-                value: duration(summary.activeSeconds)
+                value: duration(today.activeSeconds)
             ),
             NetworkDailySummaryCard(
                 id: "animation",
                 title: language.text("动画播放", "Anim Plays"),
                 value: CharacterPlaybackPresentation.playCountText(
-                    summary.animationPlaybackCount,
+                    today.animationPlaybackCount,
                     language: language
                 )
             ),
@@ -345,7 +346,7 @@ private struct NetworkIntelligenceStatusCard: View {
 }
 
 private struct TodayNetworkSummary: View {
-    let summary: NetworkDailySummary
+    let summary: NetworkIntelligenceSummary
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
 

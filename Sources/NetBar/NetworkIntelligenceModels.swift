@@ -214,15 +214,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
 
     var id: String { dateKey }
     var totalBytes: UInt64 { downloadBytes + uploadBytes }
-    var favoriteAnimationCharacterID: String? {
-        animationPlaybackCountsByCharacter
-            .filter { $0.value > 0 }
-            .sorted { lhs, rhs in
-                if lhs.value != rhs.value { return lhs.value > rhs.value }
-                return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
-            }
-            .first?.key
-    }
 
     init(
         dateKey: String,
@@ -316,12 +307,24 @@ struct NetworkIntelligenceSummary: Equatable {
     var recentDays: [NetworkDailySummary]
     var realtimeTopApplications: [ApplicationTrafficRate]
     var todayTopApplications: [ApplicationDailyUsage]
+    var animationPlaybackCountsByCharacter: [String: UInt64]
+
+    var favoriteAnimationCharacterID: String? {
+        animationPlaybackCountsByCharacter
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
+            }
+            .first?.key
+    }
 
     static let empty = NetworkIntelligenceSummary(
         latestEvent: nil,
         today: .empty(dateKey: "1970-01-01"),
         recentDays: [],
         realtimeTopApplications: [],
-        todayTopApplications: []
+        todayTopApplications: [],
+        animationPlaybackCountsByCharacter: [:]
     )
 }

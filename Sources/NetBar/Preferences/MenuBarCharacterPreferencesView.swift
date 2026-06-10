@@ -20,8 +20,8 @@ struct MenuBarCharacterSection: View {
         customCharacterStore.character(id: settings.catCharacter)
     }
 
-    private var todayPlaybackCounts: [String: UInt64] {
-        historyStore.summary.today.animationPlaybackCountsByCharacter
+    private var playbackCounts: [String: UInt64] {
+        historyStore.summary.animationPlaybackCountsByCharacter
     }
 
     func selectedCharacterAsset() -> CharacterAsset {
@@ -140,7 +140,7 @@ struct MenuBarCharacterSection: View {
                 AnimatedCharacterCatalog(
                     settings: settings,
                     characterPickerFrameTick: nil,
-                    playbackCounts: todayPlaybackCounts,
+                    playbackCounts: playbackCounts,
                     language: appPreferences.resolvedLanguage
                 )
 
@@ -201,8 +201,8 @@ struct MenuBarCharacterSection: View {
                         }) {
                         CharacterChoiceLabel(
                             title: character.displayName,
-                            detail: CharacterPlaybackPresentation.todayPlayCountText(
-                                todayPlaybackCounts[character.id] ?? 0,
+                            detail: CharacterPlaybackPresentation.totalPlayCountText(
+                                playbackCounts[character.id] ?? 0,
                                 language: appPreferences.resolvedLanguage
                             ),
                             isSelected: settings.catCharacter == character.id

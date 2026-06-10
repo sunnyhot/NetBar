@@ -411,7 +411,7 @@ struct AnimatedCharacterCatalog: View {
                                     character: character,
                                     isSelected: settings.catCharacter == character.id,
                                     frameIndex: frameTick,
-                                    playbackDetail: CharacterPlaybackPresentation.todayPlayCountText(
+                                    playbackDetail: CharacterPlaybackPresentation.totalPlayCountText(
                                         playbackCounts[character.id] ?? 0,
                                         language: language
                                     )

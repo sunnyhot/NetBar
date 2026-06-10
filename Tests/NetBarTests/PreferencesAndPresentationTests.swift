@@ -826,7 +826,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testNetworkDailySummaryPresentationFormatsTodayEstimate() {
-        let summary = NetworkDailySummary(
+        let today = NetworkDailySummary(
             dateKey: "2026-06-08",
             downloadBytes: 10_000_000,
             uploadBytes: 5_000_000,
@@ -835,11 +835,18 @@ final class PreferencesAndPresentationTests: XCTestCase {
             sampleCount: 20,
             activeSeconds: 80,
             animationPlaybackCount: 42,
+            topApplications: []
+        )
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: nil,
+            today: today,
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
             animationPlaybackCountsByCharacter: [
                 "cat": 11,
                 "cat_b": 31
-            ],
-            topApplications: []
+            ]
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
@@ -895,7 +902,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.animationPlaybackCount, 5)
         XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 2)
         XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["dog"], 3)
-        XCTAssertEqual(store.summary.today.favoriteAnimationCharacterID, "dog")
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["cat"], 2)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.favoriteAnimationCharacterID, "dog")
 
         currentDate = isoDate("2026-06-09T00:00:01Z")
         store.recordAnimationPlayback(count: 1, characterID: "cat", at: currentDate)
@@ -905,6 +914,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.dateKey, "2026-06-09")
         XCTAssertEqual(store.summary.today.animationPlaybackCount, 1)
         XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 1)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["cat"], 3)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.favoriteAnimationCharacterID, "cat")
     }
 
     func testNetworkHistoryStoreSumsPositiveDeltasPerInterface() throws {

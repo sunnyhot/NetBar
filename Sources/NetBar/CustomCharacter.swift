@@ -245,15 +245,15 @@ enum CharacterPlaybackPresentation {
         )
     }
 
-    static func todayPlayCountText(_ count: UInt64, language: AppLanguage) -> String {
+    static func totalPlayCountText(_ count: UInt64, language: AppLanguage) -> String {
         language.text(
-            "今日 \(count) 次",
-            count == 1 ? "Today 1 play" : "Today \(count) plays"
+            "总计 \(count) 次",
+            count == 1 ? "1 play total" : "\(count) plays total"
         )
     }
 
     static func favoriteText(
-        for summary: NetworkDailySummary,
+        for summary: NetworkIntelligenceSummary,
         customCharacters: [CustomCharacter],
         language: AppLanguage
     ) -> String {

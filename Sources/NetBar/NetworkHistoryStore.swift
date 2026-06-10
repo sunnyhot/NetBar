@@ -32,7 +32,11 @@ final class NetworkHistoryStore: ObservableObject {
             self.state = Self.normalizedState(decoded, todayKey: currentDateKey)
             shouldSaveLoadedState = true
         } else {
-            self.state = PersistedNetworkHistory(today: .empty(dateKey: currentDateKey), recentDays: [])
+            self.state = PersistedNetworkHistory(
+                today: .empty(dateKey: currentDateKey),
+                recentDays: [],
+                animationPlaybackCountsByCharacter: [:]
+            )
             shouldSaveLoadedState = false
         }
         self.summary = NetworkIntelligenceSummary(
@@ -40,7 +44,8 @@ final class NetworkHistoryStore: ObservableObject {
             today: state.today,
             recentDays: state.recentDays,
             realtimeTopApplications: [],
-            todayTopApplications: Array(state.today.topApplications.prefix(5))
+            todayTopApplications: Array(state.today.topApplications.prefix(5)),
+            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         if shouldSaveLoadedState {
             save()
@@ -129,11 +134,16 @@ final class NetworkHistoryStore: ObservableObject {
         rolloverIfNeeded(for: date)
         state.today.animationPlaybackCount += count
         state.today.animationPlaybackCountsByCharacter[characterID, default: 0] += count
+        state.animationPlaybackCountsByCharacter[characterID, default: 0] += count
         publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
     }
 
     func clear() {
-        state = PersistedNetworkHistory(today: .empty(dateKey: Self.dateKey(for: now(), calendar: calendar)), recentDays: [])
+        state = PersistedNetworkHistory(
+            today: .empty(dateKey: Self.dateKey(for: now(), calendar: calendar)),
+            recentDays: [],
+            animationPlaybackCountsByCharacter: [:]
+        )
         lastSnapshot = nil
         lastApplicationTotals = [:]
         publishAndSave(realtimeTopApplications: [])
@@ -155,7 +165,8 @@ final class NetworkHistoryStore: ObservableObject {
             today: state.today,
             recentDays: state.recentDays,
             realtimeTopApplications: realtimeTopApplications,
-            todayTopApplications: Array(state.today.topApplications.prefix(5))
+            todayTopApplications: Array(state.today.topApplications.prefix(5)),
+            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         save()
     }
@@ -232,10 +243,18 @@ final class NetworkHistoryStore: ObservableObject {
             today = .empty(dateKey: todayKey)
         }
 
-        return PersistedNetworkHistory(
+        var normalizedState = PersistedNetworkHistory(
             today: today,
-            recentDays: Array(recentDays.suffix(7))
+            recentDays: Array(recentDays.suffix(7)),
+            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
+        if normalizedState.animationPlaybackCountsByCharacter.isEmpty {
+            normalizedState.animationPlaybackCountsByCharacter = mergedAnimationPlaybackCounts(
+                today: normalizedState.today,
+                recentDays: normalizedState.recentDays
+            )
+        }
+        return normalizedState
     }
 
     private static func normalizedDay(_ day: NetworkDailySummary) -> NetworkDailySummary {
@@ -260,6 +279,17 @@ final class NetworkHistoryStore: ObservableObject {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 1970, components.month ?? 1, components.day ?? 1)
     }
+
+    private static func mergedAnimationPlaybackCounts(
+        today: NetworkDailySummary,
+        recentDays: [NetworkDailySummary]
+    ) -> [String: UInt64] {
+        ([today] + recentDays).reduce(into: [:]) { result, summary in
+            for (characterID, count) in summary.animationPlaybackCountsByCharacter {
+                result[characterID, default: 0] += count
+            }
+        }
+    }
 }
 
 private struct TrafficCounterTotals: Equatable {
@@ -270,4 +300,31 @@ private struct TrafficCounterTotals: Equatable {
 private struct PersistedNetworkHistory: Codable, Equatable {
     var today: NetworkDailySummary
     var recentDays: [NetworkDailySummary]
+    var animationPlaybackCountsByCharacter: [String: UInt64]
+
+    init(
+        today: NetworkDailySummary,
+        recentDays: [NetworkDailySummary],
+        animationPlaybackCountsByCharacter: [String: UInt64]
+    ) {
+        self.today = today
+        self.recentDays = recentDays
+        self.animationPlaybackCountsByCharacter = animationPlaybackCountsByCharacter
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        today = try container.decode(NetworkDailySummary.self, forKey: .today)
+        recentDays = try container.decode([NetworkDailySummary].self, forKey: .recentDays)
+        animationPlaybackCountsByCharacter = try container.decodeIfPresent(
+            [String: UInt64].self,
+            forKey: .animationPlaybackCountsByCharacter
+        ) ?? [:]
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case today
+        case recentDays
+        case animationPlaybackCountsByCharacter
+    }
 }
