@@ -276,7 +276,7 @@ enum NetworkDailySummaryPresentation {
             ),
             NetworkDailySummaryCard(
                 id: "favoriteCharacter",
-                title: language.text("最爱角色", "Favorite"),
+                title: language.text("最爱英雄", "Favorite Hero"),
                 value: CharacterPlaybackPresentation.favoriteText(
                     for: summary,
                     customCharacters: customCharacters,

@@ -851,7 +851,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
 
-        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active", "Anim Plays", "Favorite"])
+        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active", "Anim Plays", "Favorite Hero"])
         XCTAssertEqual(cards.map(\.id), ["down", "up", "peak", "active", "animation", "favoriteCharacter"])
         XCTAssertEqual(cards.first { $0.id == "active" }?.value, "1m")
         XCTAssertEqual(cards.first { $0.id == "animation" }?.value, "42 plays")
