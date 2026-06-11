@@ -236,6 +236,135 @@ struct NetworkDailySummaryCard: Equatable, Identifiable {
     let id: String
     let title: String
     let value: String
+    let milestone: CharacterPlaybackMilestone?
+
+    init(
+        id: String,
+        title: String,
+        value: String,
+        milestone: CharacterPlaybackMilestone? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.value = value
+        self.milestone = milestone
+    }
+}
+
+enum CharacterPlaybackMilestone: Equatable {
+    case spark
+    case volt
+    case crown
+    case legend
+
+    init?(count: UInt64) {
+        switch count {
+        case 1_000_000...:
+            self = .legend
+        case 500_000...:
+            self = .crown
+        case 100_000...:
+            self = .volt
+        case 50_000...:
+            self = .spark
+        default:
+            return nil
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .spark:
+            return "sparkles"
+        case .volt:
+            return "bolt.fill"
+        case .crown:
+            return "crown.fill"
+        case .legend:
+            return "star.circle.fill"
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .spark:
+            return .mint
+        case .volt:
+            return .cyan
+        case .crown:
+            return .orange
+        case .legend:
+            return .pink
+        }
+    }
+
+    var backgroundGradient: LinearGradient {
+        switch self {
+        case .spark:
+            return LinearGradient(
+                colors: [Color.mint.opacity(0.18), Color.green.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .volt:
+            return LinearGradient(
+                colors: [Color.cyan.opacity(0.2), Color.blue.opacity(0.1)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .crown:
+            return LinearGradient(
+                colors: [Color.orange.opacity(0.22), Color.yellow.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .legend:
+            return LinearGradient(
+                colors: [Color.pink.opacity(0.2), Color.orange.opacity(0.14), Color.mint.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    var strokeGradient: LinearGradient {
+        switch self {
+        case .spark:
+            return LinearGradient(colors: [.mint, .green], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .volt:
+            return LinearGradient(colors: [.cyan, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .crown:
+            return LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .legend:
+            return LinearGradient(colors: [.pink, .orange, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+
+    var glowRadius: CGFloat {
+        switch self {
+        case .spark:
+            return 5
+        case .volt:
+            return 7
+        case .crown:
+            return 9
+        case .legend:
+            return 11
+        }
+    }
+
+    var glowOpacity: Double {
+        switch self {
+        case .spark:
+            return 0.18
+        case .volt:
+            return 0.24
+        case .crown:
+            return 0.3
+        case .legend:
+            return 0.38
+        }
+    }
 }
 
 enum NetworkDailySummaryPresentation {
@@ -245,6 +374,8 @@ enum NetworkDailySummaryPresentation {
         customCharacters: [CustomCharacter] = []
     ) -> [NetworkDailySummaryCard] {
         let today = summary.today
+        let favoriteCount = summary.favoriteAnimationCharacterID
+            .flatMap { summary.animationPlaybackCountsByCharacter[$0] } ?? 0
         return [
             NetworkDailySummaryCard(
                 id: "down",
@@ -281,7 +412,8 @@ enum NetworkDailySummaryPresentation {
                     for: summary,
                     customCharacters: customCharacters,
                     language: language
-                )
+                ),
+                milestone: CharacterPlaybackMilestone(count: favoriteCount)
             )
         ]
     }
@@ -398,13 +530,33 @@ private struct TodayNetworkSummary: View {
 private struct DailySummaryCell: View {
     let card: NetworkDailySummaryCard
     let tone: NetBarTone
+    @State private var isMilestoneLit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(card.title)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(card.title)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                if let milestone = card.milestone {
+                    Image(systemName: milestone.symbolName)
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(milestone.strokeGradient)
+                        .shadow(
+                            color: milestone.accent.opacity(isMilestoneLit ? 0.55 : 0.2),
+                            radius: isMilestoneLit ? 4 : 1,
+                            x: 0,
+                            y: 0
+                        )
+                        .scaleEffect(isMilestoneLit ? 1.08 : 0.96)
+                        .accessibilityHidden(true)
+                }
+            }
+
             Text(card.value)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
@@ -413,10 +565,39 @@ private struct DailySummaryCell: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .netBarCard(cornerRadius: 10, padding: 9)
+        .overlay {
+            if let milestone = card.milestone {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(milestone.backgroundGradient)
+                    .opacity(isMilestoneLit ? 0.85 : 0.48)
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay(
+            summaryStroke
+        )
+        .shadow(
+            color: card.milestone?.accent.opacity(isMilestoneLit ? card.milestone?.glowOpacity ?? 0 : 0.08) ?? .clear,
+            radius: card.milestone?.glowRadius ?? 0,
+            x: 0,
+            y: 0
+        )
+        .onAppear {
+            isMilestoneLit = card.milestone != nil
+        }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: isMilestoneLit)
+    }
+
+    @ViewBuilder
+    private var summaryStroke: some View {
+        if let milestone = card.milestone {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(milestone.strokeGradient, lineWidth: 1.05)
+                .opacity(isMilestoneLit ? 0.9 : 0.48)
+        } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(tone.color.opacity(0.12), lineWidth: 0.6)
-        )
+        }
     }
 }
 

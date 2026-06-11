@@ -856,6 +856,38 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(cards.first { $0.id == "active" }?.value, "1m")
         XCTAssertEqual(cards.first { $0.id == "animation" }?.value, "42 plays")
         XCTAssertEqual(cards.first { $0.id == "favoriteCharacter" }?.value, "Cat β · 31 plays")
+        XCTAssertNil(cards.first { $0.id == "favoriteCharacter" }?.milestone)
+    }
+
+    func testCharacterPlaybackMilestoneThresholds() {
+        XCTAssertNil(CharacterPlaybackMilestone(count: 49_999))
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 50_000), .spark)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 99_999), .spark)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 100_000), .volt)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 499_999), .volt)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 500_000), .crown)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 999_999), .crown)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 1_000_000), .legend)
+    }
+
+    func testNetworkDailySummaryPresentationAppliesFavoriteMilestone() {
+        let today = NetworkDailySummary.empty(dateKey: "2026-06-11")
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: nil,
+            today: today,
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [
+                "cat": 100_000,
+                "dog": 500_000
+            ]
+        )
+
+        let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
+
+        XCTAssertEqual(cards.first { $0.id == "favoriteCharacter" }?.milestone, .crown)
+        XCTAssertNil(cards.first { $0.id == "animation" }?.milestone)
     }
 
     func testApplicationDailyUsageCodablePreservesRole() throws {
