@@ -372,6 +372,19 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(settings.isHistoryTrackingEnabled)
     }
 
+    func testNetworkIntelligenceSettingsV039Defaults() {
+        let settings = NetworkIntelligenceSettings.default
+
+        XCTAssertTrue(settings.isInsightStreamEnabled)
+        XCTAssertEqual(settings.insightRetentionLimit, 20)
+        XCTAssertTrue(settings.isInsightSuggestionEnabled)
+        XCTAssertFalse(settings.isSmartStatusBarModeEnabled)
+        XCTAssertTrue(settings.showsSmartAnomalyMarker)
+        XCTAssertTrue(settings.showsSmartTopApplication)
+        XCTAssertEqual(settings.historyRetentionDays, 30)
+        XCTAssertTrue(settings.isApplicationHistoryRankingEnabled)
+    }
+
     func testNetworkIntelligenceSettingsDecodeMissingFieldsFromDefaults() throws {
         let data = """
         {
@@ -390,6 +403,32 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(settings.isNetworkDropAlertEnabled, NetworkIntelligenceSettings.default.isNetworkDropAlertEnabled)
         XCTAssertEqual(settings.isProxyAttributionAlertEnabled, NetworkIntelligenceSettings.default.isProxyAttributionAlertEnabled)
         XCTAssertEqual(settings.isHistoryTrackingEnabled, NetworkIntelligenceSettings.default.isHistoryTrackingEnabled)
+    }
+
+    func testNetworkIntelligenceSettingsDecodesMissingV039FieldsWithDefaults() throws {
+        let legacyJSON = """
+        {
+          "hasSeenNotificationOnboarding": true,
+          "isAnomalyDetectionEnabled": false,
+          "isSystemNotificationEnabled": true,
+          "highTrafficThreshold": 26214400,
+          "isApplicationSpikeAlertEnabled": false,
+          "isNetworkDropAlertEnabled": true,
+          "isProxyAttributionAlertEnabled": false,
+          "isHistoryTrackingEnabled": true
+        }
+        """.data(using: .utf8)!
+
+        let decoded = try JSONDecoder().decode(NetworkIntelligenceSettings.self, from: legacyJSON)
+
+        XCTAssertTrue(decoded.hasSeenNotificationOnboarding)
+        XCTAssertFalse(decoded.isAnomalyDetectionEnabled)
+        XCTAssertEqual(decoded.highTrafficThreshold, .mbps25)
+        XCTAssertTrue(decoded.isInsightStreamEnabled)
+        XCTAssertEqual(decoded.insightRetentionLimit, 20)
+        XCTAssertFalse(decoded.isSmartStatusBarModeEnabled)
+        XCTAssertEqual(decoded.historyRetentionDays, 30)
+        XCTAssertTrue(decoded.isApplicationHistoryRankingEnabled)
     }
 
     func testAppPreferencesPersistNetworkIntelligenceSettings() {

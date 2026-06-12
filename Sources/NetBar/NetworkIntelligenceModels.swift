@@ -27,6 +27,14 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var isNetworkDropAlertEnabled: Bool
     var isProxyAttributionAlertEnabled: Bool
     var isHistoryTrackingEnabled: Bool
+    var isInsightStreamEnabled: Bool
+    var insightRetentionLimit: Int
+    var isInsightSuggestionEnabled: Bool
+    var isSmartStatusBarModeEnabled: Bool
+    var showsSmartAnomalyMarker: Bool
+    var showsSmartTopApplication: Bool
+    var historyRetentionDays: Int
+    var isApplicationHistoryRankingEnabled: Bool
 
     init(
         hasSeenNotificationOnboarding: Bool,
@@ -36,7 +44,15 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         isApplicationSpikeAlertEnabled: Bool,
         isNetworkDropAlertEnabled: Bool,
         isProxyAttributionAlertEnabled: Bool,
-        isHistoryTrackingEnabled: Bool
+        isHistoryTrackingEnabled: Bool,
+        isInsightStreamEnabled: Bool = true,
+        insightRetentionLimit: Int = 20,
+        isInsightSuggestionEnabled: Bool = true,
+        isSmartStatusBarModeEnabled: Bool = false,
+        showsSmartAnomalyMarker: Bool = true,
+        showsSmartTopApplication: Bool = true,
+        historyRetentionDays: Int = 30,
+        isApplicationHistoryRankingEnabled: Bool = true
     ) {
         self.hasSeenNotificationOnboarding = hasSeenNotificationOnboarding
         self.isAnomalyDetectionEnabled = isAnomalyDetectionEnabled
@@ -46,6 +62,14 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         self.isNetworkDropAlertEnabled = isNetworkDropAlertEnabled
         self.isProxyAttributionAlertEnabled = isProxyAttributionAlertEnabled
         self.isHistoryTrackingEnabled = isHistoryTrackingEnabled
+        self.isInsightStreamEnabled = isInsightStreamEnabled
+        self.insightRetentionLimit = insightRetentionLimit
+        self.isInsightSuggestionEnabled = isInsightSuggestionEnabled
+        self.isSmartStatusBarModeEnabled = isSmartStatusBarModeEnabled
+        self.showsSmartAnomalyMarker = showsSmartAnomalyMarker
+        self.showsSmartTopApplication = showsSmartTopApplication
+        self.historyRetentionDays = historyRetentionDays
+        self.isApplicationHistoryRankingEnabled = isApplicationHistoryRankingEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -84,6 +108,38 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             Bool.self,
             forKey: .isHistoryTrackingEnabled
         ) ?? defaultSettings.isHistoryTrackingEnabled
+        isInsightStreamEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isInsightStreamEnabled
+        ) ?? defaultSettings.isInsightStreamEnabled
+        insightRetentionLimit = try container.decodeIfPresent(
+            Int.self,
+            forKey: .insightRetentionLimit
+        ) ?? defaultSettings.insightRetentionLimit
+        isInsightSuggestionEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isInsightSuggestionEnabled
+        ) ?? defaultSettings.isInsightSuggestionEnabled
+        isSmartStatusBarModeEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isSmartStatusBarModeEnabled
+        ) ?? defaultSettings.isSmartStatusBarModeEnabled
+        showsSmartAnomalyMarker = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsSmartAnomalyMarker
+        ) ?? defaultSettings.showsSmartAnomalyMarker
+        showsSmartTopApplication = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .showsSmartTopApplication
+        ) ?? defaultSettings.showsSmartTopApplication
+        historyRetentionDays = try container.decodeIfPresent(
+            Int.self,
+            forKey: .historyRetentionDays
+        ) ?? defaultSettings.historyRetentionDays
+        isApplicationHistoryRankingEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isApplicationHistoryRankingEnabled
+        ) ?? defaultSettings.isApplicationHistoryRankingEnabled
     }
 
     func encode(to encoder: Encoder) throws {
@@ -97,6 +153,14 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(isNetworkDropAlertEnabled, forKey: .isNetworkDropAlertEnabled)
         try container.encode(isProxyAttributionAlertEnabled, forKey: .isProxyAttributionAlertEnabled)
         try container.encode(isHistoryTrackingEnabled, forKey: .isHistoryTrackingEnabled)
+        try container.encode(isInsightStreamEnabled, forKey: .isInsightStreamEnabled)
+        try container.encode(insightRetentionLimit, forKey: .insightRetentionLimit)
+        try container.encode(isInsightSuggestionEnabled, forKey: .isInsightSuggestionEnabled)
+        try container.encode(isSmartStatusBarModeEnabled, forKey: .isSmartStatusBarModeEnabled)
+        try container.encode(showsSmartAnomalyMarker, forKey: .showsSmartAnomalyMarker)
+        try container.encode(showsSmartTopApplication, forKey: .showsSmartTopApplication)
+        try container.encode(historyRetentionDays, forKey: .historyRetentionDays)
+        try container.encode(isApplicationHistoryRankingEnabled, forKey: .isApplicationHistoryRankingEnabled)
     }
 
     static let `default` = NetworkIntelligenceSettings(
@@ -107,7 +171,15 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         isApplicationSpikeAlertEnabled: true,
         isNetworkDropAlertEnabled: true,
         isProxyAttributionAlertEnabled: true,
-        isHistoryTrackingEnabled: true
+        isHistoryTrackingEnabled: true,
+        isInsightStreamEnabled: true,
+        insightRetentionLimit: 20,
+        isInsightSuggestionEnabled: true,
+        isSmartStatusBarModeEnabled: false,
+        showsSmartAnomalyMarker: true,
+        showsSmartTopApplication: true,
+        historyRetentionDays: 30,
+        isApplicationHistoryRankingEnabled: true
     )
 
     private enum CodingKeys: String, CodingKey {
@@ -119,6 +191,14 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case isNetworkDropAlertEnabled
         case isProxyAttributionAlertEnabled
         case isHistoryTrackingEnabled
+        case isInsightStreamEnabled
+        case insightRetentionLimit
+        case isInsightSuggestionEnabled
+        case isSmartStatusBarModeEnabled
+        case showsSmartAnomalyMarker
+        case showsSmartTopApplication
+        case historyRetentionDays
+        case isApplicationHistoryRankingEnabled
     }
 }
 
