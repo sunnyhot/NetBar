@@ -208,10 +208,69 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
     var peakUploadBytesPerSecond: Double
     var sampleCount: Int
     var activeSeconds: TimeInterval
+    var animationPlaybackCount: UInt64
+    var animationPlaybackCountsByCharacter: [String: UInt64]
     var topApplications: [ApplicationDailyUsage]
 
     var id: String { dateKey }
     var totalBytes: UInt64 { downloadBytes + uploadBytes }
+
+    init(
+        dateKey: String,
+        downloadBytes: UInt64,
+        uploadBytes: UInt64,
+        peakDownloadBytesPerSecond: Double,
+        peakUploadBytesPerSecond: Double,
+        sampleCount: Int,
+        activeSeconds: TimeInterval,
+        animationPlaybackCount: UInt64 = 0,
+        animationPlaybackCountsByCharacter: [String: UInt64] = [:],
+        topApplications: [ApplicationDailyUsage]
+    ) {
+        self.dateKey = dateKey
+        self.downloadBytes = downloadBytes
+        self.uploadBytes = uploadBytes
+        self.peakDownloadBytesPerSecond = peakDownloadBytesPerSecond
+        self.peakUploadBytesPerSecond = peakUploadBytesPerSecond
+        self.sampleCount = sampleCount
+        self.activeSeconds = activeSeconds
+        self.animationPlaybackCount = animationPlaybackCount
+        self.animationPlaybackCountsByCharacter = animationPlaybackCountsByCharacter
+        self.topApplications = topApplications
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+
+        dateKey = try container.decode(String.self, forKey: .dateKey)
+        downloadBytes = try container.decode(UInt64.self, forKey: .downloadBytes)
+        uploadBytes = try container.decode(UInt64.self, forKey: .uploadBytes)
+        peakDownloadBytesPerSecond = try container.decode(Double.self, forKey: .peakDownloadBytesPerSecond)
+        peakUploadBytesPerSecond = try container.decode(Double.self, forKey: .peakUploadBytesPerSecond)
+        sampleCount = try container.decode(Int.self, forKey: .sampleCount)
+        activeSeconds = try container.decode(TimeInterval.self, forKey: .activeSeconds)
+        animationPlaybackCount = try container.decodeIfPresent(UInt64.self, forKey: .animationPlaybackCount) ?? 0
+        animationPlaybackCountsByCharacter = try container.decodeIfPresent(
+            [String: UInt64].self,
+            forKey: .animationPlaybackCountsByCharacter
+        ) ?? [:]
+        topApplications = try container.decode([ApplicationDailyUsage].self, forKey: .topApplications)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+
+        try container.encode(dateKey, forKey: .dateKey)
+        try container.encode(downloadBytes, forKey: .downloadBytes)
+        try container.encode(uploadBytes, forKey: .uploadBytes)
+        try container.encode(peakDownloadBytesPerSecond, forKey: .peakDownloadBytesPerSecond)
+        try container.encode(peakUploadBytesPerSecond, forKey: .peakUploadBytesPerSecond)
+        try container.encode(sampleCount, forKey: .sampleCount)
+        try container.encode(activeSeconds, forKey: .activeSeconds)
+        try container.encode(animationPlaybackCount, forKey: .animationPlaybackCount)
+        try container.encode(animationPlaybackCountsByCharacter, forKey: .animationPlaybackCountsByCharacter)
+        try container.encode(topApplications, forKey: .topApplications)
+    }
 
     static func empty(dateKey: String) -> NetworkDailySummary {
         NetworkDailySummary(
@@ -222,8 +281,23 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
             peakUploadBytesPerSecond: 0,
             sampleCount: 0,
             activeSeconds: 0,
+            animationPlaybackCount: 0,
+            animationPlaybackCountsByCharacter: [:],
             topApplications: []
         )
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case dateKey
+        case downloadBytes
+        case uploadBytes
+        case peakDownloadBytesPerSecond
+        case peakUploadBytesPerSecond
+        case sampleCount
+        case activeSeconds
+        case animationPlaybackCount
+        case animationPlaybackCountsByCharacter
+        case topApplications
     }
 }
 
@@ -233,12 +307,24 @@ struct NetworkIntelligenceSummary: Equatable {
     var recentDays: [NetworkDailySummary]
     var realtimeTopApplications: [ApplicationTrafficRate]
     var todayTopApplications: [ApplicationDailyUsage]
+    var animationPlaybackCountsByCharacter: [String: UInt64]
+
+    var favoriteAnimationCharacterID: String? {
+        animationPlaybackCountsByCharacter
+            .filter { $0.value > 0 }
+            .sorted { lhs, rhs in
+                if lhs.value != rhs.value { return lhs.value > rhs.value }
+                return lhs.key.localizedStandardCompare(rhs.key) == .orderedAscending
+            }
+            .first?.key
+    }
 
     static let empty = NetworkIntelligenceSummary(
         latestEvent: nil,
         today: .empty(dateKey: "1970-01-01"),
         recentDays: [],
         realtimeTopApplications: [],
-        todayTopApplications: []
+        todayTopApplications: [],
+        animationPlaybackCountsByCharacter: [:]
     )
 }

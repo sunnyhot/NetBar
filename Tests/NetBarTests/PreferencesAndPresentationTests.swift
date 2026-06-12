@@ -826,7 +826,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testNetworkDailySummaryPresentationFormatsTodayEstimate() {
-        let summary = NetworkDailySummary(
+        let today = NetworkDailySummary(
             dateKey: "2026-06-08",
             downloadBytes: 10_000_000,
             uploadBytes: 5_000_000,
@@ -834,14 +834,60 @@ final class PreferencesAndPresentationTests: XCTestCase {
             peakUploadBytesPerSecond: 1_000_000,
             sampleCount: 20,
             activeSeconds: 80,
+            animationPlaybackCount: 42,
             topApplications: []
+        )
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: nil,
+            today: today,
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [
+                "cat": 11,
+                "cat_b": 31
+            ]
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
 
-        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active"])
-        XCTAssertEqual(cards.map(\.id), ["down", "up", "peak", "active"])
-        XCTAssertEqual(cards.last?.value, "1m")
+        XCTAssertEqual(cards.map(\.title), ["Today Down", "Today Up", "Peak", "Active", "Anim Plays", "Favorite Hero"])
+        XCTAssertEqual(cards.map(\.id), ["down", "up", "peak", "active", "animation", "favoriteCharacter"])
+        XCTAssertEqual(cards.first { $0.id == "active" }?.value, "1m")
+        XCTAssertEqual(cards.first { $0.id == "animation" }?.value, "42 plays")
+        XCTAssertEqual(cards.first { $0.id == "favoriteCharacter" }?.value, "Cat β · 31 plays")
+        XCTAssertNil(cards.first { $0.id == "favoriteCharacter" }?.milestone)
+    }
+
+    func testCharacterPlaybackMilestoneThresholds() {
+        XCTAssertNil(CharacterPlaybackMilestone(count: 49_999))
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 50_000), .spark)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 99_999), .spark)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 100_000), .volt)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 499_999), .volt)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 500_000), .crown)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 999_999), .crown)
+        XCTAssertEqual(CharacterPlaybackMilestone(count: 1_000_000), .legend)
+    }
+
+    func testNetworkDailySummaryPresentationAppliesFavoriteMilestone() {
+        let today = NetworkDailySummary.empty(dateKey: "2026-06-11")
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: nil,
+            today: today,
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [
+                "cat": 100_000,
+                "dog": 500_000
+            ]
+        )
+
+        let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
+
+        XCTAssertEqual(cards.first { $0.id == "favoriteCharacter" }?.milestone, .crown)
+        XCTAssertNil(cards.first { $0.id == "animation" }?.milestone)
     }
 
     func testApplicationDailyUsageCodablePreservesRole() throws {
@@ -875,6 +921,34 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.uploadBytes, 700)
         XCTAssertEqual(store.summary.today.peakDownloadBytesPerSecond, 300)
         XCTAssertEqual(store.summary.today.peakUploadBytesPerSecond, 200)
+    }
+
+    func testNetworkHistoryStoreAccumulatesAnimationPlaybacksForToday() throws {
+        let root = try temporaryDirectory()
+        var currentDate = isoDate("2026-06-08T12:00:00Z")
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
+
+        store.recordAnimationPlayback(count: 2, characterID: "cat", at: currentDate)
+        store.recordAnimationPlayback(count: 3, characterID: "dog", at: currentDate)
+
+        XCTAssertEqual(store.summary.today.animationPlaybackCount, 5)
+        XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 2)
+        XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["cat"], 2)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.favoriteAnimationCharacterID, "dog")
+
+        currentDate = isoDate("2026-06-09T00:00:01Z")
+        store.recordAnimationPlayback(count: 1, characterID: "cat", at: currentDate)
+
+        XCTAssertEqual(store.summary.recentDays.last?.animationPlaybackCount, 5)
+        XCTAssertEqual(store.summary.recentDays.last?.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.today.dateKey, "2026-06-09")
+        XCTAssertEqual(store.summary.today.animationPlaybackCount, 1)
+        XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 1)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["cat"], 3)
+        XCTAssertEqual(store.summary.animationPlaybackCountsByCharacter["dog"], 3)
+        XCTAssertEqual(store.summary.favoriteAnimationCharacterID, "cat")
     }
 
     func testNetworkHistoryStoreSumsPositiveDeltasPerInterface() throws {
@@ -1342,6 +1416,18 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(InterfacePresentation.iconName(for: "utun4"), "antenna.radiowaves.left.and.right")
         XCTAssertEqual(InterfacePresentation.iconName(for: "awdl0"), "antenna.radiowaves.left.and.right")
         XCTAssertEqual(InterfacePresentation.iconName(for: "ipsec0"), "network")
+    }
+
+    func testInterfaceRateHasTrafficOnlyWhenCurrentSpeedIsNonZero() {
+        XCTAssertFalse(
+            interfaceRate(id: "en0", download: 0, upload: 0).hasTraffic
+        )
+        XCTAssertTrue(
+            interfaceRate(id: "en0", download: 1, upload: 0).hasTraffic
+        )
+        XCTAssertTrue(
+            interfaceRate(id: "en0", download: 0, upload: 1).hasTraffic
+        )
     }
 
     func testGooglyEyesCharacterIsAvailableAsSpecialMenuBarCharacter() {
@@ -2072,6 +2158,37 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(frames, [1, 2, 0])
     }
 
+    func testRunCatAnimationReportsCompletedPlaybackWhenLoopingToFirstFrame() {
+        let character = CustomCharacter(
+            id: "custom.loop",
+            displayName: "Loop",
+            sourceKind: .frameSequence,
+            frameCount: 3,
+            frameWidth: 18,
+            frameHeight: 18,
+            motionStyle: nil,
+            pixelationScale: .off,
+            createdAt: Date(timeIntervalSince1970: 1),
+            updatedAt: Date(timeIntervalSince1970: 1)
+        )
+        var completedPlaybackCount = 0
+        let animation = RunCatAnimation(
+            character: CharacterAsset(custom: character),
+            onFrameChange: { _ in }
+        )
+        animation.onPlaybackComplete = { characterID in
+            XCTAssertEqual(characterID, "custom.loop")
+            completedPlaybackCount += 1
+        }
+
+        animation.advanceFrameForTesting()
+        animation.advanceFrameForTesting()
+        XCTAssertEqual(completedPlaybackCount, 0)
+
+        animation.advanceFrameForTesting()
+        XCTAssertEqual(completedPlaybackCount, 1)
+    }
+
     func testPreviewFrameTimelineAnimatesNonCatBuiltInCharacters() {
         var timeline = CharacterPreviewFrameTimeline()
         let cheetah = CharacterAsset(builtIn: RunCatCharacter.byId("cheetah"))
@@ -2741,6 +2858,21 @@ final class PreferencesAndPresentationTests: XCTestCase {
             uploadBytesPerSecond: 0,
             totalReceivedBytes: received,
             totalSentBytes: sent,
+            receivedPackets: 0,
+            sentPackets: 0,
+            isPrimary: id == "en0"
+        )
+    }
+
+    private func interfaceRate(id: String, download: Double, upload: Double) -> InterfaceRate {
+        InterfaceRate(
+            id: id,
+            name: id,
+            displayName: id,
+            downloadBytesPerSecond: download,
+            uploadBytesPerSecond: upload,
+            totalReceivedBytes: 0,
+            totalSentBytes: 0,
             receivedPackets: 0,
             sentPackets: 0,
             isPrimary: id == "en0"

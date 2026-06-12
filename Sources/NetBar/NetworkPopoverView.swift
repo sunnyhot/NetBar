@@ -3,6 +3,7 @@ import SwiftUI
 struct NetworkPopoverView: View {
     @ObservedObject var monitor: NetworkMonitor
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
     let openPreferences: () -> Void
     @State private var appSearchText = ""
     @State private var historyWindow: TrafficHistoryWindow = .seconds90
@@ -45,8 +46,9 @@ struct NetworkPopoverView: View {
                     }
 
                     TodayNetworkSummary(
-                        summary: monitor.intelligenceSummary.today,
-                        appPreferences: appPreferences
+                        summary: monitor.intelligenceSummary,
+                        appPreferences: appPreferences,
+                        customCharacterStore: customCharacterStore
                     )
 
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
@@ -234,30 +236,184 @@ struct NetworkDailySummaryCard: Equatable, Identifiable {
     let id: String
     let title: String
     let value: String
+    let milestone: CharacterPlaybackMilestone?
+
+    init(
+        id: String,
+        title: String,
+        value: String,
+        milestone: CharacterPlaybackMilestone? = nil
+    ) {
+        self.id = id
+        self.title = title
+        self.value = value
+        self.milestone = milestone
+    }
+}
+
+enum CharacterPlaybackMilestone: Equatable {
+    case spark
+    case volt
+    case crown
+    case legend
+
+    init?(count: UInt64) {
+        switch count {
+        case 1_000_000...:
+            self = .legend
+        case 500_000...:
+            self = .crown
+        case 100_000...:
+            self = .volt
+        case 50_000...:
+            self = .spark
+        default:
+            return nil
+        }
+    }
+
+    var symbolName: String {
+        switch self {
+        case .spark:
+            return "sparkles"
+        case .volt:
+            return "bolt.fill"
+        case .crown:
+            return "crown.fill"
+        case .legend:
+            return "star.circle.fill"
+        }
+    }
+
+    var accent: Color {
+        switch self {
+        case .spark:
+            return .mint
+        case .volt:
+            return .cyan
+        case .crown:
+            return .orange
+        case .legend:
+            return .pink
+        }
+    }
+
+    var backgroundGradient: LinearGradient {
+        switch self {
+        case .spark:
+            return LinearGradient(
+                colors: [Color.mint.opacity(0.18), Color.green.opacity(0.08)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .volt:
+            return LinearGradient(
+                colors: [Color.cyan.opacity(0.2), Color.blue.opacity(0.1)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .crown:
+            return LinearGradient(
+                colors: [Color.orange.opacity(0.22), Color.yellow.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        case .legend:
+            return LinearGradient(
+                colors: [Color.pink.opacity(0.2), Color.orange.opacity(0.14), Color.mint.opacity(0.12)],
+                startPoint: .topLeading,
+                endPoint: .bottomTrailing
+            )
+        }
+    }
+
+    var strokeGradient: LinearGradient {
+        switch self {
+        case .spark:
+            return LinearGradient(colors: [.mint, .green], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .volt:
+            return LinearGradient(colors: [.cyan, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .crown:
+            return LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
+        case .legend:
+            return LinearGradient(colors: [.pink, .orange, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
+        }
+    }
+
+    var glowRadius: CGFloat {
+        switch self {
+        case .spark:
+            return 5
+        case .volt:
+            return 7
+        case .crown:
+            return 9
+        case .legend:
+            return 11
+        }
+    }
+
+    var glowOpacity: Double {
+        switch self {
+        case .spark:
+            return 0.18
+        case .volt:
+            return 0.24
+        case .crown:
+            return 0.3
+        case .legend:
+            return 0.38
+        }
+    }
 }
 
 enum NetworkDailySummaryPresentation {
-    static func cards(for summary: NetworkDailySummary, language: AppLanguage) -> [NetworkDailySummaryCard] {
-        [
+    static func cards(
+        for summary: NetworkIntelligenceSummary,
+        language: AppLanguage,
+        customCharacters: [CustomCharacter] = []
+    ) -> [NetworkDailySummaryCard] {
+        let today = summary.today
+        let favoriteCount = summary.favoriteAnimationCharacterID
+            .flatMap { summary.animationPlaybackCountsByCharacter[$0] } ?? 0
+        return [
             NetworkDailySummaryCard(
                 id: "down",
                 title: language.text("今日下载", "Today Down"),
-                value: ByteFormat.bytes(summary.downloadBytes)
+                value: ByteFormat.bytes(today.downloadBytes)
             ),
             NetworkDailySummaryCard(
                 id: "up",
                 title: language.text("今日上传", "Today Up"),
-                value: ByteFormat.bytes(summary.uploadBytes)
+                value: ByteFormat.bytes(today.uploadBytes)
             ),
             NetworkDailySummaryCard(
                 id: "peak",
                 title: language.text("今日峰值", "Peak"),
-                value: ByteFormat.speed(max(summary.peakDownloadBytesPerSecond, summary.peakUploadBytesPerSecond))
+                value: ByteFormat.speed(max(today.peakDownloadBytesPerSecond, today.peakUploadBytesPerSecond))
             ),
             NetworkDailySummaryCard(
                 id: "active",
                 title: language.text("活跃时长", "Active"),
-                value: duration(summary.activeSeconds)
+                value: duration(today.activeSeconds)
+            ),
+            NetworkDailySummaryCard(
+                id: "animation",
+                title: language.text("动画播放", "Anim Plays"),
+                value: CharacterPlaybackPresentation.playCountText(
+                    today.animationPlaybackCount,
+                    language: language
+                )
+            ),
+            NetworkDailySummaryCard(
+                id: "favoriteCharacter",
+                title: language.text("最爱英雄", "Favorite Hero"),
+                value: CharacterPlaybackPresentation.favoriteText(
+                    for: summary,
+                    customCharacters: customCharacters,
+                    language: language
+                ),
+                milestone: CharacterPlaybackMilestone(count: favoriteCount)
             )
         ]
     }
@@ -322,15 +478,23 @@ private struct NetworkIntelligenceStatusCard: View {
 }
 
 private struct TodayNetworkSummary: View {
-    let summary: NetworkDailySummary
+    let summary: NetworkIntelligenceSummary
     @ObservedObject var appPreferences: AppPreferences
+    @ObservedObject var customCharacterStore: CustomCharacterStore
 
     private var cards: [NetworkDailySummaryCard] {
         NetworkDailySummaryPresentation.cards(
             for: summary,
-            language: appPreferences.resolvedLanguage
+            language: appPreferences.resolvedLanguage,
+            customCharacters: customCharacterStore.characters
         )
     }
+
+    private let columns = [
+        GridItem(.flexible(minimum: 96), spacing: 8),
+        GridItem(.flexible(minimum: 96), spacing: 8),
+        GridItem(.flexible(minimum: 96), spacing: 8)
+    ]
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -339,7 +503,7 @@ private struct TodayNetworkSummary: View {
                 subtitle: appPreferences.text("本地累计估算", "Local estimate")
             )
 
-            HStack(spacing: 8) {
+            LazyVGrid(columns: columns, spacing: 8) {
                 ForEach(cards) { card in
                     DailySummaryCell(card: card, tone: tone(for: card.id))
                 }
@@ -355,6 +519,8 @@ private struct TodayNetworkSummary: View {
             return .upload
         case "peak":
             return .warning
+        case "favoriteCharacter":
+            return .success
         default:
             return .neutral
         }
@@ -364,13 +530,33 @@ private struct TodayNetworkSummary: View {
 private struct DailySummaryCell: View {
     let card: NetworkDailySummaryCard
     let tone: NetBarTone
+    @State private var isMilestoneLit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text(card.title)
-                .font(.system(size: 9, weight: .bold))
-                .foregroundStyle(.tertiary)
-                .lineLimit(1)
+            HStack(spacing: 4) {
+                Text(card.title)
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+
+                Spacer(minLength: 4)
+
+                if let milestone = card.milestone {
+                    Image(systemName: milestone.symbolName)
+                        .font(.system(size: 10, weight: .heavy))
+                        .foregroundStyle(milestone.strokeGradient)
+                        .shadow(
+                            color: milestone.accent.opacity(isMilestoneLit ? 0.55 : 0.2),
+                            radius: isMilestoneLit ? 4 : 1,
+                            x: 0,
+                            y: 0
+                        )
+                        .scaleEffect(isMilestoneLit ? 1.08 : 0.96)
+                        .accessibilityHidden(true)
+                }
+            }
+
             Text(card.value)
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .foregroundStyle(.primary)
@@ -379,10 +565,39 @@ private struct DailySummaryCell: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .netBarCard(cornerRadius: 10, padding: 9)
+        .overlay {
+            if let milestone = card.milestone {
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(milestone.backgroundGradient)
+                    .opacity(isMilestoneLit ? 0.85 : 0.48)
+                    .allowsHitTesting(false)
+            }
+        }
         .overlay(
+            summaryStroke
+        )
+        .shadow(
+            color: card.milestone?.accent.opacity(isMilestoneLit ? card.milestone?.glowOpacity ?? 0 : 0.08) ?? .clear,
+            radius: card.milestone?.glowRadius ?? 0,
+            x: 0,
+            y: 0
+        )
+        .onAppear {
+            isMilestoneLit = card.milestone != nil
+        }
+        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: isMilestoneLit)
+    }
+
+    @ViewBuilder
+    private var summaryStroke: some View {
+        if let milestone = card.milestone {
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .strokeBorder(milestone.strokeGradient, lineWidth: 1.05)
+                .opacity(isMilestoneLit ? 0.9 : 0.48)
+        } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(tone.color.opacity(0.12), lineWidth: 0.6)
-        )
+        }
     }
 }
 
@@ -1135,6 +1350,10 @@ private struct InterfaceList: View {
     @ObservedObject var appPreferences: AppPreferences
     let refresh: () -> Void
 
+    private var activeInterfaces: [InterfaceRate] {
+        interfaces.filter(\.hasTraffic)
+    }
+
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             NetBarSectionHeader(
@@ -1142,11 +1361,15 @@ private struct InterfaceList: View {
                 subtitle: appPreferences.text("活动接口与累计包量", "Active interfaces and cumulative packets")
             )
 
-            if interfaces.isEmpty {
-                EmptyInterfacesView(appPreferences: appPreferences, refresh: refresh)
+            if activeInterfaces.isEmpty {
+                EmptyInterfacesView(
+                    hasKnownInterfaces: !interfaces.isEmpty,
+                    appPreferences: appPreferences,
+                    refresh: refresh
+                )
             } else {
                 VStack(spacing: 6) {
-                    ForEach(interfaces) { item in
+                    ForEach(activeInterfaces) { item in
                         InterfaceRow(interface: item)
                     }
                 }
@@ -1156,6 +1379,7 @@ private struct InterfaceList: View {
 }
 
 private struct EmptyInterfacesView: View {
+    let hasKnownInterfaces: Bool
     @ObservedObject var appPreferences: AppPreferences
     let refresh: () -> Void
 
@@ -1164,9 +1388,9 @@ private struct EmptyInterfacesView: View {
             Image(systemName: "network.slash")
                 .font(.system(size: 24, weight: .medium))
                 .foregroundStyle(.tertiary)
-            Text(appPreferences.text("暂无网络接口", "No Network Interfaces"))
+            Text(title)
                 .font(.system(size: 12, weight: .bold))
-            Text(appPreferences.text("请确认网络连接可用。", "Check that a network connection is available."))
+            Text(message)
                 .font(.system(size: 11))
                 .foregroundStyle(.secondary)
             Button { refresh() } label: {
@@ -1176,6 +1400,18 @@ private struct EmptyInterfacesView: View {
         }
         .frame(maxWidth: .infinity, minHeight: 120)
         .netBarCard(cornerRadius: 12, padding: 12)
+    }
+
+    private var title: String {
+        hasKnownInterfaces
+            ? appPreferences.text("暂无活动接口", "No Active Interfaces")
+            : appPreferences.text("暂无网络接口", "No Network Interfaces")
+    }
+
+    private var message: String {
+        hasKnownInterfaces
+            ? appPreferences.text("检测到流量后会自动显示。", "Interfaces appear when traffic is detected.")
+            : appPreferences.text("请确认网络连接可用。", "Check that a network connection is available.")
     }
 }
 

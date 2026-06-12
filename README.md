@@ -179,7 +179,7 @@ swift run NetBar
 swift test
 ```
 
-## 打包 Release
+## 打包 Release（本地验证）
 
 执行：
 
@@ -193,6 +193,52 @@ swift test
 dist/NetBar.app.zip
 dist/NetBar.app.zip.sha256
 ```
+
+## 发布流程
+
+正式发布由 GitHub Actions 自动完成，配置在 `.github/workflows/release.yml`。推送 `v*` tag 后，Actions 会根据 tag 写入 App 版本号、打包 `NetBar.app.zip`，并创建 GitHub Release。
+
+NetBar 的自动更新优先读取 Release 资产 `latest.json`，失败时回退 GitHub Releases API。Release 里必须包含固定资产名 `NetBar.app.zip`，这个名字来自 `Resources/Info.plist` 的 `NBUpdateAssetName`。
+
+1. 确认要发布的代码已经提交，并同步到最新 `main`。
+
+```bash
+git status --short --branch
+git pull --rebase origin main
+swift test
+./Scripts/package-release.sh
+```
+
+2. 选择新版本号并推送 tag。tag 必须以 `v` 开头；Actions 会把 `v0.32.4` 转成 App 版本号 `0.32.4`，写入 `CFBundleShortVersionString`，并用 Actions run number 写入 `CFBundleVersion`。
+
+```bash
+VERSION=0.32.4
+TAG="v$VERSION"
+git tag -a "$TAG" -m "$TAG"
+git push origin main "$TAG"
+```
+
+3. 等待 GitHub Actions 完成 `Build & Release` workflow。
+
+```bash
+git ls-remote origin main "refs/tags/$TAG"
+```
+
+打开仓库的 Actions 页面查看构建状态。workflow 成功后应完成这些动作：
+
+- 将 tag 版本写入 `Resources/Info.plist`
+- 构建并验证 `dist/NetBar.app.zip`
+- 上传 `NetBar.app.zip`、`NetBar.app.zip.sha256` 和 `latest.json`
+- 创建 GitHub Release：`https://github.com/sunnyhot/NetBar/releases/tag/$TAG`
+
+4. 验证 Release 和更新入口。
+
+```bash
+curl -I -L "https://github.com/sunnyhot/NetBar/releases/download/$TAG/NetBar.app.zip"
+curl -Ls -o /dev/null -w '%{url_effective}\n' "https://github.com/sunnyhot/NetBar/releases/latest"
+```
+
+确认 zip 地址返回 `200` 并带有合理的 `content-length`，`releases/latest` 最终跳转到新 tag。如果当前 App 已经是同版本，检查更新会正常显示没有更新。
 
 当前构建脚本会使用 ad-hoc codesign 进行本地签名。正式分发时建议使用开发者证书签名并进行 Apple notarization，以减少用户首次打开时的 Gatekeeper 提示。
 

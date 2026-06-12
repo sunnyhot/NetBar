@@ -211,4 +211,62 @@ struct CharacterAsset: Equatable, Identifiable {
             return false
         }
     }
+
+    func displayName(language: AppLanguage) -> String {
+        switch source {
+        case .builtIn(let character):
+            return character.displayName(language: language)
+        case .custom(let character):
+            return character.displayName
+        }
+    }
+}
+
+enum CharacterPlaybackPresentation {
+    static func displayName(
+        for characterID: String,
+        customCharacters: [CustomCharacter],
+        language: AppLanguage
+    ) -> String {
+        if characterID.hasPrefix("custom.") {
+            return customCharacters.first { $0.id == characterID }?.displayName
+                ?? language.text("已删除角色", "Deleted Character")
+        }
+
+        return RunCatCharacter.allCharacters.first { $0.id == characterID }?
+            .displayName(language: language)
+            ?? characterID
+    }
+
+    static func playCountText(_ count: UInt64, language: AppLanguage) -> String {
+        language.text(
+            "\(count) 次",
+            count == 1 ? "1 play" : "\(count) plays"
+        )
+    }
+
+    static func totalPlayCountText(_ count: UInt64, language: AppLanguage) -> String {
+        language.text(
+            "总计 \(count) 次",
+            count == 1 ? "1 play total" : "\(count) plays total"
+        )
+    }
+
+    static func favoriteText(
+        for summary: NetworkIntelligenceSummary,
+        customCharacters: [CustomCharacter],
+        language: AppLanguage
+    ) -> String {
+        guard let characterID = summary.favoriteAnimationCharacterID else {
+            return language.text("暂无", "None")
+        }
+
+        let name = displayName(
+            for: characterID,
+            customCharacters: customCharacters,
+            language: language
+        )
+        let count = summary.animationPlaybackCountsByCharacter[characterID] ?? 0
+        return "\(name) · \(playCountText(count, language: language))"
+    }
 }

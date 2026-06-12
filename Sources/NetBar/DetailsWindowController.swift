@@ -96,6 +96,7 @@ final class DetailsWindowOutsideClickMonitor {
 final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let monitor: NetworkMonitor
     private let appPreferences: AppPreferences
+    private let customCharacterStore: CustomCharacterStore
     private let openPreferences: () -> Void
     private var panel: NSPanel?
     private let defaultWindowSize = NSSize(width: 440, height: 720)
@@ -119,10 +120,12 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     init(
         monitor: NetworkMonitor,
         appPreferences: AppPreferences,
+        customCharacterStore: CustomCharacterStore,
         openPreferences: @escaping () -> Void
     ) {
         self.monitor = monitor
         self.appPreferences = appPreferences
+        self.customCharacterStore = customCharacterStore
         self.openPreferences = openPreferences
     }
 
@@ -188,6 +191,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             rootView: NetworkPopoverView(
                 monitor: monitor,
                 appPreferences: appPreferences,
+                customCharacterStore: customCharacterStore,
                 openPreferences: openPreferences
             )
         )

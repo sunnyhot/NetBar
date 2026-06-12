@@ -385,8 +385,43 @@ final class AppUpdater: ObservableObject {
             statusMessage = "正在检查更新..."
         }
 
+        // 1. Try to get latest tag via redirect first to bypass rate limits
+        let latestTag = await fetchLatestTagViaRedirect()
+        if let latestTag = latestTag {
+            if !version(latestTag, isNewerThan: currentVersion) {
+                lastCheckedAt = Date()
+                availableUpdate = nil
+                statusMessage = "当前已是最新版本 \(currentVersion)"
+                isChecking = false
+                return
+            }
+        }
+
+        // 2. If there is a newer version (or redirect check failed), fetch the full release details
         do {
-            let release = try await fetchLatestRelease()
+            let release: GitHubRelease
+            do {
+                release = try await fetchLatestRelease()
+            } catch {
+                // If API fails (e.g. rate limit), but we have a newer tag, construct a fallback release
+                if let latestTag = latestTag {
+                    let fallbackURL = URL(string: "https://github.com/\(repository)/releases/download/\(latestTag)/\(assetName)")!
+                    let asset = GitHubReleaseAsset(name: assetName, size: 0, browserDownloadURL: fallbackURL)
+                    release = GitHubRelease(
+                        tagName: latestTag,
+                        name: latestTag,
+                        body: appPreferences.text(
+                            "新版本已发布（因 GitHub API 限制，未能加载更新日志）",
+                            "New version released (Changelog unavailable due to GitHub API rate limits)"
+                        ),
+                        htmlURL: URL(string: "https://github.com/\(repository)/releases/tag/\(latestTag)")!,
+                        assets: [asset]
+                    )
+                } else {
+                    throw error
+                }
+            }
+
             lastCheckedAt = Date()
 
             guard version(release.tagName, isNewerThan: currentVersion) else {
@@ -521,6 +556,29 @@ final class AppUpdater: ObservableObject {
     }
 
     // MARK: - Network
+
+    private func fetchLatestTagViaRedirect() async -> String? {
+        guard let url = URL(string: "https://github.com/\(repository)/releases/latest") else {
+            return nil
+        }
+        var request = URLRequest(url: url)
+        request.httpMethod = "HEAD"
+        request.setValue("NetBar \(currentVersion)", forHTTPHeaderField: "User-Agent")
+        
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            if let httpResponse = response as? HTTPURLResponse,
+               let finalURL = httpResponse.url {
+                let tag = finalURL.lastPathComponent
+                if !tag.isEmpty && tag != "latest" {
+                    return tag
+                }
+            }
+        } catch {
+            // Ignore error
+        }
+        return nil
+    }
 
     private func fetchLatestRelease() async throws -> GitHubRelease {
         try await releaseFetcher.fetchLatestRelease()
