@@ -854,6 +854,7 @@ struct StatusBarPresentation: Equatable {
 
 struct StatusBarRenderSignature: Equatable {
     let presentation: StatusBarPresentation
+    let smartContext: SmartStatusBarContext
     let fontSize: Double
     let itemWidth: Double
     let usesAutomaticWidth: Bool
@@ -986,13 +987,15 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore? = nil,
-        catFrameIndex: Int? = nil
+        catFrameIndex: Int? = nil,
+        smartContext: SmartStatusBarContext = .manual
     ) -> StatusBarPresentation {
         let layout = layout(
             snapshot: snapshot,
             settings: settings,
             customCharacterStore: customCharacterStore,
-            catFrameIndex: catFrameIndex
+            catFrameIndex: catFrameIndex,
+            smartContext: smartContext
         )
         return StatusBarPresentation(
             kind: .retinaImage,
@@ -1007,15 +1010,18 @@ enum StatusBarDisplayRenderer {
         appearanceName: String,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        googlyEyesState: GooglyEyesRenderState? = nil
+        googlyEyesState: GooglyEyesRenderState? = nil,
+        smartContext: SmartStatusBarContext = .manual
     ) -> StatusBarRenderSignature {
         StatusBarRenderSignature(
             presentation: presentation(
                 snapshot: snapshot,
                 settings: settings,
                 customCharacterStore: customCharacterStore,
-                catFrameIndex: catFrameIndex
+                catFrameIndex: catFrameIndex,
+                smartContext: smartContext
             ),
+            smartContext: smartContext,
             fontSize: settings.fontSize,
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
@@ -1059,7 +1065,8 @@ enum StatusBarDisplayRenderer {
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        googlyEyesState: GooglyEyesRenderState? = nil
+        googlyEyesState: GooglyEyesRenderState? = nil,
+        smartContext: SmartStatusBarContext = .manual
     ) -> NSImage {
         image(
             snapshot: snapshot,
@@ -1067,7 +1074,8 @@ enum StatusBarDisplayRenderer {
             scale: NSScreen.main?.backingScaleFactor ?? 2,
             customCharacterStore: customCharacterStore,
             catFrameIndex: catFrameIndex,
-            googlyEyesState: googlyEyesState
+            googlyEyesState: googlyEyesState,
+            smartContext: smartContext
         )
     }
 
@@ -1077,13 +1085,15 @@ enum StatusBarDisplayRenderer {
         scale: CGFloat,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        googlyEyesState: GooglyEyesRenderState? = nil
+        googlyEyesState: GooglyEyesRenderState? = nil,
+        smartContext: SmartStatusBarContext = .manual
     ) -> NSImage {
         let layout = layout(
             snapshot: snapshot,
             settings: settings,
             customCharacterStore: customCharacterStore,
-            catFrameIndex: catFrameIndex
+            catFrameIndex: catFrameIndex,
+            smartContext: smartContext
         )
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
@@ -1517,9 +1527,15 @@ enum StatusBarDisplayRenderer {
     static func width(
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
-        customCharacterStore: CustomCharacterStore? = nil
+        customCharacterStore: CustomCharacterStore? = nil,
+        smartContext: SmartStatusBarContext = .manual
     ) -> CGFloat {
-        layout(snapshot: snapshot, settings: settings, customCharacterStore: customCharacterStore).width
+        layout(
+            snapshot: snapshot,
+            settings: settings,
+            customCharacterStore: customCharacterStore,
+            smartContext: smartContext
+        ).width
     }
 
     static func stableMinimumWidth(settings: StatusBarSettings) -> CGFloat {
@@ -1542,7 +1558,8 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore?,
-        catFrameIndex: Int? = nil
+        catFrameIndex: Int? = nil,
+        smartContext: SmartStatusBarContext = .manual
     ) -> Layout {
         let font = NSFont.monospacedDigitSystemFont(
             ofSize: settings.clampedFontSize,
@@ -1555,8 +1572,12 @@ enum StatusBarDisplayRenderer {
             value: ByteFormat.speed(snapshot.uploadBytesPerSecond + snapshot.downloadBytesPerSecond),
             settings: settings
         )
+        let displayMode = smartContext.trafficDisplayModeOverride ?? settings.trafficDisplayMode
         let lines: [String] = {
-            switch settings.trafficDisplayMode {
+            if let overrideLine = smartContext.overrideLine {
+                return [overrideLine]
+            }
+            switch displayMode {
             case .upDown:
                 return settings.order == .uploadFirst ? [upload, download] : [download, upload]
             case .downloadOnly:
@@ -1580,7 +1601,8 @@ enum StatusBarDisplayRenderer {
             customCharacterStore: customCharacterStore,
             catFrameIndex: catFrameIndex
         )
-        let automaticWidth = ceil(max(measuredWidth, stableWidth) + horizontalPadding * 2 + catExtraWidth)
+        let automaticTextWidth = smartContext.overrideLine == nil ? max(measuredWidth, stableWidth) : measuredWidth
+        let automaticWidth = ceil(automaticTextWidth + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth
 
         return Layout(

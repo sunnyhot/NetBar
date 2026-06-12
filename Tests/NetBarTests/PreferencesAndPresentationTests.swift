@@ -62,6 +62,96 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testStatusBarContextEvaluatorFallsBackToManualWhenDisabled() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartStatusBarModeEnabled = false
+        let context = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 20_000_000, upload: 1_000_000),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings,
+            language: .english
+        )
+
+        XCTAssertEqual(context.emphasis, .manual)
+        XCTAssertNil(context.trafficDisplayModeOverride)
+    }
+
+    func testStatusBarContextEvaluatorPrioritizesAnomaly() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartStatusBarModeEnabled = true
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            timestamp: Date(timeIntervalSince1970: 10),
+            cooldownKey: "networkDrop"
+        )
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: event,
+            today: .empty(dateKey: "2026-06-12"),
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [:],
+            insightCards: []
+        )
+
+        let context = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty,
+            intelligenceSummary: summary,
+            settings: settings,
+            language: .english
+        )
+
+        XCTAssertEqual(context.emphasis, .anomaly(.networkDrop))
+        XCTAssertEqual(context.overrideLine, "! Network drop")
+    }
+
+    func testStatusBarContextEvaluatorShortensTopApplicationName() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartStatusBarModeEnabled = true
+        let appTraffic = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [appRate("VeryLongApplicationNameThatWouldOverflow", download: 8_000_000, upload: 500_000)],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let context = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
+            appTraffic: appTraffic,
+            intelligenceSummary: .empty,
+            settings: settings,
+            language: .english
+        )
+
+        XCTAssertEqual(context.emphasis, .topApplication("VeryLongA..."))
+        XCTAssertEqual(context.overrideLine, "VeryLongA...")
+    }
+
+    func testStatusBarPresentationUsesSmartOverrideLine() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsArrows = true
+        let context = SmartStatusBarContext(
+            emphasis: .topApplication("VeryLongA..."),
+            trafficDisplayModeOverride: nil,
+            overrideLine: "VeryLongA..."
+        )
+
+        let presentation = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
+            settings: settings,
+            smartContext: context
+        )
+
+        XCTAssertEqual(presentation.lines, ["VeryLongA..."])
+    }
+
     func testStatusBarTrafficDisplayModePersistsAndResets() {
         let defaults = isolatedDefaults()
         let settings = StatusBarSettings(defaults: defaults)

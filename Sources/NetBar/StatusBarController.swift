@@ -535,6 +535,13 @@ final class StatusBarController {
 
         // Color pipeline: compute time bucket independently from position tracking
         let currentColorBucket = StatusBarDisplayRenderer.colorTimeBucket(forMode: settings.catColorMode)
+        let smartContext = StatusBarContextEvaluator.evaluate(
+            snapshot: monitor.snapshot,
+            appTraffic: monitor.appTraffic,
+            intelligenceSummary: monitor.intelligenceSummary,
+            settings: appPreferences.networkIntelligenceSettings,
+            language: appPreferences.resolvedLanguage
+        )
 
         let signature = StatusBarDisplayRenderer.signature(
             snapshot: monitor.snapshot,
@@ -542,7 +549,8 @@ final class StatusBarController {
             appearanceName: appearanceName,
             customCharacterStore: customCharacterStore,
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
-            googlyEyesState: activeGooglyEyesState
+            googlyEyesState: activeGooglyEyesState,
+            smartContext: smartContext
         )
         guard signature != lastRenderSignature else {
             lastColorTimeBucket = currentColorBucket
@@ -563,7 +571,8 @@ final class StatusBarController {
                 scale: scale,
                 customCharacterStore: customCharacterStore,
                 catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
-                googlyEyesState: activeGooglyEyesState
+                googlyEyesState: activeGooglyEyesState,
+                smartContext: smartContext
             )
             renderedImageCache.append((signature: signature, image: image))
             if renderedImageCache.count > Self.renderedImageCacheLimit {
