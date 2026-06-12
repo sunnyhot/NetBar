@@ -35,6 +35,7 @@ final class NetworkMonitor: ObservableObject {
     private var previousApplicationSampleDate: Date?
     private var lastApplicationTrafficDate: Date?
     private var anomalyDetector = NetworkAnomalyDetector()
+    private var insightCenter = NetworkInsightCenter()
     private var previousCPUTickSample: CPUTickSample?
     private var isReadingApplicationTraffic = false
     private var isRefreshing = false
@@ -314,6 +315,11 @@ final class NetworkMonitor: ObservableObject {
         if let latest = events.last {
             intelligenceSummary.latestEvent = latest
         }
+        intelligenceSummary.insightCards = insightCenter.ingest(
+            events: events,
+            settings: settings,
+            language: language
+        )
         return events
     }
 
@@ -479,6 +485,7 @@ final class NetworkMonitor: ObservableObject {
     private func syncIntelligenceSummaryFromHistory() {
         var summary = historyStore.summary
         summary.latestEvent = intelligenceSummary.latestEvent
+        summary.insightCards = intelligenceSummary.insightCards
         intelligenceSummary = summary
     }
 

@@ -759,6 +759,75 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
     }
 
+    func testNetworkInsightCenterCreatesReadableCardForHighTraffic() {
+        var center = NetworkInsightCenter()
+        let event = NetworkAnomalyEvent(
+            kind: .highTraffic,
+            severity: .warning,
+            title: "High traffic",
+            message: "Current total speed is about 11.0 MB/s.",
+            timestamp: Date(timeIntervalSince1970: 100),
+            applicationName: "Arc",
+            bytesPerSecond: 11_000_000,
+            cooldownKey: "highTraffic"
+        )
+
+        let cards = center.ingest(
+            events: [event],
+            settings: .default,
+            language: .english
+        )
+
+        XCTAssertEqual(cards.count, 1)
+        XCTAssertEqual(cards.first?.kind, .highTraffic)
+        XCTAssertEqual(cards.first?.applicationName, "Arc")
+        XCTAssertTrue(cards.first?.suggestion.contains("Activity Monitor") == true)
+    }
+
+    func testNetworkInsightCenterSuppressesDuplicateCooldownCards() {
+        var center = NetworkInsightCenter()
+        let first = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            timestamp: Date(timeIntervalSince1970: 100),
+            cooldownKey: "networkDrop"
+        )
+        let second = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped again.",
+            timestamp: Date(timeIntervalSince1970: 120),
+            cooldownKey: "networkDrop"
+        )
+
+        _ = center.ingest(events: [first], settings: .default, language: .english)
+        let cards = center.ingest(events: [second], settings: .default, language: .english)
+
+        XCTAssertEqual(cards.count, 1)
+        XCTAssertEqual(cards.first?.message, "Network activity dropped.")
+    }
+
+    func testNetworkInsightCenterRespectsDisabledStream() {
+        var center = NetworkInsightCenter()
+        var settings = NetworkIntelligenceSettings.default
+        settings.isInsightStreamEnabled = false
+        let event = NetworkAnomalyEvent(
+            kind: .proxyAttributionGap,
+            severity: .info,
+            title: "Proxy attribution gap",
+            message: "Traffic may be concentrated in a proxy process.",
+            timestamp: Date(timeIntervalSince1970: 100),
+            cooldownKey: "proxyAttributionGap"
+        )
+
+        let cards = center.ingest(events: [event], settings: settings, language: .english)
+
+        XCTAssertTrue(cards.isEmpty)
+    }
+
     func testNetworkNotificationControllerRefreshesAuthorizationStatus() async {
         let center = FakeNetworkNotificationCenter(authorizationStatus: .authorized)
         let controller = NetworkNotificationController(center: center)
@@ -885,7 +954,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             animationPlaybackCountsByCharacter: [
                 "cat": 11,
                 "cat_b": 31
-            ]
+            ],
+            insightCards: []
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
@@ -920,7 +990,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             animationPlaybackCountsByCharacter: [
                 "cat": 100_000,
                 "dog": 500_000
-            ]
+            ],
+            insightCards: []
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
@@ -1088,7 +1159,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             recentDays: days,
             realtimeTopApplications: [],
             todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:]
+            animationPlaybackCountsByCharacter: [:],
+            insightCards: []
         )
 
         let presentation = NetworkHistoryPresentation.make(summary: summary, language: .english)

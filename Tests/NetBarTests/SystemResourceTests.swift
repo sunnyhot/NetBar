@@ -451,6 +451,7 @@ final class SystemResourceTests: XCTestCase {
 
         XCTAssertEqual(events.map(\.kind), [.highTraffic])
         XCTAssertEqual(monitor.intelligenceSummary.latestEvent?.kind, .highTraffic)
+        XCTAssertEqual(monitor.intelligenceSummary.insightCards.map(\.kind), [.highTraffic])
     }
 
     func testNetworkIntelligenceCoordinatorForwardsEventsToNotificationAndPet() {

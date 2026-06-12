@@ -267,6 +267,40 @@ struct NetworkAnomalyEvent: Codable, Equatable, Identifiable {
     }
 }
 
+struct NetworkInsightCard: Equatable, Identifiable {
+    let id: UUID
+    let kind: NetworkAnomalyKind
+    let severity: NetworkAnomalySeverity
+    let title: String
+    let message: String
+    let suggestion: String
+    let timestamp: Date
+    let applicationName: String?
+    let cooldownKey: String
+
+    init(
+        id: UUID = UUID(),
+        kind: NetworkAnomalyKind,
+        severity: NetworkAnomalySeverity,
+        title: String,
+        message: String,
+        suggestion: String,
+        timestamp: Date,
+        applicationName: String?,
+        cooldownKey: String
+    ) {
+        self.id = id
+        self.kind = kind
+        self.severity = severity
+        self.title = title
+        self.message = message
+        self.suggestion = suggestion
+        self.timestamp = timestamp
+        self.applicationName = applicationName
+        self.cooldownKey = cooldownKey
+    }
+}
+
 struct ApplicationDailyUsage: Codable, Equatable, Identifiable {
     let applicationID: String
     var displayName: String
@@ -388,6 +422,7 @@ struct NetworkIntelligenceSummary: Equatable {
     var realtimeTopApplications: [ApplicationTrafficRate]
     var todayTopApplications: [ApplicationDailyUsage]
     var animationPlaybackCountsByCharacter: [String: UInt64]
+    var insightCards: [NetworkInsightCard]
 
     var favoriteAnimationCharacterID: String? {
         animationPlaybackCountsByCharacter
@@ -405,6 +440,7 @@ struct NetworkIntelligenceSummary: Equatable {
         recentDays: [],
         realtimeTopApplications: [],
         todayTopApplications: [],
-        animationPlaybackCountsByCharacter: [:]
+        animationPlaybackCountsByCharacter: [:],
+        insightCards: []
     )
 }
