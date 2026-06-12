@@ -14,7 +14,7 @@ jobs:
     runs-on: macos-15
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Extract version
         id: version
@@ -124,7 +124,7 @@ jobs:
           cat dist/latest.json
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           name: NetBar ${{ steps.version.outputs.tag }}
           body_path: dist/release-notes.md
