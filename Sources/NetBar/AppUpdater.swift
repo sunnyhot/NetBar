@@ -408,6 +408,18 @@ final class AppUpdater: ObservableObject {
         return "v\(trimmed)"
     }
 
+    var diagnosticsStatusText: String {
+        statusMessage
+    }
+
+    var diagnosticsBundleIdentifier: String {
+        currentBundleIdentifier
+    }
+
+    var diagnosticsLastCheckedAt: Date? {
+        lastCheckedAt
+    }
+
     var releasePageURL: URL? {
         URL(string: "https://github.com/\(repository)/releases")
     }

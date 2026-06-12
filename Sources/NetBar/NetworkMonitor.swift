@@ -62,6 +62,15 @@ final class NetworkMonitor: ObservableObject {
         return Array(historyBuffer[start...]) + Array(historyBuffer[..<start])
     }
 
+    var samplingDiagnostics: NetworkSamplingDiagnostics {
+        NetworkSamplingDiagnostics(
+            isRunning: isRunning,
+            isApplicationTrafficVisible: isApplicationTrafficVisible,
+            isApplicationTrafficSamplingEnabled: shouldSampleApplicationTraffic,
+            isPowerSaveModeEnabled: powerSaveMode
+        )
+    }
+
     init(
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
         appTrafficReader: ApplicationTrafficReading? = nil,

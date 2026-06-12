@@ -86,6 +86,21 @@ final class NetworkHistoryStore: ObservableObject {
         }
     }
 
+    var diagnosticsStatusText: String {
+        switch storageStatus {
+        case .available:
+            return "available"
+        case .unreadableBackupCreated(let url):
+            return "unreadableBackupCreated:\(url.lastPathComponent)"
+        case .writeFailed(let message):
+            return "writeFailed:\(message)"
+        }
+    }
+
+    var diagnosticsPath: String {
+        fileURL.path
+    }
+
     func configure(isTrackingEnabled: Bool, retentionDays: Int) {
         self.isTrackingEnabled = isTrackingEnabled
         self.retentionDays = max(retentionDays, 1)

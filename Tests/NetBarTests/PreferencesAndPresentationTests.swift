@@ -152,6 +152,32 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.lines, ["VeryLongA..."])
     }
 
+    func testDiagnosticsCenterBuildsPrivacySafeSummaryText() {
+        let snapshot = DiagnosticsSnapshot(
+            appVersion: "v0.39.0",
+            bundleIdentifier: "local.codex.NetBar",
+            updateStatus: "检查更新失败：network offline",
+            lastCheckedAt: Date(timeIntervalSince1970: 100),
+            sampling: NetworkSamplingDiagnostics(
+                isRunning: true,
+                isApplicationTrafficVisible: false,
+                isApplicationTrafficSamplingEnabled: false,
+                isPowerSaveModeEnabled: true
+            ),
+            notificationAuthorization: "authorized",
+            historyStatus: "available",
+            historyPath: "/Users/example/Library/Application Support/NetBar/NetworkHistory.json"
+        )
+
+        let text = DiagnosticsCenter.copyText(for: snapshot, language: .english)
+
+        XCTAssertTrue(text.contains("NetBar Diagnostics"))
+        XCTAssertTrue(text.contains("v0.39.0"))
+        XCTAssertTrue(text.contains("powerSave=true"))
+        XCTAssertFalse(text.contains("https://"))
+        XCTAssertFalse(text.contains("example.com"))
+    }
+
     func testStatusBarTrafficDisplayModePersistsAndResets() {
         let defaults = isolatedDefaults()
         let settings = StatusBarSettings(defaults: defaults)
