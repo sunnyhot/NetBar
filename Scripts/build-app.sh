@@ -33,14 +33,22 @@ chmod +x "$MACOS_DIR/$APP_NAME"
 
 ENTITLEMENTS="$ROOT_DIR/Resources/NetBar.entitlements"
 if [ -f "$ENTITLEMENTS" ]; then
-    CODESIGN_FLAGS="--force --deep --sign - --entitlements $ENTITLEMENTS"
+    CODESIGN_FLAGS=(--force --deep --sign - --entitlements "$ENTITLEMENTS")
 else
-    CODESIGN_FLAGS="--force --deep --sign -"
+    CODESIGN_FLAGS=(--force --deep --sign -)
 fi
 
 if command -v codesign >/dev/null 2>&1; then
-    codesign $CODESIGN_FLAGS "$APP_DIR" >/dev/null 2>&1 || \
-        codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1 || true
+    if ! codesign "${CODESIGN_FLAGS[@]}" "$APP_DIR" >/dev/null 2>&1; then
+        if ! codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1; then
+            if [ "${ALLOW_UNSIGNED_BUILD:-0}" = "1" ]; then
+                echo "warning: codesign failed; continuing because ALLOW_UNSIGNED_BUILD=1" >&2
+            else
+                echo "error: codesign failed; set ALLOW_UNSIGNED_BUILD=1 to keep an unsigned local build" >&2
+                exit 1
+            fi
+        fi
+    fi
 fi
 
 echo "$APP_DIR"

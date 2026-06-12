@@ -75,7 +75,6 @@ final class SystemMetricsReader: SystemMetricsReading {
 
         guard result == KERN_SUCCESS else { return 0 }
 
-        let pageSize = UInt64(vm_kernel_page_size)
         let activePages = UInt64(vmStats.active_count)
         let wiredPages = UInt64(vmStats.wire_count)
         let compressedPages = UInt64(vmStats.compressor_page_count)

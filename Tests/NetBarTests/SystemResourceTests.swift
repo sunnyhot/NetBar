@@ -10,9 +10,9 @@ final class SystemResourceTests: XCTestCase {
         let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 4_000_000_000, swapUsedBytes: 1_000_000_000)
 
         XCTAssertEqual(usage.freeBytes, 8_000_000_000)
-        XCTAssertEqualWithAccuracy(usage.usedFraction, 0.5, accuracy: 0.001)
-        XCTAssertEqualWithAccuracy(usage.usedPercentage, 50.0, accuracy: 0.01)
-        XCTAssertEqualWithAccuracy(usage.swapUsedFraction, 0.25, accuracy: 0.001)
+        XCTAssertEqual(usage.usedFraction, 0.5, accuracy: 0.001)
+        XCTAssertEqual(usage.usedPercentage, 50.0, accuracy: 0.01)
+        XCTAssertEqual(usage.swapUsedFraction, 0.25, accuracy: 0.001)
     }
 
     func testMemoryUsageZeroTotal() {
@@ -44,8 +44,8 @@ final class SystemResourceTests: XCTestCase {
         // Simulate a delta where 25% of ticks are user, 10% are system
         let cpu = CPUUsage(totalTicks: 1000, userTicks: 250, systemTicks: 100, idleTicks: 650)
 
-        XCTAssertEqualWithAccuracy(cpu.usageFraction, 0.35, accuracy: 0.001)
-        XCTAssertEqualWithAccuracy(cpu.usagePercentage, 35.0, accuracy: 0.01)
+        XCTAssertEqual(cpu.usageFraction, 0.35, accuracy: 0.001)
+        XCTAssertEqual(cpu.usagePercentage, 35.0, accuracy: 0.01)
     }
 
     func testCPUUsageZeroTicks() {
@@ -58,7 +58,7 @@ final class SystemResourceTests: XCTestCase {
     func testCPUUsageFullLoad() {
         let cpu = CPUUsage(totalTicks: 1000, userTicks: 800, systemTicks: 200, idleTicks: 0)
 
-        XCTAssertEqualWithAccuracy(cpu.usageFraction, 1.0, accuracy: 0.001)
+        XCTAssertEqual(cpu.usageFraction, 1.0, accuracy: 0.001)
     }
 
     // MARK: - ThermalInfo Tests
@@ -197,7 +197,7 @@ final class SystemResourceTests: XCTestCase {
             cpuUsage: 25.5,
             processCount: 300
         )
-        XCTAssertEqualWithAccuracy(summary.memoryUsagePercentage!, 50.0, accuracy: 0.01)
+        XCTAssertEqual(summary.memoryUsagePercentage!, 50.0, accuracy: 0.01)
     }
 
     func testSystemResourceSummaryZeroMemory() {
@@ -548,7 +548,7 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(cpu.totalTicks, 1000)
         XCTAssertEqual(cpu.userTicks, 400)
         XCTAssertEqual(cpu.systemTicks, 100)
-        XCTAssertEqualWithAccuracy(cpu.usagePercentage, 50.0, accuracy: 0.01)
+        XCTAssertEqual(cpu.usagePercentage, 50.0, accuracy: 0.01)
     }
 
     func testNetworkMonitorStopsResourceTimer() async {
@@ -814,6 +814,29 @@ final class SystemResourceTests: XCTestCase {
 
         // appTraffic should remain in empty state
         XCTAssertEqual(monitor.appTraffic.sampleCount, 0, "start() should not sample app traffic when sampling disabled")
+
+        monitor.stop()
+    }
+
+    func testPowerSaveRescheduleDoesNotSampleAppTrafficWhenNotVisible() async {
+        let trafficReader = TrackingApplicationTrafficReader()
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.start()
+        monitor.setPowerSaveMode(true)
+        try? await Task.sleep(nanoseconds: 1_200_000_000)
+
+        XCTAssertEqual(trafficReader.callCount, 0, "Power-save reschedule must not start app traffic sampling while hidden")
 
         monitor.stop()
     }

@@ -292,7 +292,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     func testAppPreferencesActivationPolicyMatchesDockIconSetting() {
         let defaults = isolatedDefaults()
 
-        var preferences = AppPreferences(
+        let preferences = AppPreferences(
             defaults: defaults,
             loginItemManager: FakeLoginItemManager()
         )
@@ -2298,6 +2298,60 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(manifest.notes, "Bug fixes and improvements")
     }
 
+    func testManifestReleaseCarriesSHA256ToAsset() async throws {
+        let expectedSHA256 = String(repeating: "a", count: 64)
+        let fetcher = UpdateReleaseFetcher(
+            repository: "sunnyhot/NetBar",
+            currentVersion: "0.37.1",
+            loadData: { request in
+                let json = """
+                {
+                    "version": "0.38.1",
+                    "tag": "v0.38.1",
+                    "asset": "NetBar.app.zip",
+                    "asset_url": "https://github.com/sunnyhot/NetBar/releases/download/v0.38.1/NetBar.app.zip",
+                    "sha256": "\(expectedSHA256)",
+                    "notes": "Security hardening",
+                    "html_url": "https://github.com/sunnyhot/NetBar/releases/tag/v0.38.1"
+                }
+                """.data(using: .utf8)!
+                let response = HTTPURLResponse(
+                    url: request.url!,
+                    statusCode: 200,
+                    httpVersion: nil,
+                    headerFields: nil
+                )!
+                return (json, response)
+            }
+        )
+
+        let release = try await fetcher.fetchLatestRelease()
+
+        XCTAssertEqual(release.assets.first?.sha256, expectedSHA256)
+    }
+
+    func testUpdateArchiveIntegrityAcceptsMatchingSHA256AndRejectsMismatch() throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("NetBarTests-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let archiveURL = directory.appendingPathComponent("NetBar.app.zip")
+        try Data("netbar-update".utf8).write(to: archiveURL)
+
+        try UpdateArchiveIntegrity.validate(
+            fileURL: archiveURL,
+            expectedSHA256: "5a870270648d26cf0ddb72ce56fbb6941ec0a3bf115814fd6027fd420ada9b28"
+        )
+
+        XCTAssertThrowsError(
+            try UpdateArchiveIntegrity.validate(fileURL: archiveURL, expectedSHA256: String(repeating: "0", count: 64))
+        ) { error in
+            guard case UpdateError.checksumMismatch = error else {
+                return XCTFail("Expected checksum mismatch, got \(error)")
+            }
+        }
+    }
+
     func testUpdateReleaseFetcherFallsBackToGitHubAPIAfterManifestGatewayTimeout() async throws {
         var requestedURLs: [URL] = []
         let fetcher = UpdateReleaseFetcher(
@@ -3412,9 +3466,7 @@ extension PreferencesAndPresentationTests {
 
     func testRunCatAnimationUpdateActivityLevel() {
         let asset = CharacterAsset(builtIn: .defaultCat)
-        var lastFrame: Int?
-        let animation = RunCatAnimation(character: asset, speedMultiplier: 1.0) { frame in
-            lastFrame = frame
+        let animation = RunCatAnimation(character: asset, speedMultiplier: 1.0) { _ in
         }
 
         // Setting activity level should work

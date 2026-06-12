@@ -457,25 +457,7 @@ enum CustomCharacterImageProcessor {
         _ frames: [NSImage],
         pixelation: CustomCharacterPixelationScale
     ) async throws -> [NSImage] {
-        try await withThrowingTaskGroup(of: (Int, NSImage).self) { group in
-            for (index, frame) in frames.enumerated() {
-                group.addTask {
-                    (index, try await self.pixelatedAsync(frame, scale: pixelation))
-                }
-            }
-
-            var results = frames
-            for try await (index, image) in group {
-                results[index] = image
-            }
-            return results
-        }
-    }
-
-    private static func pixelatedAsync(_ image: NSImage, scale: CustomCharacterPixelationScale) async throws -> NSImage {
-        try await Task.detached(priority: .utility) {
-            try pixelated(image, scale: scale)
-        }.value
+        try frames.map { try pixelated($0, scale: pixelation) }
     }
 }
 

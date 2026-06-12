@@ -1,4 +1,5 @@
 import AppKit
+import CommonCrypto
 import Foundation
 import SwiftUI
 
@@ -22,11 +23,25 @@ struct GitHubReleaseAsset: Decodable, Equatable {
     let name: String
     let size: Int
     let browserDownloadURL: URL
+    let sha256: String?
 
     enum CodingKeys: String, CodingKey {
         case name
         case size
         case browserDownloadURL = "browser_download_url"
+        case sha256
+    }
+
+    init(
+        name: String,
+        size: Int,
+        browserDownloadURL: URL,
+        sha256: String? = nil
+    ) {
+        self.name = name
+        self.size = size
+        self.browserDownloadURL = browserDownloadURL
+        self.sha256 = sha256
     }
 }
 
@@ -109,7 +124,8 @@ struct UpdateReleaseFetcher {
         let releaseAsset = GitHubReleaseAsset(
             name: manifest.asset,
             size: 0,
-            browserDownloadURL: assetURL
+            browserDownloadURL: assetURL,
+            sha256: manifest.sha256
         )
         return GitHubRelease(
             tagName: manifest.tag,
@@ -317,6 +333,41 @@ private enum UpdateDialogState {
     case readyToInstall
 }
 
+enum UpdateArchiveIntegrity {
+    static func validate(fileURL: URL, expectedSHA256: String?) throws {
+        guard let expected = expectedSHA256?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !expected.isEmpty else {
+            return
+        }
+
+        let actual = try sha256Hex(for: fileURL)
+        guard actual.caseInsensitiveCompare(expected) == .orderedSame else {
+            throw UpdateError.checksumMismatch
+        }
+    }
+
+    static func sha256Hex(for fileURL: URL) throws -> String {
+        let handle = try FileHandle(forReadingFrom: fileURL)
+        defer { try? handle.close() }
+
+        var context = CC_SHA256_CTX()
+        CC_SHA256_Init(&context)
+
+        while true {
+            let data = handle.readData(ofLength: 1024 * 1024)
+            guard !data.isEmpty else { break }
+            data.withUnsafeBytes { buffer in
+                guard let baseAddress = buffer.baseAddress else { return }
+                CC_SHA256_Update(&context, baseAddress, CC_LONG(data.count))
+            }
+        }
+
+        var digest = [UInt8](repeating: 0, count: Int(CC_SHA256_DIGEST_LENGTH))
+        CC_SHA256_Final(&digest, &context)
+        return digest.map { String(format: "%02x", $0) }.joined()
+    }
+}
+
 // MARK: - AppUpdater
 
 @MainActor
@@ -472,6 +523,7 @@ final class AppUpdater: ObservableObject {
 
         do {
             let downloadedZip = try await downloadWithProgress(asset: availableUpdate.asset)
+            try UpdateArchiveIntegrity.validate(fileURL: downloadedZip, expectedSHA256: availableUpdate.asset.sha256)
             statusMessage = "正在解压更新..."
             let appURL = try unzipApp(from: downloadedZip)
             try validateDownloadedApp(appURL, expectedVersion: availableUpdate.versionText)
@@ -494,6 +546,7 @@ final class AppUpdater: ObservableObject {
 
         do {
             let downloadedZip = try await downloadWithProgress(asset: availableUpdate.asset)
+            try UpdateArchiveIntegrity.validate(fileURL: downloadedZip, expectedSHA256: availableUpdate.asset.sha256)
             statusMessage = "正在解压..."
             let appURL = try unzipApp(from: downloadedZip)
             try validateDownloadedApp(appURL, expectedVersion: availableUpdate.versionText)
@@ -845,6 +898,7 @@ enum UpdateError: LocalizedError {
     case bundleIdentifierMismatch
     case downloadedVersionIsOlder
     case codeSignatureInvalid
+    case checksumMismatch
 
     var errorDescription: String? {
         switch self {
@@ -872,6 +926,8 @@ enum UpdateError: LocalizedError {
             return "下载的版本低于当前版本"
         case .codeSignatureInvalid:
             return "下载的 App 签名校验失败"
+        case .checksumMismatch:
+            return "下载的安装包校验失败"
         }
     }
 }

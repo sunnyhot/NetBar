@@ -94,20 +94,11 @@ final class NetworkMonitor: ObservableObject {
         // handles the first read + timer creation.
         if shouldSampleApplicationTraffic {
             refreshApplicationTraffic()
-            applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
-                Task { @MainActor in
-                    self?.refreshApplicationTraffic()
-                }
-            }
+            scheduleApplicationTrafficTimer()
         }
         refreshSystemResources()
         scheduleNextSample()
-        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
-        systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshSystemResources()
-            }
-        }
+        scheduleSystemResourceTimer()
     }
 
     func resumeApplicationTrafficSampling() {
@@ -118,11 +109,7 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer = nil
         streamingReader?.start()
         refreshApplicationTraffic()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refreshApplicationTraffic()
-            }
-        }
+        scheduleApplicationTrafficTimer()
     }
 
     func pauseApplicationTrafficSampling() {
@@ -154,23 +141,30 @@ final class NetworkMonitor: ObservableObject {
 
     private func rescheduleTimers() {
         guard isRunning else { return }
-        let interval: TimeInterval = powerSaveMode ? 2.0 : 1.0
-        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
 
-        timer?.invalidate()
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                self?.refresh()
-            }
+        scheduleNextSample()
+
+        if shouldSampleApplicationTraffic {
+            scheduleApplicationTrafficTimer()
+        } else {
+            applicationTimer?.invalidate()
+            applicationTimer = nil
         }
 
+        scheduleSystemResourceTimer()
+    }
+
+    private func scheduleApplicationTrafficTimer() {
         applicationTimer?.invalidate()
         applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
             }
         }
+    }
 
+    private func scheduleSystemResourceTimer() {
+        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
         systemResourceTimer?.invalidate()
         systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in

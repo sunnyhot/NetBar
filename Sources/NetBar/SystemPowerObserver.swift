@@ -27,7 +27,9 @@ final class SystemPowerObserver: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.isScreenLocked = true
+            Task { @MainActor in
+                self?.isScreenLocked = true
+            }
         }
 
         wakeObserver = NSWorkspace.shared.notificationCenter.addObserver(
@@ -35,7 +37,9 @@ final class SystemPowerObserver: ObservableObject {
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.isScreenLocked = false
+            Task { @MainActor in
+                self?.isScreenLocked = false
+            }
         }
     }
 
