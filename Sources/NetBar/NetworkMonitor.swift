@@ -323,6 +323,14 @@ final class NetworkMonitor: ObservableObject {
         lastApplicationTrafficDate = nil
     }
 
+    func configureHistory(settings: NetworkIntelligenceSettings) {
+        historyStore.configure(
+            isTrackingEnabled: settings.isHistoryTrackingEnabled,
+            retentionDays: settings.historyRetentionDays
+        )
+        syncIntelligenceSummaryFromHistory()
+    }
+
     func recordAnimationPlayback(count: UInt64 = 1, characterID: String) {
         historyStore.recordAnimationPlayback(count: count, characterID: characterID, at: now())
         syncIntelligenceSummaryFromHistory()

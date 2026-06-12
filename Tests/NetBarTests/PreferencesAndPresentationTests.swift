@@ -1017,20 +1017,85 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.uploadBytes, 600)
     }
 
-    func testNetworkHistoryStoreRollsOverAndRetainsSevenDays() throws {
+    func testNetworkHistoryStoreRollsOverAndRetainsThirtyDays() throws {
         let root = try temporaryDirectory()
-        var currentDate = isoDate("2026-06-01T12:00:00Z")
+        let startDate = isoDate("2026-06-01T12:00:00Z")
+        var currentDate = startDate
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
 
-        for dayOffset in 0..<9 {
-            currentDate = isoDate("2026-06-\(String(format: "%02d", dayOffset + 1))T12:00:00Z")
+        for dayOffset in 0..<35 {
+            currentDate = fixedCalendar().date(byAdding: .day, value: dayOffset, to: startDate)!
             store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: UInt64(dayOffset * 1_000 + 1_000), sent: UInt64(dayOffset * 1_000 + 2_000), timestamp: currentDate))
         }
 
-        XCTAssertEqual(store.summary.recentDays.count, 7)
-        XCTAssertEqual(store.summary.today.dateKey, "2026-06-09")
-        XCTAssertEqual(store.summary.recentDays.first?.dateKey, "2026-06-02")
-        XCTAssertEqual(store.summary.recentDays.last?.dateKey, "2026-06-08")
+        XCTAssertEqual(store.summary.recentDays.count, 30)
+        XCTAssertEqual(store.summary.today.dateKey, "2026-07-05")
+        XCTAssertEqual(store.summary.recentDays.first?.dateKey, "2026-06-05")
+        XCTAssertEqual(store.summary.recentDays.last?.dateKey, "2026-07-04")
+    }
+
+    func testNetworkHistoryStoreSkipsWritesWhenTrackingDisabled() throws {
+        let root = try temporaryDirectory()
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 0) })
+        store.configure(isTrackingEnabled: false, retentionDays: 30)
+
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000))
+        store.record(appTraffic: ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [appRate("Safari", download: 2_000, upload: 500)],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        ), interval: 1)
+
+        XCTAssertEqual(store.summary.today.downloadBytes, 0)
+        XCTAssertEqual(store.summary.today.uploadBytes, 0)
+        XCTAssertTrue(store.summary.todayTopApplications.isEmpty)
+    }
+
+    func testNetworkHistoryStoreBacksUpUnreadableStorage() throws {
+        let root = try temporaryDirectory()
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        let historyURL = root.appendingPathComponent("NetworkHistory.json")
+        try Data("not-json".utf8).write(to: historyURL)
+
+        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 0) })
+
+        guard case .unreadableBackupCreated(let backupURL) = store.storageStatus else {
+            return XCTFail("Expected unreadable backup status")
+        }
+        XCTAssertTrue(FileManager.default.fileExists(atPath: backupURL.path))
+        XCTAssertEqual(store.summary.today.dateKey, "1970-01-01")
+    }
+
+    func testNetworkHistoryPresentationBuildsSevenAndThirtyDaySummaries() {
+        let days = (1...30).map { day in
+            NetworkDailySummary(
+                dateKey: "2026-06-\(String(format: "%02d", day))",
+                downloadBytes: UInt64(day * 1_000),
+                uploadBytes: UInt64(day * 100),
+                peakDownloadBytesPerSecond: Double(day * 10),
+                peakUploadBytesPerSecond: Double(day * 5),
+                sampleCount: day,
+                activeSeconds: TimeInterval(day * 60),
+                topApplications: []
+            )
+        }
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: nil,
+            today: .empty(dateKey: "2026-07-01"),
+            recentDays: days,
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [:]
+        )
+
+        let presentation = NetworkHistoryPresentation.make(summary: summary, language: .english)
+
+        XCTAssertEqual(presentation.sevenDay.totalBytes, UInt64((24...30).reduce(0) { $0 + $1 * 1_100 }))
+        XCTAssertEqual(presentation.thirtyDay.totalBytes, UInt64((1...30).reduce(0) { $0 + $1 * 1_100 }))
+        XCTAssertEqual(presentation.peakDownload?.dateKey, "2026-06-30")
     }
 
     func testNetworkHistoryStoreAccumulatesTodayTopApplications() throws {

@@ -1,9 +1,16 @@
 import Combine
 import Foundation
 
+enum NetworkHistoryStorageStatus: Equatable {
+    case available
+    case unreadableBackupCreated(URL)
+    case writeFailed(String)
+}
+
 @MainActor
 final class NetworkHistoryStore: ObservableObject {
     @Published private(set) var summary: NetworkIntelligenceSummary
+    @Published private(set) var storageStatus: NetworkHistoryStorageStatus = .available
 
     private let fileURL: URL
     private let calendar: Calendar
@@ -13,24 +20,50 @@ final class NetworkHistoryStore: ObservableObject {
     private var lastApplicationTotals: [String: TrafficCounterTotals] = [:]
     private var encoder = JSONEncoder()
     private var decoder = JSONDecoder()
+    private var isTrackingEnabled = true
+    private var retentionDays: Int
 
     init(
         rootDirectory: URL? = nil,
         calendar: Calendar = .current,
+        retentionDays: Int = 30,
         now: @escaping () -> Date = Date.init
     ) {
         self.calendar = calendar
         self.now = now
+        self.retentionDays = max(retentionDays, 1)
         let root = rootDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("NetBar", isDirectory: true)
         self.fileURL = root.appendingPathComponent("NetworkHistory.json")
         self.encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let currentDateKey = Self.dateKey(for: now(), calendar: calendar)
         let shouldSaveLoadedState: Bool
-        if let data = try? Data(contentsOf: fileURL),
-           let decoded = try? decoder.decode(PersistedNetworkHistory.self, from: data) {
-            self.state = Self.normalizedState(decoded, todayKey: currentDateKey)
-            shouldSaveLoadedState = true
+        if let data = try? Data(contentsOf: fileURL) {
+            do {
+                let decoded = try decoder.decode(PersistedNetworkHistory.self, from: data)
+                self.state = Self.normalizedState(
+                    decoded,
+                    todayKey: currentDateKey,
+                    retentionDays: self.retentionDays
+                )
+                shouldSaveLoadedState = true
+            } catch {
+                let backupURL = fileURL
+                    .deletingPathExtension()
+                    .appendingPathExtension("corrupt-\(Int(now().timeIntervalSince1970)).json")
+                try? FileManager.default.createDirectory(
+                    at: fileURL.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try? FileManager.default.moveItem(at: fileURL, to: backupURL)
+                self.storageStatus = .unreadableBackupCreated(backupURL)
+                self.state = PersistedNetworkHistory(
+                    today: .empty(dateKey: currentDateKey),
+                    recentDays: [],
+                    animationPlaybackCountsByCharacter: [:]
+                )
+                shouldSaveLoadedState = false
+            }
         } else {
             self.state = PersistedNetworkHistory(
                 today: .empty(dateKey: currentDateKey),
@@ -52,7 +85,15 @@ final class NetworkHistoryStore: ObservableObject {
         }
     }
 
+    func configure(isTrackingEnabled: Bool, retentionDays: Int) {
+        self.isTrackingEnabled = isTrackingEnabled
+        self.retentionDays = max(retentionDays, 1)
+        state.recentDays = Array(state.recentDays.suffix(self.retentionDays))
+        publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
+    }
+
     func record(snapshot: NetworkSnapshot) {
+        guard isTrackingEnabled else { return }
         rolloverIfNeeded(for: snapshot.timestamp)
         defer { lastSnapshot = snapshot }
 
@@ -80,6 +121,7 @@ final class NetworkHistoryStore: ObservableObject {
     }
 
     func record(appTraffic: ApplicationTrafficState, interval: TimeInterval) {
+        guard isTrackingEnabled else { return }
         guard let timestamp = appTraffic.timestamp else { return }
         rolloverIfNeeded(for: timestamp)
         var usageByID: [String: ApplicationDailyUsage] = [:]
@@ -130,6 +172,7 @@ final class NetworkHistoryStore: ObservableObject {
     }
 
     func recordAnimationPlayback(count: UInt64, characterID: String, at date: Date) {
+        guard isTrackingEnabled else { return }
         guard count > 0 else { return }
         rolloverIfNeeded(for: date)
         state.today.animationPlaybackCount += count
@@ -153,7 +196,7 @@ final class NetworkHistoryStore: ObservableObject {
         let key = Self.dateKey(for: date, calendar: calendar)
         guard state.today.dateKey != key else { return }
         state.recentDays.append(state.today)
-        state.recentDays = Array(state.recentDays.suffix(7))
+        state.recentDays = Array(state.recentDays.suffix(retentionDays))
         state.today = .empty(dateKey: key)
         lastSnapshot = nil
         lastApplicationTotals = [:]
@@ -176,8 +219,9 @@ final class NetworkHistoryStore: ObservableObject {
             try FileManager.default.createDirectory(at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
             let data = try encoder.encode(state)
             try data.write(to: fileURL, options: .atomic)
+            storageStatus = .available
         } catch {
-            // Non-fatal: in-memory summaries continue for this session.
+            storageStatus = .writeFailed(error.localizedDescription)
         }
     }
 
@@ -233,7 +277,8 @@ final class NetworkHistoryStore: ObservableObject {
 
     private static func normalizedState(
         _ state: PersistedNetworkHistory,
-        todayKey: String
+        todayKey: String,
+        retentionDays: Int
     ) -> PersistedNetworkHistory {
         var today = normalizedDay(state.today)
         var recentDays = state.recentDays.map(normalizedDay)
@@ -245,7 +290,7 @@ final class NetworkHistoryStore: ObservableObject {
 
         var normalizedState = PersistedNetworkHistory(
             today: today,
-            recentDays: Array(recentDays.suffix(7)),
+            recentDays: Array(recentDays.suffix(max(retentionDays, 1))),
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         if normalizedState.animationPlaybackCountsByCharacter.isEmpty {

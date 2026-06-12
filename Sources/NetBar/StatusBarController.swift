@@ -274,6 +274,13 @@ final class StatusBarController {
         }
         .store(in: &cancellables)
 
+        appPreferences.$networkIntelligenceSettings
+            .sink { [weak self] settings in
+                self?.monitor.configureHistory(settings: settings)
+                self?.requestRender()
+            }
+            .store(in: &cancellables)
+
         powerObserver.$isScreenLocked
             .removeDuplicates()
             .sink { [weak self] isLocked in
@@ -307,6 +314,7 @@ final class StatusBarController {
 
     private func handleNetworkIntelligenceUpdate() {
         let settings = appPreferences.networkIntelligenceSettings
+        monitor.configureHistory(settings: settings)
         let events = monitor.refreshIntelligence(
             settings: settings,
             language: appPreferences.resolvedLanguage
