@@ -178,6 +178,28 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(text.contains("example.com"))
     }
 
+    func testNetworkHistoryPresentationEstimateNoticeIsLocalized() {
+        let presentation = NetworkHistoryPresentation.make(summary: .empty, language: .simplifiedChinese)
+
+        XCTAssertTrue(presentation.estimateNotice.contains("本地估算值"))
+    }
+
+    func testNetworkInsightCardDisplayDataKeepsApplicationOptional() {
+        let card = NetworkInsightCard(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            suggestion: "Check Wi-Fi.",
+            timestamp: Date(timeIntervalSince1970: 10),
+            applicationName: nil,
+            cooldownKey: "networkDrop"
+        )
+
+        XCTAssertNil(card.applicationName)
+        XCTAssertEqual(card.title, "Network drop")
+    }
+
     func testStatusBarTrafficDisplayModePersistsAndResets() {
         let defaults = isolatedDefaults()
         let settings = StatusBarSettings(defaults: defaults)

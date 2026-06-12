@@ -3,6 +3,7 @@ import SwiftUI
 struct AboutPreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var updater: AppUpdater
+    let diagnosticsSnapshot: DiagnosticsSnapshot
 
     private var updateStatusColor: Color {
         if updater.isChecking || updater.isDownloading {
@@ -36,6 +37,11 @@ struct AboutPreferencesView: View {
                 appInfoCard
 
                 softwareUpdateSection
+
+                DiagnosticsPreferencesView(
+                    appPreferences: appPreferences,
+                    snapshot: diagnosticsSnapshot
+                )
 
                 thanksFooter
 

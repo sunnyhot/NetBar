@@ -123,8 +123,34 @@ struct IntelligencePreferencesView: View {
             systemImage: "calendar.badge.clock"
         ) {
             Toggle(
-                appPreferences.text("记录今日与最近 7 天", "Track today and recent 7 days"),
+                appPreferences.text("记录今日与最近 30 天", "Track today and recent 30 days"),
                 isOn: settingsBinding(\.isHistoryTrackingEnabled)
+            )
+
+            Stepper(
+                value: settingsBinding(\.historyRetentionDays),
+                in: 7...30,
+                step: 1
+            ) {
+                Text(appPreferences.text(
+                    "历史保留 \(appPreferences.networkIntelligenceSettings.historyRetentionDays) 天",
+                    "Keep \(appPreferences.networkIntelligenceSettings.historyRetentionDays) days"
+                ))
+            }
+
+            Toggle(
+                appPreferences.text("洞察事件流", "Insight stream"),
+                isOn: settingsBinding(\.isInsightStreamEnabled)
+            )
+
+            Toggle(
+                appPreferences.text("洞察建议", "Insight suggestions"),
+                isOn: settingsBinding(\.isInsightSuggestionEnabled)
+            )
+
+            Toggle(
+                appPreferences.text("应用累计排行", "Application ranking"),
+                isOn: settingsBinding(\.isApplicationHistoryRankingEnabled)
             )
 
             Button(appPreferences.text("清空历史数据", "Clear History"), role: .destructive) {

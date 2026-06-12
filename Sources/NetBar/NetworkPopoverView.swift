@@ -30,6 +30,10 @@ struct NetworkPopoverView: View {
                     )
                     .padding(.top, 16)
 
+                    if appPreferences.networkIntelligenceSettings.isInsightStreamEnabled {
+                        insightStreamSection
+                    }
+
                     if !appPreferences.hasCompletedOnboarding {
                         FirstLaunchGuide(
                             appPreferences: appPreferences,
@@ -50,6 +54,10 @@ struct NetworkPopoverView: View {
                         appPreferences: appPreferences,
                         customCharacterStore: customCharacterStore
                     )
+
+                    if appPreferences.networkIntelligenceSettings.isHistoryTrackingEnabled {
+                        historyLedgerSection
+                    }
 
                     SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
 
@@ -94,6 +102,119 @@ struct NetworkPopoverView: View {
         .frame(minWidth: 440, idealWidth: 440, maxWidth: 440, minHeight: 500, idealHeight: 720, maxHeight: .infinity)
         .netBarPanelBackground()
         .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
+    }
+
+    private var insightStreamSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            NetBarSectionHeader(
+                title: appPreferences.text("洞察事件", "Insights"),
+                subtitle: appPreferences.text("最近异常与建议", "Recent anomalies and suggestions")
+            )
+
+            if monitor.intelligenceSummary.insightCards.isEmpty {
+                Text(appPreferences.text("暂无新的洞察事件。", "No new insights."))
+                    .font(.system(size: 12))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(8)
+                    .netBarCard(cornerRadius: 8, padding: 0)
+            } else {
+                VStack(spacing: 6) {
+                    ForEach(Array(monitor.intelligenceSummary.insightCards.prefix(5))) { card in
+                        VStack(alignment: .leading, spacing: 3) {
+                            Text(card.title)
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(card.message)
+                                .font(.system(size: 11))
+                                .foregroundStyle(.secondary)
+                            if !card.suggestion.isEmpty {
+                                Text(card.suggestion)
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(.tertiary)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(8)
+                        .netBarCard(cornerRadius: 8, padding: 0)
+                    }
+                }
+            }
+        }
+    }
+
+    private var historyLedgerSection: some View {
+        let presentation = NetworkHistoryPresentation.make(
+            summary: monitor.intelligenceSummary,
+            language: appPreferences.resolvedLanguage
+        )
+
+        return VStack(alignment: .leading, spacing: 8) {
+            NetBarSectionHeader(
+                title: appPreferences.text("历史账本", "Traffic Ledger"),
+                subtitle: appPreferences.text("本地累计趋势", "Local accumulated trends")
+            )
+
+            HStack(spacing: 8) {
+                historyMetricCard(
+                    title: appPreferences.text("今日", "Today"),
+                    value: ByteFormat.bytes(presentation.today.totalBytes)
+                )
+                historyMetricCard(
+                    title: presentation.sevenDay.title,
+                    value: ByteFormat.bytes(presentation.sevenDay.totalBytes)
+                )
+                historyMetricCard(
+                    title: presentation.thirtyDay.title,
+                    value: ByteFormat.bytes(presentation.thirtyDay.totalBytes)
+                )
+            }
+
+            if let peak = presentation.peakDownload {
+                Text("\(appPreferences.text("峰值下载", "Peak download")) \(peak.dateKey): \(ByteFormat.speed(peak.downloadBytesPerSecond))")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.secondary)
+            }
+
+            if appPreferences.networkIntelligenceSettings.isApplicationHistoryRankingEnabled {
+                if presentation.applicationRanking.isEmpty {
+                    Text(appPreferences.text("暂无应用累计排行。", "No application ranking yet."))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                } else {
+                    VStack(spacing: 5) {
+                        ForEach(Array(presentation.applicationRanking.prefix(5))) { app in
+                            HStack {
+                                Text(app.displayName)
+                                    .font(.system(size: 11, weight: .medium))
+                                    .lineLimit(1)
+                                Spacer()
+                                Text(ByteFormat.bytes(app.totalBytes))
+                                    .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                            }
+                        }
+                    }
+                }
+            }
+
+            Text(presentation.estimateNotice)
+                .font(.system(size: 10))
+                .foregroundStyle(.tertiary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+    }
+
+    private func historyMetricCard(title: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(title)
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.secondary)
+            Text(value)
+                .font(.system(size: 12, weight: .bold, design: .monospaced))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(8)
+        .netBarCard(cornerRadius: 8, padding: 0)
     }
 }
 

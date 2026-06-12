@@ -19,6 +19,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyStore: networkHistoryStore,
         updater: updater,
         notificationController: notificationController,
+        diagnosticsSnapshot: { [weak self] in
+            guard let self else {
+                return DiagnosticsCenter.makeSnapshot(
+                    appVersion: "v0.0.0",
+                    bundleIdentifier: "local.codex.NetBar",
+                    updateStatus: "unavailable",
+                    lastCheckedAt: nil,
+                    sampling: NetworkSamplingDiagnostics(
+                        isRunning: false,
+                        isApplicationTrafficVisible: false,
+                        isApplicationTrafficSamplingEnabled: false,
+                        isPowerSaveModeEnabled: false
+                    ),
+                    notificationAuthorization: "unknown",
+                    historyStatus: "unknown",
+                    historyPath: ""
+                )
+            }
+            return DiagnosticsCenter.makeSnapshot(
+                appVersion: self.updater.currentVersionText,
+                bundleIdentifier: self.updater.diagnosticsBundleIdentifier,
+                updateStatus: self.updater.diagnosticsStatusText,
+                lastCheckedAt: self.updater.diagnosticsLastCheckedAt,
+                sampling: self.statusBarController?.samplingDiagnostics ?? NetworkSamplingDiagnostics(
+                    isRunning: false,
+                    isApplicationTrafficVisible: false,
+                    isApplicationTrafficSamplingEnabled: false,
+                    isPowerSaveModeEnabled: false
+                ),
+                notificationAuthorization: self.notificationController.authorizationStatus.title(
+                    language: self.appPreferences.resolvedLanguage
+                ),
+                historyStatus: self.networkHistoryStore.diagnosticsStatusText,
+                historyPath: self.networkHistoryStore.diagnosticsPath
+            )
+        },
         clearNetworkHistory: { [weak self] in
             self?.statusBarController?.clearNetworkHistory()
         }

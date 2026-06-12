@@ -160,6 +160,10 @@ final class StatusBarController {
         }
     )
 
+    var samplingDiagnostics: NetworkSamplingDiagnostics {
+        monitor.samplingDiagnostics
+    }
+
     init(
         monitor: NetworkMonitor,
         settings: StatusBarSettings,
