@@ -28,6 +28,28 @@ enum PetMood: String, Codable, CaseIterable, Identifiable {
     }
 }
 
+enum PetActivityLevel: String, Codable, CaseIterable, Identifiable {
+    case idle
+    case light
+    case active
+    case heavy
+
+    var id: String { rawValue }
+
+    func title(language: AppLanguage) -> String {
+        switch self {
+        case .idle:
+            return language.text("空闲", "Idle")
+        case .light:
+            return language.text("轻度", "Light")
+        case .active:
+            return language.text("活跃", "Active")
+        case .heavy:
+            return language.text("高活跃", "Heavy")
+        }
+    }
+}
+
 enum PetPersonality: String, Codable, CaseIterable, Identifiable {
     case healing
     case playful
@@ -130,6 +152,28 @@ struct PetSettings: Codable, Equatable {
     var enabledReminderIDs: Set<String>
     var enabledSkillIDs: Set<String>
     var highTrafficThresholdBytesPerSecond: Double
+    var isPetMoodFeedbackEnabled: Bool
+    var isPetActivityLevelEnabled: Bool
+
+    init(
+        isEnabled: Bool,
+        isQuietModeEnabled: Bool,
+        personality: PetPersonality,
+        enabledReminderIDs: Set<String>,
+        enabledSkillIDs: Set<String>,
+        highTrafficThresholdBytesPerSecond: Double,
+        isPetMoodFeedbackEnabled: Bool = true,
+        isPetActivityLevelEnabled: Bool = true
+    ) {
+        self.isEnabled = isEnabled
+        self.isQuietModeEnabled = isQuietModeEnabled
+        self.personality = personality
+        self.enabledReminderIDs = enabledReminderIDs
+        self.enabledSkillIDs = enabledSkillIDs
+        self.highTrafficThresholdBytesPerSecond = highTrafficThresholdBytesPerSecond
+        self.isPetMoodFeedbackEnabled = isPetMoodFeedbackEnabled
+        self.isPetActivityLevelEnabled = isPetActivityLevelEnabled
+    }
 
     static let `default` = PetSettings(
         isEnabled: false,
@@ -137,7 +181,9 @@ struct PetSettings: Codable, Equatable {
         personality: .healing,
         enabledReminderIDs: PetReminderKind.defaultEnabled,
         enabledSkillIDs: PetSkillID.defaultEnabled,
-        highTrafficThresholdBytesPerSecond: 10_000_000
+        highTrafficThresholdBytesPerSecond: 10_000_000,
+        isPetMoodFeedbackEnabled: true,
+        isPetActivityLevelEnabled: true
     )
 
     func isReminderEnabled(_ kind: PetReminderKind) -> Bool {
@@ -149,8 +195,46 @@ struct PetSettings: Codable, Equatable {
     }
 }
 
+extension PetSettings {
+    private enum CodingKeys: String, CodingKey {
+        case isEnabled
+        case isQuietModeEnabled
+        case personality
+        case enabledReminderIDs
+        case enabledSkillIDs
+        case highTrafficThresholdBytesPerSecond
+        case isPetMoodFeedbackEnabled
+        case isPetActivityLevelEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        let fallback = PetSettings.default
+        self.init(
+            isEnabled: try container.decodeIfPresent(Bool.self, forKey: .isEnabled) ?? fallback.isEnabled,
+            isQuietModeEnabled: try container.decodeIfPresent(Bool.self, forKey: .isQuietModeEnabled) ?? fallback.isQuietModeEnabled,
+            personality: try container.decodeIfPresent(PetPersonality.self, forKey: .personality) ?? fallback.personality,
+            enabledReminderIDs: try container.decodeIfPresent(Set<String>.self, forKey: .enabledReminderIDs) ?? fallback.enabledReminderIDs,
+            enabledSkillIDs: try container.decodeIfPresent(Set<String>.self, forKey: .enabledSkillIDs) ?? fallback.enabledSkillIDs,
+            highTrafficThresholdBytesPerSecond: try container.decodeIfPresent(
+                Double.self,
+                forKey: .highTrafficThresholdBytesPerSecond
+            ) ?? fallback.highTrafficThresholdBytesPerSecond,
+            isPetMoodFeedbackEnabled: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .isPetMoodFeedbackEnabled
+            ) ?? fallback.isPetMoodFeedbackEnabled,
+            isPetActivityLevelEnabled: try container.decodeIfPresent(
+                Bool.self,
+                forKey: .isPetActivityLevelEnabled
+            ) ?? fallback.isPetActivityLevelEnabled
+        )
+    }
+}
+
 struct PetState: Codable, Equatable {
     var mood: PetMood
+    var activityLevel: PetActivityLevel
     var energy: Int
     var affection: Int
     var activeSkillID: String?
@@ -165,6 +249,7 @@ struct PetState: Codable, Equatable {
 
     init(
         mood: PetMood,
+        activityLevel: PetActivityLevel,
         energy: Int,
         affection: Int,
         activeSkillID: String?,
@@ -178,6 +263,7 @@ struct PetState: Codable, Equatable {
         lastUpdatedAt: Date
     ) {
         self.mood = mood
+        self.activityLevel = activityLevel
         self.energy = energy
         self.affection = affection
         self.activeSkillID = activeSkillID
@@ -194,6 +280,7 @@ struct PetState: Codable, Equatable {
     static func `default`(now: Date = Date()) -> PetState {
         PetState(
             mood: .happy,
+            activityLevel: .idle,
             energy: 80,
             affection: 0,
             activeSkillID: nil,
@@ -232,6 +319,7 @@ struct PetState: Codable, Equatable {
 extension PetState {
     private enum CodingKeys: String, CodingKey {
         case mood
+        case activityLevel
         case energy
         case affection
         case activeSkillID
@@ -251,6 +339,7 @@ extension PetState {
         let createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? fallbackDate
         self.init(
             mood: try container.decodeIfPresent(PetMood.self, forKey: .mood) ?? .happy,
+            activityLevel: try container.decodeIfPresent(PetActivityLevel.self, forKey: .activityLevel) ?? .idle,
             energy: try container.decodeIfPresent(Int.self, forKey: .energy) ?? 80,
             affection: try container.decodeIfPresent(Int.self, forKey: .affection) ?? 0,
             activeSkillID: try container.decodeIfPresent(String.self, forKey: .activeSkillID),

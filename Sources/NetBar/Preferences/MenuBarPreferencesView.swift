@@ -44,6 +44,24 @@ struct MenuBarPreferencesView: View {
                     .pickerStyle(.menu)
                 }
 
+                PreferenceSection(
+                    title: appPreferences.text("智能菜单栏", "Smart Menu Bar"),
+                    systemImage: "bolt.badge.automatic"
+                ) {
+                    Toggle(
+                        appPreferences.text("启用智能菜单栏模式", "Enable smart menu bar mode"),
+                        isOn: intelligenceBinding(\.isSmartStatusBarModeEnabled)
+                    )
+                    Toggle(
+                        appPreferences.text("异常状态标识", "Anomaly marker"),
+                        isOn: intelligenceBinding(\.showsSmartAnomalyMarker)
+                    )
+                    Toggle(
+                        appPreferences.text("Top 应用提示", "Top app hint"),
+                        isOn: intelligenceBinding(\.showsSmartTopApplication)
+                    )
+                }
+
                 CollapsiblePreferenceSection(
                     title: appPreferences.text("显示内容", "Display"),
                     systemImage: "textformat.size",
@@ -85,5 +103,18 @@ struct MenuBarPreferencesView: View {
             }
             .padding(.trailing, 2)
         }
+    }
+
+    private func intelligenceBinding<Value>(
+        _ keyPath: WritableKeyPath<NetworkIntelligenceSettings, Value>
+    ) -> Binding<Value> {
+        Binding(
+            get: { appPreferences.networkIntelligenceSettings[keyPath: keyPath] },
+            set: { newValue in
+                var copy = appPreferences.networkIntelligenceSettings
+                copy[keyPath: keyPath] = newValue
+                appPreferences.networkIntelligenceSettings = copy
+            }
+        )
     }
 }

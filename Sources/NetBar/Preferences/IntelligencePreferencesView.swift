@@ -3,6 +3,7 @@ import SwiftUI
 struct IntelligencePreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var notificationController: NetworkNotificationController
+    @ObservedObject var petController: PetController
     let clearHistory: () -> Void
 
     var body: some View {
@@ -12,6 +13,7 @@ struct IntelligencePreferencesView: View {
                 anomalySection
                 notificationSection
                 historySection
+                petFeedbackSection
             }
             .padding(.trailing, 2)
         }
@@ -123,8 +125,34 @@ struct IntelligencePreferencesView: View {
             systemImage: "calendar.badge.clock"
         ) {
             Toggle(
-                appPreferences.text("记录今日与最近 7 天", "Track today and recent 7 days"),
+                appPreferences.text("记录今日与最近 30 天", "Track today and recent 30 days"),
                 isOn: settingsBinding(\.isHistoryTrackingEnabled)
+            )
+
+            Stepper(
+                value: settingsBinding(\.historyRetentionDays),
+                in: 7...30,
+                step: 1
+            ) {
+                Text(appPreferences.text(
+                    "历史保留 \(appPreferences.networkIntelligenceSettings.historyRetentionDays) 天",
+                    "Keep \(appPreferences.networkIntelligenceSettings.historyRetentionDays) days"
+                ))
+            }
+
+            Toggle(
+                appPreferences.text("洞察事件流", "Insight stream"),
+                isOn: settingsBinding(\.isInsightStreamEnabled)
+            )
+
+            Toggle(
+                appPreferences.text("洞察建议", "Insight suggestions"),
+                isOn: settingsBinding(\.isInsightSuggestionEnabled)
+            )
+
+            Toggle(
+                appPreferences.text("应用累计排行", "Application ranking"),
+                isOn: settingsBinding(\.isApplicationHistoryRankingEnabled)
             )
 
             Button(appPreferences.text("清空历史数据", "Clear History"), role: .destructive) {
@@ -141,6 +169,22 @@ struct IntelligencePreferencesView: View {
         }
     }
 
+    private var petFeedbackSection: some View {
+        PreferenceSection(
+            title: appPreferences.text("宠物反馈", "Pet Feedback"),
+            systemImage: "face.smiling"
+        ) {
+            Toggle(
+                appPreferences.text("心情反馈", "Mood feedback"),
+                isOn: petSettingBinding(\.isPetMoodFeedbackEnabled)
+            )
+            Toggle(
+                appPreferences.text("活跃等级", "Activity level"),
+                isOn: petSettingBinding(\.isPetActivityLevelEnabled)
+            )
+        }
+    }
+
     private func settingsBinding<Value>(
         _ keyPath: WritableKeyPath<NetworkIntelligenceSettings, Value>
     ) -> Binding<Value> {
@@ -150,6 +194,19 @@ struct IntelligencePreferencesView: View {
             },
             set: { newValue in
                 updateSettings { settings in
+                    settings[keyPath: keyPath] = newValue
+                }
+            }
+        )
+    }
+
+    private func petSettingBinding<Value>(
+        _ keyPath: WritableKeyPath<PetSettings, Value>
+    ) -> Binding<Value> {
+        Binding(
+            get: { petController.settings[keyPath: keyPath] },
+            set: { newValue in
+                petController.updateSettings { settings in
                     settings[keyPath: keyPath] = newValue
                 }
             }

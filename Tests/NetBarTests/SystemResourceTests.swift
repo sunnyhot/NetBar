@@ -315,6 +315,26 @@ final class SystemResourceTests: XCTestCase {
 
     // MARK: - NetworkMonitor System Resource Integration
 
+    func testNetworkMonitorExposesSamplingDiagnostics() {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: [])
+        )
+
+        monitor.setPowerSaveMode(true)
+        let diagnostics = monitor.samplingDiagnostics
+
+        XCTAssertFalse(diagnostics.isRunning)
+        XCTAssertFalse(diagnostics.isApplicationTrafficSamplingEnabled)
+        XCTAssertTrue(diagnostics.isPowerSaveModeEnabled)
+    }
+
     func testNetworkMonitorUpdatesNetworkIntelligenceSummary() async throws {
         var currentDate = Date(timeIntervalSince1970: 100)
         let reader = SequenceNetworkStatsReader(samples: [
@@ -451,6 +471,7 @@ final class SystemResourceTests: XCTestCase {
 
         XCTAssertEqual(events.map(\.kind), [.highTraffic])
         XCTAssertEqual(monitor.intelligenceSummary.latestEvent?.kind, .highTraffic)
+        XCTAssertEqual(monitor.intelligenceSummary.insightCards.map(\.kind), [.highTraffic])
     }
 
     func testNetworkIntelligenceCoordinatorForwardsEventsToNotificationAndPet() {
