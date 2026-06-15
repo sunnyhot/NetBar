@@ -2805,6 +2805,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(state.lastUpdatedAt, Date(timeIntervalSince1970: 10))
     }
 
+    func testPetStateDefaultsIncludeActivityLevel() {
+        let state = PetState.default(now: Date(timeIntervalSince1970: 10))
+
+        XCTAssertEqual(state.activityLevel, .idle)
+    }
+
     func testPetReminderRecordUsesStringKeysForUserDefaultsEncoding() {
         var state = PetState.default(now: Date(timeIntervalSince1970: 10))
         state.recordReminder(.highTraffic, at: Date(timeIntervalSince1970: 20))
@@ -2930,6 +2936,49 @@ final class PreferencesAndPresentationTests: XCTestCase {
         controller.observe(todaySummary: summary)
 
         XCTAssertEqual(controller.state.mood, .excited)
+    }
+
+    func testPetControllerUpdatesActivityLevelFromDailySummary() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings {
+            $0.isEnabled = true
+            $0.isPetActivityLevelEnabled = true
+        }
+        let summary = NetworkDailySummary(
+            dateKey: "2026-06-12",
+            downloadBytes: 30_000_000_000,
+            uploadBytes: 5_000_000_000,
+            peakDownloadBytesPerSecond: 20_000_000,
+            peakUploadBytesPerSecond: 2_000_000,
+            sampleCount: 100,
+            activeSeconds: 3_600,
+            topApplications: []
+        )
+
+        controller.observe(todaySummary: summary)
+
+        XCTAssertEqual(controller.state.activityLevel, .heavy)
+    }
+
+    func testPetControllerCanDisableMoodFeedbackForAnomalies() {
+        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
+        controller.updateSettings {
+            $0.isEnabled = true
+            $0.isPetMoodFeedbackEnabled = false
+        }
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            timestamp: Date(timeIntervalSince1970: 100),
+            cooldownKey: "networkDrop"
+        )
+
+        controller.observe(anomaly: event)
+
+        XCTAssertNil(controller.latestCue)
+        XCTAssertEqual(controller.state.mood, .happy)
     }
 
     func testPetControllerMapsLowNetworkSpeedToSleepyMood() {

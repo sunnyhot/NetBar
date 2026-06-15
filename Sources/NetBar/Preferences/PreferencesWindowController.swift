@@ -9,6 +9,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let historyStore: NetworkHistoryStore
     private let updater: AppUpdater
     private let notificationController: NetworkNotificationController
+    private let petController: PetController
     private let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     private let clearNetworkHistory: () -> Void
     private var window: NSWindow?
@@ -20,6 +21,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         historyStore: NetworkHistoryStore,
         updater: AppUpdater,
         notificationController: NetworkNotificationController,
+        petController: PetController,
         diagnosticsSnapshot: @escaping () -> DiagnosticsSnapshot,
         clearNetworkHistory: @escaping () -> Void
     ) {
@@ -29,6 +31,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         self.historyStore = historyStore
         self.updater = updater
         self.notificationController = notificationController
+        self.petController = petController
         self.diagnosticsSnapshot = diagnosticsSnapshot
         self.clearNetworkHistory = clearNetworkHistory
     }
@@ -64,6 +67,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
                 historyStore: historyStore,
                 updater: updater,
                 notificationController: notificationController,
+                petController: petController,
                 diagnosticsSnapshot: diagnosticsSnapshot,
                 clearNetworkHistory: clearNetworkHistory
             )
@@ -82,6 +86,7 @@ private struct PreferencesView: View {
     @ObservedObject var historyStore: NetworkHistoryStore
     @ObservedObject var updater: AppUpdater
     @ObservedObject var notificationController: NetworkNotificationController
+    @ObservedObject var petController: PetController
     let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     let clearNetworkHistory: () -> Void
     @State private var selectedTab = 0
@@ -111,6 +116,7 @@ private struct PreferencesView: View {
                 IntelligencePreferencesView(
                     appPreferences: appPreferences,
                     notificationController: notificationController,
+                    petController: petController,
                     clearHistory: clearNetworkHistory
                 )
                     .tabItem {

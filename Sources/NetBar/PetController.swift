@@ -62,7 +62,7 @@ final class PetController: ObservableObject {
     }
 
     func observe(anomaly event: NetworkAnomalyEvent) {
-        guard settings.isEnabled else { return }
+        guard settings.isEnabled, settings.isPetMoodFeedbackEnabled else { return }
         let date = now()
         clearExpiredActiveSkillIfNeeded(at: date)
         state.mood = mood(for: event)
@@ -81,6 +81,9 @@ final class PetController: ObservableObject {
         guard settings.isEnabled else { return }
         let date = now()
         clearExpiredActiveSkillIfNeeded(at: date)
+        if settings.isPetActivityLevelEnabled {
+            state.activityLevel = activityLevel(for: summary)
+        }
         if summary.totalBytes >= 10_000_000_000
             || summary.peakDownloadBytesPerSecond + summary.peakUploadBytesPerSecond >= settings.highTrafficThresholdBytesPerSecond {
             state.mood = .excited
@@ -289,6 +292,19 @@ final class PetController: ObservableObject {
         case .networkRecovered:
             return .happy
         }
+    }
+
+    private func activityLevel(for summary: NetworkDailySummary) -> PetActivityLevel {
+        if summary.totalBytes >= 30_000_000_000 || summary.activeSeconds >= 3_600 {
+            return .heavy
+        }
+        if summary.totalBytes >= 5_000_000_000 || summary.activeSeconds >= 900 {
+            return .active
+        }
+        if summary.totalBytes > 0 || summary.activeSeconds > 0 {
+            return .light
+        }
+        return .idle
     }
 
     private func animationHint(for event: NetworkAnomalyEvent) -> PetAnimationHint {

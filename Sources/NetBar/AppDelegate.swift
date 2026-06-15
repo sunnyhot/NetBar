@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyStore: networkHistoryStore,
         updater: updater,
         notificationController: notificationController,
+        petController: petController,
         diagnosticsSnapshot: { [weak self] in
             guard let self else {
                 return DiagnosticsCenter.makeSnapshot(
