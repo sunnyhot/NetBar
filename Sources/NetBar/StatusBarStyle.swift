@@ -64,6 +64,9 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     case roseGold        // Rose gold (warm pink → gold → copper)
     case arcanePrism     // Arcane prism (gem-like magic color flow)
     case heatVision      // Heat vision (red eye beams)
+    case crystalPrism    // Crystal chroma facets inspired by magical pets
+    case starlightShift  // Starlight color-shift with bright accents
+    case phantomChroma   // Iridescent randomized chroma flow
     case randomPop       // Random color per frame change (拼色)
     case randomCycle     // Smooth random color cycling (随机炫彩)
 
@@ -88,6 +91,9 @@ enum CatColorMode: String, CaseIterable, Identifiable {
         case .roseGold:    return zh ? "玫瑰金" : "Rose Gold"
         case .arcanePrism: return zh ? "魔法炫彩" : "Arcane Prism"
         case .heatVision:  return zh ? "热视线" : "Heat Vision"
+        case .crystalPrism: return zh ? "水晶炫彩" : "Crystal Prism"
+        case .starlightShift: return zh ? "星辉流彩" : "Starlight Shift"
+        case .phantomChroma: return zh ? "幻影炫彩" : "Phantom Chroma"
         case .randomPop:   return zh ? "随机拼色" : "Random Pop"
         case .randomCycle: return zh ? "随机炫彩" : "Random Cycle"
         }
@@ -265,6 +271,37 @@ enum CatColorMode: String, CaseIterable, Identifiable {
                 brightness: 0.92 + 0.08 * pulse,
                 alpha: 1.0
             )
+
+        case .crystalPrism:
+            let t = CGFloat(time.truncatingRemainder(dividingBy: 3.6) / 3.6)
+            let hue = (0.58 + t * 0.32 + CGFloat(frameIndex % 4) * 0.035).truncatingRemainder(dividingBy: 1)
+            let glint = 0.5 + 0.5 * sin(t * .pi * 8)
+            return NSColor(
+                calibratedHue: hue,
+                saturation: 0.82 + 0.16 * glint,
+                brightness: 0.88 + 0.12 * glint,
+                alpha: 1.0
+            )
+
+        case .starlightShift:
+            let t = CGFloat(time.truncatingRemainder(dividingBy: 4.2) / 4.2)
+            let hue = (0.64 + t * 0.48 + CGFloat(frameIndex % 3) * 0.05).truncatingRemainder(dividingBy: 1)
+            let pulse = 0.5 + 0.5 * cos(t * .pi * 10)
+            return NSColor(
+                calibratedHue: hue,
+                saturation: 0.68 + 0.22 * pulse,
+                brightness: 0.9 + 0.1 * pulse,
+                alpha: 1.0
+            )
+
+        case .phantomChroma:
+            let bucket = Int(time * 3)
+            let mixed = UInt32(truncatingIfNeeded: bucket &* 2246822519 &+ frameIndex &* 3266489917)
+            let seed = mixed ^ (mixed &>> 13)
+            let hue = CGFloat(Double(seed % 360) / 360.0)
+            let sat = CGFloat(0.74 + 0.24 * Double((seed >> 8) % 100) / 100.0)
+            let bright = CGFloat(0.82 + 0.18 * Double((seed >> 16) % 100) / 100.0)
+            return NSColor(calibratedHue: hue, saturation: sat.clamped(to: 0...1), brightness: bright.clamped(to: 0...1), alpha: 1.0)
 
         case .randomPop:
             // Change color on each frame change — truly random-feeling jumps
@@ -460,6 +497,55 @@ enum CatColorMode: String, CaseIterable, Identifiable {
                 (color: NSColor(calibratedHue: 0.0, saturation: 1.0, brightness: 0.82 + 0.14 * pulse, alpha: 1.0), position: 1.0),
             ]
 
+        case .crystalPrism:
+            let drift = CGFloat((time.truncatingRemainder(dividingBy: 3.6)) / 3.6) * 0.28
+                + CGFloat(frameIndex % 4) * 0.018
+            let stops: [(hue: CGFloat, saturation: CGFloat, brightness: CGFloat, position: CGFloat)] = [
+                (0.58, 0.88, 1.00, 0.0),
+                (0.72, 0.82, 0.96, 0.14),
+                (0.86, 0.92, 1.00, 0.32),
+                (0.50, 0.78, 0.98, 0.52),
+                (0.13, 0.90, 1.00, 0.73),
+                (0.94, 0.84, 0.98, 1.0),
+            ]
+            return stops.map { stop in
+                (
+                    color: NSColor(
+                        calibratedHue: (stop.hue + drift).truncatingRemainder(dividingBy: 1),
+                        saturation: stop.saturation,
+                        brightness: stop.brightness,
+                        alpha: 1.0
+                    ),
+                    position: stop.position
+                )
+            }
+
+        case .starlightShift:
+            let drift = CGFloat((time.truncatingRemainder(dividingBy: 4.2)) / 4.2) * 0.34
+            let shimmer = CGFloat(0.5 + 0.5 * sin(time * 5.4 + Double(frameIndex) * 0.7))
+            return [
+                (color: NSColor(calibratedHue: (0.62 + drift).truncatingRemainder(dividingBy: 1), saturation: 0.9, brightness: 0.95, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: (0.72 + drift).truncatingRemainder(dividingBy: 1), saturation: 0.92, brightness: 0.9 + 0.1 * shimmer, alpha: 1.0), position: 0.22),
+                (color: NSColor(calibratedHue: (0.88 + drift).truncatingRemainder(dividingBy: 1), saturation: 0.9, brightness: 1.0, alpha: 1.0), position: 0.45),
+                (color: NSColor(calibratedHue: (0.10 + drift).truncatingRemainder(dividingBy: 1), saturation: 0.9, brightness: 1.0, alpha: 1.0), position: 0.68),
+                (color: NSColor(calibratedHue: (0.55 + drift).truncatingRemainder(dividingBy: 1), saturation: 0.9, brightness: 0.96, alpha: 1.0), position: 1.0),
+            ]
+
+        case .phantomChroma:
+            let timeBucket = Int(time * 2.5)
+            let seed = UInt32(truncatingIfNeeded: timeBucket &* 374761393 &+ frameIndex &* 668265263)
+            let hue1 = CGFloat(Double((seed &+ 37) % 360) / 360.0)
+            let hue2 = CGFloat(Double(((seed >> 7) &+ 149) % 360) / 360.0)
+            let hue3 = CGFloat(Double(((seed >> 13) &+ 251) % 360) / 360.0)
+            let hue4 = (hue1 + 0.62).truncatingRemainder(dividingBy: 1)
+            return [
+                (color: NSColor(calibratedHue: hue1, saturation: 0.86, brightness: 0.98, alpha: 1.0), position: 0.0),
+                (color: NSColor(calibratedHue: hue2, saturation: 0.72, brightness: 1.00, alpha: 1.0), position: 0.24),
+                (color: NSColor(calibratedHue: hue3, saturation: 0.88, brightness: 0.92, alpha: 1.0), position: 0.48),
+                (color: NSColor(calibratedHue: hue4, saturation: 0.78, brightness: 1.0, alpha: 1.0), position: 0.76),
+                (color: NSColor(calibratedHue: hue2, saturation: 0.90, brightness: 0.94, alpha: 1.0), position: 1.0),
+            ]
+
         case .randomPop:
             // Random: 2-3 random colors split across the body
             let timeBucket = Int(time * 2)
@@ -491,7 +577,7 @@ enum CatColorMode: String, CaseIterable, Identifiable {
     /// Whether this mode should show sparkle/star decorations on the character
     var hasSparkles: Bool {
         switch self {
-        case .galaxy, .neon, .aurora, .cyber, .candy, .arcanePrism, .heatVision, .randomPop, .rainbow:
+        case .galaxy, .neon, .aurora, .cyber, .candy, .arcanePrism, .heatVision, .crystalPrism, .starlightShift, .phantomChroma, .randomPop, .rainbow:
             return true
         default:
             return false
@@ -1218,8 +1304,9 @@ enum StatusBarDisplayRenderer {
                         }
                     }
 
-                    if character.isTemplate {
-                        // Template mode: tint with color from CatColorMode
+                    if character.supportsColorControls {
+                        // Color-capable characters use the same tint pipeline, whether their
+                        // source frames are template silhouettes or full-color sprites.
                         if colorMode == .solid {
                             // Solid color: use single-color tint
                             let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
@@ -1246,7 +1333,7 @@ enum StatusBarDisplayRenderer {
                             }
                         }
                     } else {
-                        // Color mode (gaming-cat, party-parrot, etc.): draw with original colors
+                        // Original-only characters keep authored colors.
                         catImg.isTemplate = false
                         catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
                     }
@@ -1468,7 +1555,18 @@ enum StatusBarDisplayRenderer {
                     return NSImage(contentsOf: url)
                 }
                 if let resPath = Bundle.main.resourcePath {
-                    return NSImage(contentsOf: URL(fileURLWithPath: "\(resPath)/RunCat/\(runCatCharacter.id)/frame_\(frameIndex).png"))
+                    let bundledURL = URL(fileURLWithPath: "\(resPath)/RunCat/\(runCatCharacter.id)/frame_\(frameIndex).png")
+                    if let image = NSImage(contentsOf: bundledURL) {
+                        return image
+                    }
+                }
+                let sourceTreeURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+                    .appendingPathComponent("Resources")
+                    .appendingPathComponent("RunCat")
+                    .appendingPathComponent(runCatCharacter.id)
+                    .appendingPathComponent("frame_\(frameIndex).png")
+                if FileManager.default.fileExists(atPath: sourceTreeURL.path) {
+                    return NSImage(contentsOf: sourceTreeURL)
                 }
                 return nil
             case .custom(let customCharacter):

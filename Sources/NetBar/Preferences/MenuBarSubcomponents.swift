@@ -333,7 +333,18 @@ struct CharacterPickerPreviewIcon: View {
             return NSImage(contentsOf: url)
         }
         if let resourcePath = Bundle.main.resourcePath {
-            return NSImage(contentsOf: URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(frameIndex).png"))
+            let bundledURL = URL(fileURLWithPath: "\(resourcePath)/RunCat/\(character.id)/frame_\(frameIndex).png")
+            if let image = NSImage(contentsOf: bundledURL) {
+                return image
+            }
+        }
+        let sourceTreeURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
+            .appendingPathComponent("Resources")
+            .appendingPathComponent("RunCat")
+            .appendingPathComponent(character.id)
+            .appendingPathComponent("frame_\(frameIndex).png")
+        if FileManager.default.fileExists(atPath: sourceTreeURL.path) {
+            return NSImage(contentsOf: sourceTreeURL)
         }
         return nil
     }

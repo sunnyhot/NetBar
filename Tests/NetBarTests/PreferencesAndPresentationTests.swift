@@ -1754,6 +1754,65 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(character.frameWidth, 36)
     }
 
+    func testAllBuiltInCharactersExceptSushiSupportColorControls() {
+        let unsupported = RunCatCharacter.allCharacters
+            .filter { !$0.supportsColorControls }
+            .map(\.id)
+
+        XCTAssertEqual(unsupported, ["sushi"])
+    }
+
+    func testGoldenCatUsesSelectedSolidColorInsteadOfOriginalColor() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "golden_cat"
+        settings.catColorMode = CatColorMode.solid.rawValue
+        settings.catColor = PersistedColor(red: 0.02, green: 0.18, blue: 1.0, alpha: 1)
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.backgroundColor = .olive
+        settings.usesSystemTextColor = false
+        settings.textColor = .black
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0
+        )
+
+        XCTAssertGreaterThan(
+            bluePixelCount(in: image, horizontalRegion: 0.0..<0.34),
+            10,
+            dominantColorSummary(in: image)
+        )
+    }
+
+    func testRockKingdomInspiredChromaModesUseRichMultiStopPalettes() {
+        let modes: [CatColorMode] = [.crystalPrism, .starlightShift, .phantomChroma]
+
+        for mode in modes {
+            let colors = mode.gradientColors(
+                at: 19.25,
+                frameIndex: 2,
+                baseColor: PersistedColor.white,
+                size: NSSize(width: 42, height: 18)
+            )
+            XCTAssertGreaterThanOrEqual(colors.count, 5, mode.rawValue)
+            XCTAssertEqual(colors.first?.position, 0, mode.rawValue)
+            XCTAssertEqual(colors.last?.position, 1, mode.rawValue)
+
+            let components = colors.compactMap { hsbComponents(for: $0.color) }
+            XCTAssertEqual(components.count, colors.count, mode.rawValue)
+            XCTAssertTrue(components.allSatisfy { $0.saturation >= 0.62 }, mode.rawValue)
+            XCTAssertGreaterThan(hueSpread(in: components), 0.32, mode.rawValue)
+        }
+
+        XCTAssertEqual(CatColorMode.crystalPrism.displayName(zh: true), "水晶炫彩")
+        XCTAssertEqual(CatColorMode.starlightShift.displayName(zh: false), "Starlight Shift")
+        XCTAssertTrue(CatColorMode.phantomChroma.hasSparkles)
+    }
+
     func testDuplicateGooglyCatRunnerIsRemovedFromBuiltInCharacterList() {
         XCTAssertFalse(RunCatCharacter.allCharacters.contains { $0.id == "googly_cat" })
         XCTAssertFalse(RunCatCharacter.allCharacters.contains { $0.nameZh == "咕咕眼猫" })
@@ -1784,6 +1843,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             "metal_cluster_cat": (10, 149),
             "flash_cat": (5, 42),
             "maneki_neko": (15, 14),
+            "prism_fox": (5, 40),
+            "starlight_dragon": (5, 46),
+            "chroma_slime": (6, 30),
             "sushi": (16, 58)
         ]
 
@@ -3536,6 +3598,32 @@ final class PreferencesAndPresentationTests: XCTestCase {
                     color.redComponent > 0.72,
                     color.redComponent > color.greenComponent + 0.45,
                     color.redComponent > color.blueComponent + 0.45
+                else { continue }
+                count += 1
+            }
+        }
+
+        return count
+    }
+
+    private func bluePixelCount(in image: NSImage, horizontalRegion: Range<Double>) -> Int {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        let minX = max(Int(Double(bitmap.pixelsWide) * horizontalRegion.lowerBound), 0)
+        let maxX = min(Int(Double(bitmap.pixelsWide) * horizontalRegion.upperBound), bitmap.pixelsWide)
+        var count = 0
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in minX..<maxX {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5,
+                    color.blueComponent > 0.72,
+                    color.blueComponent > color.redComponent + 0.35,
+                    color.blueComponent > color.greenComponent + 0.35
                 else { continue }
                 count += 1
             }

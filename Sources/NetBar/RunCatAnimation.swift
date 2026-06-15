@@ -23,7 +23,7 @@ struct RunCatCharacter: Equatable, Identifiable {
 
     var resourceDir: String { id }
     var isGooglyEyes: Bool { id == Self.googlyEyesID }
-    var supportsColorControls: Bool { isTemplate || isGooglyEyes }
+    var supportsColorControls: Bool { id != "sushi" }
 
     var displayName: String {
         // Use Chinese name by default; can be switched based on locale
@@ -62,6 +62,10 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 5, frameWidth: 22, isTemplate: true, category: .animal),
         RunCatCharacter(id: "frog", nameZh: "青蛙", nameEn: "Frog", nameJa: "カエル",
                         frameCount: 5, frameWidth: 25, isTemplate: true, category: .animal),
+        RunCatCharacter(id: "prism_fox", nameZh: "棱镜狐", nameEn: "Prism Fox", nameJa: "プリズムフォックス",
+                        frameCount: 5, frameWidth: 40, isTemplate: false, category: .animal),
+        RunCatCharacter(id: "starlight_dragon", nameZh: "星辉幼龙", nameEn: "Starlight Dragon", nameJa: "スターライトドラゴン",
+                        frameCount: 5, frameWidth: 46, isTemplate: false, category: .animal),
 
         // Inanimate runners
         RunCatCharacter(id: "cogwheel", nameZh: "齿轮", nameEn: "Cogwheel", nameJa: "歯車",
@@ -96,6 +100,8 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 5, frameWidth: 42, isTemplate: false, category: .special),
         RunCatCharacter(id: "maneki_neko", nameZh: "招财猫", nameEn: "Maneki Neko", nameJa: "招き猫",
                         frameCount: 15, frameWidth: 14, isTemplate: true, category: .special),
+        RunCatCharacter(id: "chroma_slime", nameZh: "幻彩史莱姆", nameEn: "Chroma Slime", nameJa: "クロマスライム",
+                        frameCount: 6, frameWidth: 30, isTemplate: false, category: .special),
         RunCatCharacter(id: "sushi", nameZh: "寿司", nameEn: "Sushi", nameJa: "お寿司",
                         frameCount: 16, frameWidth: 58, isTemplate: false, category: .special),
     ]
