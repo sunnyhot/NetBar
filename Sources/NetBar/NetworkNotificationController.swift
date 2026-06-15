@@ -29,9 +29,15 @@ protocol NetworkNotificationCentering: AnyObject {
 }
 
 final class UserNotificationCenterAdapter: NetworkNotificationCentering {
-    private let center: UNUserNotificationCenter
+    private let makeCenter: () -> UNUserNotificationCenter
+    private lazy var center: UNUserNotificationCenter = makeCenter()
 
-    init(center: UNUserNotificationCenter = .current()) {
+    init(makeCenter: @escaping () -> UNUserNotificationCenter = { UNUserNotificationCenter.current() }) {
+        self.makeCenter = makeCenter
+    }
+
+    init(center: UNUserNotificationCenter) {
+        self.makeCenter = { center }
         self.center = center
     }
 

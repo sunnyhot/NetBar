@@ -31,24 +31,32 @@ fi
 
 chmod +x "$MACOS_DIR/$APP_NAME"
 
-ENTITLEMENTS="$ROOT_DIR/Resources/NetBar.entitlements"
-if [ -f "$ENTITLEMENTS" ]; then
-    CODESIGN_FLAGS=(--force --deep --sign - --entitlements "$ENTITLEMENTS")
-else
-    CODESIGN_FLAGS=(--force --deep --sign -)
-fi
+if [ "${NETBAR_CODESIGN_APP:-0}" = "1" ]; then
+    ENTITLEMENTS="$ROOT_DIR/Resources/NetBar.entitlements"
+    # Preserve the 4K CodeDirectory page size produced by SwiftPM's linker
+    # signature. On newer macOS builds, re-signing this small menu-bar app with
+    # the codesign default 16K page size can pass verification but be killed at launch.
+    CODESIGN_PAGE_SIZE=(--pagesize 4096)
+    if [ -f "$ENTITLEMENTS" ]; then
+        CODESIGN_FLAGS=(--force --deep --sign - --entitlements "$ENTITLEMENTS" "${CODESIGN_PAGE_SIZE[@]}")
+    else
+        CODESIGN_FLAGS=(--force --deep --sign - "${CODESIGN_PAGE_SIZE[@]}")
+    fi
 
-if command -v codesign >/dev/null 2>&1; then
-    if ! codesign "${CODESIGN_FLAGS[@]}" "$APP_DIR" >/dev/null 2>&1; then
-        if ! codesign --force --deep --sign - "$APP_DIR" >/dev/null 2>&1; then
-            if [ "${ALLOW_UNSIGNED_BUILD:-0}" = "1" ]; then
-                echo "warning: codesign failed; continuing because ALLOW_UNSIGNED_BUILD=1" >&2
-            else
-                echo "error: codesign failed; set ALLOW_UNSIGNED_BUILD=1 to keep an unsigned local build" >&2
-                exit 1
+    if command -v codesign >/dev/null 2>&1; then
+        if ! codesign "${CODESIGN_FLAGS[@]}" "$APP_DIR" >/dev/null 2>&1; then
+            if ! codesign --force --deep --sign - "${CODESIGN_PAGE_SIZE[@]}" "$APP_DIR" >/dev/null 2>&1; then
+                if [ "${ALLOW_UNSIGNED_BUILD:-0}" = "1" ]; then
+                    echo "warning: codesign failed; continuing because ALLOW_UNSIGNED_BUILD=1" >&2
+                else
+                    echo "error: codesign failed; set ALLOW_UNSIGNED_BUILD=1 to keep an unsigned local build" >&2
+                    exit 1
+                fi
             fi
         fi
     fi
+else
+    echo "Skipping bundle codesign; preserving SwiftPM linker-signed executable"
 fi
 
 echo "$APP_DIR"

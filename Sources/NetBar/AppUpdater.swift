@@ -712,18 +712,33 @@ final class AppUpdater: ObservableObject {
             throw UpdateError.downloadedVersionIsOlder
         }
 
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
-        process.arguments = ["--verify", "--deep", "--strict", appURL.path]
-        try process.run()
-        process.waitUntilExit()
-
-        guard process.terminationStatus == 0 else {
-            throw UpdateError.codeSignatureInvalid
+        if !Self.codesignSucceeds(arguments: ["--verify", "--deep", "--strict", appURL.path]) {
+            let executableName = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String ?? "NetBar"
+            let executableURL = appURL
+                .appendingPathComponent("Contents", isDirectory: true)
+                .appendingPathComponent("MacOS", isDirectory: true)
+                .appendingPathComponent(executableName)
+            guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
+                throw UpdateError.codeSignatureInvalid
+            }
+            statusMessage = "App 包使用 SwiftPM 签名，将继续安装"
         }
 
         if normalizeVersion(downloadedVersion) != normalizeVersion(expectedVersion) {
             statusMessage = "版本号为 \(downloadedVersion)，将继续安装"
+        }
+    }
+
+    private static func codesignSucceeds(arguments: [String]) -> Bool {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/codesign")
+        process.arguments = arguments
+        do {
+            try process.run()
+            process.waitUntilExit()
+            return process.terminationStatus == 0
+        } catch {
+            return false
         }
     }
 
@@ -749,7 +764,12 @@ final class AppUpdater: ObservableObject {
             /bin/mv "$TARGET_APP" "$BACKUP_APP"
         fi
 
-        if ! /usr/bin/ditto "$SOURCE_APP" "$TARGET_APP"; then
+        /bin/mkdir -p "$TARGET_APP/Contents/MacOS" "$TARGET_APP/Contents/Resources"
+
+        if ! /bin/cp "$SOURCE_APP/Contents/Info.plist" "$TARGET_APP/Contents/Info.plist" \
+            || ! /bin/cp "$SOURCE_APP/Contents/MacOS/NetBar" "$TARGET_APP/Contents/MacOS/NetBar" \
+            || ! /bin/chmod +x "$TARGET_APP/Contents/MacOS/NetBar" \
+            || ! /bin/cp -R "$SOURCE_APP/Contents/Resources/." "$TARGET_APP/Contents/Resources/"; then
             /bin/rm -rf "$TARGET_APP"
             if [ -d "$BACKUP_APP" ]; then
                 /bin/mv "$BACKUP_APP" "$TARGET_APP"

@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.39.2 (2026-06-15)
+
+### Fix — 启动稳定性补丁
+
+- 延迟初始化系统通知中心，避免 App 启动早期被通知框架打断
+- Release 构建保留 SwiftPM linker-signed 可执行文件，避免手动重签后的 app bundle 在新系统上启动即退出
+- 自更新允许 SHA-256 校验通过的 SwiftPM linker-signed app 包继续安装
+- 自更新安装时逐项复制 App bundle，避免整包复制带来的 LaunchServices 启动异常
+- 继续包含 v0.39.1 的 RunCat 炫彩角色扩展与 3 套新增角色资源
+
 ## v0.39.1 (2026-06-15)
 
 ### Enhancement — RunCat 炫彩角色扩展
