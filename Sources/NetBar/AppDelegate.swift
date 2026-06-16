@@ -114,6 +114,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         false
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        statusBarController?.flushNetworkHistory()
+        networkHistoryStore.flushNow()
+    }
+
     @objc private func showAbout(_ sender: Any?) {
         NSApplication.shared.orderFrontStandardAboutPanel(options: [
             .applicationName: "NetBar",

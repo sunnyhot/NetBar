@@ -449,6 +449,39 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(monitor.intelligenceSummary.today.uploadBytes, 3_000)
     }
 
+    func testNetworkMonitorStopFlushesHistoryStore() async throws {
+        var currentDate = Date(timeIntervalSince1970: 100)
+        let root = try temporaryDirectoryForSystemTests()
+        let historyURL = root.appendingPathComponent("NetworkHistory.json")
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [
+                [InterfaceStats(name: "en0", receivedBytes: 1_000, sentBytes: 2_000, receivedPackets: 1, sentPackets: 1)],
+                [InterfaceStats(name: "en0", receivedBytes: 2_000, sentBytes: 3_500, receivedPackets: 2, sentPackets: 2)]
+            ]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            historyStore: NetworkHistoryStore(rootDirectory: root, now: { currentDate }, saveDebounceInterval: 20),
+            now: { currentDate }
+        )
+
+        monitor.refresh()
+        await waitForSnapshotSamples(1, monitor: monitor)
+        currentDate = currentDate.addingTimeInterval(1)
+        monitor.refresh()
+        await waitForSnapshotSamples(2, monitor: monitor)
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: historyURL.path))
+
+        monitor.stop()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: historyURL.path))
+    }
+
     func testNetworkMonitorRecordsApplicationTrafficInIntelligenceSummary() async throws {
         var currentDate = Date(timeIntervalSince1970: 100)
         let trafficReader = SequenceApplicationTrafficReader(samples: [

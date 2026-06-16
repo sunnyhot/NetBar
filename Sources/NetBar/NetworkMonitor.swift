@@ -156,6 +156,7 @@ final class NetworkMonitor: ObservableObject {
         systemResourceTimer?.invalidate()
         systemResourceTimer = nil
         pauseApplicationTrafficSampling()
+        flushNetworkHistory()
         isRunning = false
     }
 
@@ -366,6 +367,10 @@ final class NetworkMonitor: ObservableObject {
         historyStore.clear()
         intelligenceSummary = historyStore.summary
         lastApplicationTrafficDate = nil
+    }
+
+    func flushNetworkHistory() {
+        historyStore.flushNow()
     }
 
     func configureHistory(settings: NetworkIntelligenceSettings) {

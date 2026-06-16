@@ -22,16 +22,21 @@ final class NetworkHistoryStore: ObservableObject {
     private var decoder = JSONDecoder()
     private var isTrackingEnabled = true
     private var retentionDays: Int
+    private let saveDebounceInterval: TimeInterval
+    private var pendingSaveTimer: Timer?
+    private var isDirty = false
 
     init(
         rootDirectory: URL? = nil,
         calendar: Calendar = .current,
         retentionDays: Int = 30,
-        now: @escaping () -> Date = Date.init
+        now: @escaping () -> Date = Date.init,
+        saveDebounceInterval: TimeInterval = 20
     ) {
         self.calendar = calendar
         self.now = now
         self.retentionDays = max(retentionDays, 1)
+        self.saveDebounceInterval = saveDebounceInterval
         let root = rootDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("NetBar", isDirectory: true)
         self.fileURL = root.appendingPathComponent("NetworkHistory.json")
@@ -105,7 +110,7 @@ final class NetworkHistoryStore: ObservableObject {
         self.isTrackingEnabled = isTrackingEnabled
         self.retentionDays = max(retentionDays, 1)
         state.recentDays = Array(state.recentDays.suffix(self.retentionDays))
-        publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
+        publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
     }
 
     func record(snapshot: NetworkSnapshot) {
@@ -117,7 +122,7 @@ final class NetworkHistoryStore: ObservableObject {
             state.today.peakDownloadBytesPerSecond = max(state.today.peakDownloadBytesPerSecond, snapshot.downloadBytesPerSecond)
             state.today.peakUploadBytesPerSecond = max(state.today.peakUploadBytesPerSecond, snapshot.uploadBytesPerSecond)
             state.today.sampleCount += 1
-            publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
+            publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
             return
         }
 
@@ -133,7 +138,7 @@ final class NetworkHistoryStore: ObservableObject {
             state.today.activeSeconds += interval
         }
 
-        publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
+        publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
     }
 
     func record(appTraffic: ApplicationTrafficState, interval: TimeInterval) {
@@ -184,7 +189,7 @@ final class NetworkHistoryStore: ObservableObject {
             ApplicationTrafficPresentation.displayApplications(appTraffic.applications, mode: .activity),
             by: .activity
         )
-        publishAndSave(realtimeTopApplications: Array(realtimeTop.prefix(5)))
+        publishAndScheduleSave(realtimeTopApplications: Array(realtimeTop.prefix(5)))
     }
 
     func recordAnimationPlayback(count: UInt64, characterID: String, at date: Date) {
@@ -194,7 +199,7 @@ final class NetworkHistoryStore: ObservableObject {
         state.today.animationPlaybackCount += count
         state.today.animationPlaybackCountsByCharacter[characterID, default: 0] += count
         state.animationPlaybackCountsByCharacter[characterID, default: 0] += count
-        publishAndSave(realtimeTopApplications: summary.realtimeTopApplications)
+        publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
     }
 
     func clear() {
@@ -205,7 +210,8 @@ final class NetworkHistoryStore: ObservableObject {
         )
         lastSnapshot = nil
         lastApplicationTotals = [:]
-        publishAndSave(realtimeTopApplications: [])
+        publishAndScheduleSave(realtimeTopApplications: [])
+        flushNow()
     }
 
     private func rolloverIfNeeded(for date: Date) {
@@ -218,7 +224,7 @@ final class NetworkHistoryStore: ObservableObject {
         lastApplicationTotals = [:]
     }
 
-    private func publishAndSave(realtimeTopApplications: [ApplicationTrafficRate]) {
+    private func publishAndScheduleSave(realtimeTopApplications: [ApplicationTrafficRate]) {
         summary = NetworkIntelligenceSummary(
             latestEvent: summary.latestEvent,
             today: state.today,
@@ -228,7 +234,27 @@ final class NetworkHistoryStore: ObservableObject {
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter,
             insightCards: summary.insightCards
         )
+        scheduleSave()
+    }
+
+    func flushNow() {
+        pendingSaveTimer?.invalidate()
+        pendingSaveTimer = nil
+        guard isDirty else { return }
         save()
+        isDirty = false
+    }
+
+    private func scheduleSave() {
+        isDirty = true
+        guard pendingSaveTimer == nil else { return }
+        let timer = Timer(timeInterval: saveDebounceInterval, repeats: false) { [weak self] _ in
+            Task { @MainActor in
+                self?.flushNow()
+            }
+        }
+        RunLoop.main.add(timer, forMode: .common)
+        pendingSaveTimer = timer
     }
 
     private func save() {

@@ -600,6 +600,10 @@ final class StatusBarController {
         monitor.clearNetworkHistory()
     }
 
+    func flushNetworkHistory() {
+        monitor.flushNetworkHistory()
+    }
+
     private var applicationTrafficPauseTask: Task<Void, Never>?
 
     private func configureDetailsWindowObserver() {

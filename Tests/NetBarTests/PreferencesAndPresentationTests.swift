@@ -1171,6 +1171,44 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.peakUploadBytesPerSecond, 200)
     }
 
+    func testNetworkHistoryStoreDefersDiskWriteUntilFlush() throws {
+        let root = try temporaryDirectory()
+        let historyURL = root.appendingPathComponent("NetworkHistory.json")
+        let store = NetworkHistoryStore(
+            rootDirectory: root,
+            calendar: fixedCalendar(),
+            now: { Date(timeIntervalSince1970: 0) },
+            saveDebounceInterval: 20
+        )
+
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000))
+
+        XCTAssertFalse(FileManager.default.fileExists(atPath: historyURL.path))
+
+        store.flushNow()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: historyURL.path))
+    }
+
+    func testNetworkHistoryStoreClearFlushesImmediately() throws {
+        let root = try temporaryDirectory()
+        let historyURL = root.appendingPathComponent("NetworkHistory.json")
+        let store = NetworkHistoryStore(
+            rootDirectory: root,
+            calendar: fixedCalendar(),
+            now: { Date(timeIntervalSince1970: 0) },
+            saveDebounceInterval: 20
+        )
+
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000))
+        store.clear()
+
+        XCTAssertTrue(FileManager.default.fileExists(atPath: historyURL.path))
+        let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 0) })
+        XCTAssertEqual(reloaded.summary.today.downloadBytes, 0)
+        XCTAssertEqual(reloaded.summary.today.uploadBytes, 0)
+    }
+
     func testNetworkHistoryStoreAccumulatesAnimationPlaybacksForToday() throws {
         let root = try temporaryDirectory()
         var currentDate = isoDate("2026-06-08T12:00:00Z")
@@ -1465,6 +1503,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         store.record(snapshot: first)
         store.record(snapshot: second)
         store.record(appTraffic: apps, interval: 1)
+        store.flushNow()
         let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { reloadTimestamp })
 
         XCTAssertEqual(reloaded.summary.today.downloadBytes, 500)
@@ -1480,6 +1519,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
         store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000, timestamp: currentDate))
         store.record(snapshot: sampleSnapshot(download: 300, upload: 200, received: 1_800, sent: 2_600, timestamp: isoDate("2026-06-01T12:00:01Z")))
+        store.flushNow()
 
         currentDate = isoDate("2026-06-02T12:00:00Z")
         let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
