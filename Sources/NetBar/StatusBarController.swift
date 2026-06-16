@@ -141,8 +141,7 @@ final class StatusBarController {
     private var needsRender = false
     private var pendingAnimationPlaybackCountsByCharacter: [String: UInt64] = [:]
     private var animationPlaybackFlushTimer: Timer?
-    private var renderedImageCache: [(signature: StatusBarRenderSignature, image: NSImage)] = []
-    private static let renderedImageCacheLimit = 12
+    private let renderedImageCache = StatusBarRenderedImageCache(limit: 12)
     private var renderCoalesceInterval: TimeInterval = 1.0 / 15.0
     private lazy var networkIntelligenceCoordinator = NetworkIntelligenceCoordinator(
         notify: { [weak self] event, settings in
@@ -279,6 +278,7 @@ final class StatusBarController {
             DispatchQueue.main.async {
                 self?.lastRenderSignature = nil
                 self?.lastColorTimeBucket = nil
+                self?.renderedImageCache.removeAll()
                 self?.requestRender()
             }
         }
@@ -525,7 +525,7 @@ final class StatusBarController {
         statusItem.length = presentation.width
 
         let image: NSImage
-        if let cached = renderedImageCache.first(where: { $0.signature == signature })?.image {
+        if let cached = renderedImageCache.image(for: signature) {
             image = cached
         } else {
             let scale = button.window?.screen?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2
@@ -538,10 +538,7 @@ final class StatusBarController {
                 googlyEyesState: activeGooglyEyesState,
                 smartContext: smartContext
             )
-            renderedImageCache.append((signature: signature, image: image))
-            if renderedImageCache.count > Self.renderedImageCacheLimit {
-                renderedImageCache.removeFirst()
-            }
+            renderedImageCache.store(image, for: signature)
         }
         button.attributedTitle = NSAttributedString(string: "")
         button.title = ""

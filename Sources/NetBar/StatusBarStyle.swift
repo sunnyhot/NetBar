@@ -984,6 +984,8 @@ enum StatusBarDisplayRenderer {
 
     private static let tintImageCache = NSCache<TintImageCacheKey, NSImage>()
 
+    private static let textLayoutCache = StatusBarTextLayoutCache(limit: 24)
+
     private static let gradientTintImageCache: NSCache<GradientTintImageCacheKey, NSImage> = {
         let cache = NSCache<GradientTintImageCacheKey, NSImage>()
         cache.countLimit = 30
@@ -1687,6 +1689,28 @@ enum StatusBarDisplayRenderer {
             }
         }()
         let horizontalPadding: CGFloat = settings.showsBackground ? 8 : 2
+        let cacheKey = StatusBarTextLayoutCacheKey(
+            lines: lines,
+            fontSize: settings.fontSize,
+            isBold: settings.isBold,
+            lineSpacing: settings.lineSpacing,
+            alignment: settings.alignment,
+            showsBackground: settings.showsBackground
+        )
+        if settings.usesAutomaticWidth, let cached = textLayoutCache.layout(for: cacheKey) {
+            let catExtraWidth = characterExtraWidth(
+                settings: settings,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex
+            )
+            return Layout(
+                width: ceil(cached.width + catExtraWidth),
+                horizontalPadding: cached.horizontalPadding,
+                lines: cached.lines,
+                font: font
+            )
+        }
+
         let measuredWidth = lines
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
             .max() ?? 1
@@ -1702,6 +1726,17 @@ enum StatusBarDisplayRenderer {
         let automaticTextWidth = smartContext.overrideLine == nil ? max(measuredWidth, stableWidth) : measuredWidth
         let automaticWidth = ceil(automaticTextWidth + horizontalPadding * 2 + catExtraWidth)
         let width = settings.usesAutomaticWidth ? automaticWidth : settings.clampedWidth
+
+        if settings.usesAutomaticWidth {
+            textLayoutCache.store(
+                StatusBarCachedTextLayout(
+                    width: ceil(automaticTextWidth + horizontalPadding * 2),
+                    horizontalPadding: horizontalPadding,
+                    lines: lines
+                ),
+                for: cacheKey
+            )
+        }
 
         return Layout(
             width: width,

@@ -32,6 +32,64 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testStatusBarRenderedImageCacheReusesMatchingSignatureAndEvictsOldest() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        let cache = StatusBarRenderedImageCache(limit: 2)
+        let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
+        let firstSignature = StatusBarDisplayRenderer.signature(
+            snapshot: snapshot,
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua"
+        )
+        let secondSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 43_000, upload: 9_500),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua"
+        )
+        let thirdSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 44_000, upload: 9_500),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua"
+        )
+
+        let firstImage = NSImage(size: NSSize(width: 10, height: 10))
+        let secondImage = NSImage(size: NSSize(width: 11, height: 10))
+        let thirdImage = NSImage(size: NSSize(width: 12, height: 10))
+
+        cache.store(firstImage, for: firstSignature)
+        cache.store(secondImage, for: secondSignature)
+
+        XCTAssertTrue(cache.image(for: firstSignature) === firstImage)
+
+        cache.store(thirdImage, for: thirdSignature)
+
+        XCTAssertNil(cache.image(for: secondSignature))
+        XCTAssertTrue(cache.image(for: firstSignature) === firstImage)
+        XCTAssertTrue(cache.image(for: thirdSignature) === thirdImage)
+    }
+
+    func testStatusBarTextLayoutCacheReusesMatchingInputs() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        let cache = StatusBarTextLayoutCache(limit: 2)
+        let key = StatusBarTextLayoutCacheKey(
+            lines: ["down", "up"],
+            fontSize: settings.fontSize,
+            isBold: settings.isBold,
+            lineSpacing: settings.lineSpacing,
+            alignment: settings.alignment,
+            showsBackground: settings.showsBackground
+        )
+        let layout = StatusBarCachedTextLayout(
+            width: 48,
+            horizontalPadding: 2,
+            lines: ["down", "up"]
+        )
+
+        cache.store(layout, for: key)
+
+        XCTAssertEqual(cache.layout(for: key), layout)
+    }
+
     func testStatusBarTrafficDisplayModeControlsRenderedLines() {
         let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
         let settings = StatusBarSettings(defaults: isolatedDefaults())
