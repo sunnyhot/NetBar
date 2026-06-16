@@ -697,7 +697,7 @@ struct RatePoint: Identifiable, Equatable {
     let uploadBytesPerSecond: Double
 }
 
-enum NetworkActivityLevel {
+enum NetworkActivityLevel: Equatable {
     case idle      // 0 B/s
     case low       // < 100 KB/s
     case moderate  // 100 KB/s - 1 MB/s

@@ -315,6 +315,70 @@ final class SystemResourceTests: XCTestCase {
 
     // MARK: - NetworkMonitor System Resource Integration
 
+    func testPerformanceSamplingPolicyForBackgroundIdleState() {
+        let policy = PerformanceSamplingCoordinator.policy(for: PerformanceSamplingState(
+            isRunning: true,
+            isDetailWindowVisible: false,
+            isScreenLocked: false,
+            isLowPowerModeEnabled: false,
+            activityLevel: .idle,
+            showsStatusAnimation: true,
+            animationSpeedSource: .networkSpeed
+        ))
+
+        XCTAssertEqual(policy.interfaceInterval, 3.0)
+        XCTAssertFalse(policy.isApplicationTrafficEnabled)
+        XCTAssertEqual(policy.systemResourceInterval, 5.0)
+        XCTAssertFalse(policy.isAnimationMetricSamplingEnabled)
+    }
+
+    func testPerformanceSamplingPolicyForDetailVisibleState() {
+        let policy = PerformanceSamplingCoordinator.policy(for: PerformanceSamplingState(
+            isRunning: true,
+            isDetailWindowVisible: true,
+            isScreenLocked: false,
+            isLowPowerModeEnabled: false,
+            activityLevel: .high,
+            showsStatusAnimation: true,
+            animationSpeedSource: .autoComposite
+        ))
+
+        XCTAssertEqual(policy.interfaceInterval, 1.0)
+        XCTAssertTrue(policy.isApplicationTrafficEnabled)
+        XCTAssertEqual(policy.systemResourceInterval, 5.0)
+        XCTAssertTrue(policy.isAnimationMetricSamplingEnabled)
+    }
+
+    func testPerformanceSamplingPolicyForLowPowerAndLockedStates() {
+        let lowPower = PerformanceSamplingCoordinator.policy(for: PerformanceSamplingState(
+            isRunning: true,
+            isDetailWindowVisible: true,
+            isScreenLocked: false,
+            isLowPowerModeEnabled: true,
+            activityLevel: .moderate,
+            showsStatusAnimation: true,
+            animationSpeedSource: .cpuUsage
+        ))
+        XCTAssertEqual(lowPower.interfaceInterval, 2.0)
+        XCTAssertTrue(lowPower.isApplicationTrafficEnabled)
+        XCTAssertEqual(lowPower.systemResourceInterval, 10.0)
+        XCTAssertTrue(lowPower.isAnimationMetricSamplingEnabled)
+
+        let locked = PerformanceSamplingCoordinator.policy(for: PerformanceSamplingState(
+            isRunning: true,
+            isDetailWindowVisible: true,
+            isScreenLocked: true,
+            isLowPowerModeEnabled: false,
+            activityLevel: .high,
+            showsStatusAnimation: true,
+            animationSpeedSource: .autoComposite
+        ))
+        XCTAssertEqual(locked.interfaceInterval, 0)
+        XCTAssertFalse(locked.isApplicationTrafficEnabled)
+        XCTAssertEqual(locked.systemResourceInterval, 0)
+        XCTAssertFalse(locked.isAnimationMetricSamplingEnabled)
+    }
+
     func testNetworkMonitorExposesSamplingDiagnostics() {
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[]]),
