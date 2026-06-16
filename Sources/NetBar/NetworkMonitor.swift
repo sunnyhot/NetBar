@@ -44,13 +44,16 @@ final class NetworkMonitor: ObservableObject {
     private var applicationTimer: Timer?
     private var systemResourceTimer: Timer?
     private var isRefreshingSystemResources = false
+    private var isScreenLockedForSampling = false
     private var powerSaveMode = false
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
     private let historyCapacity = 900
     private var activityLevel: NetworkActivityLevel = .idle
     private var applicationSampleInterval: TimeInterval {
-        powerSaveMode ? 5.0 : 1.0
+        currentSamplingPolicy.applicationTrafficInterval > 0
+            ? currentSamplingPolicy.applicationTrafficInterval
+            : (powerSaveMode ? 5.0 : 1.0)
     }
 
     var recentHistory: [RatePoint] {
@@ -69,6 +72,18 @@ final class NetworkMonitor: ObservableObject {
             isApplicationTrafficSamplingEnabled: shouldSampleApplicationTraffic,
             isPowerSaveModeEnabled: powerSaveMode
         )
+    }
+
+    var currentSamplingPolicy: PerformanceSamplingPolicy {
+        PerformanceSamplingCoordinator.policy(for: PerformanceSamplingState(
+            isRunning: isRunning,
+            isDetailWindowVisible: shouldSampleApplicationTraffic,
+            isScreenLocked: isScreenLockedForSampling,
+            isLowPowerModeEnabled: powerSaveMode,
+            activityLevel: activityLevel,
+            showsStatusAnimation: true,
+            animationSpeedSource: .networkSpeed
+        ))
     }
 
     init(
@@ -149,12 +164,24 @@ final class NetworkMonitor: ObservableObject {
         rescheduleTimers()
     }
 
+    func setScreenLockedForSampling(_ locked: Bool) {
+        guard isScreenLockedForSampling != locked else { return }
+        isScreenLockedForSampling = locked
+        if locked {
+            stop()
+        } else if !isRunning {
+            start()
+        } else {
+            rescheduleTimers()
+        }
+    }
+
     private func rescheduleTimers() {
         guard isRunning else { return }
 
         scheduleNextSample()
 
-        if shouldSampleApplicationTraffic {
+        if currentSamplingPolicy.isApplicationTrafficEnabled {
             scheduleApplicationTrafficTimer()
         } else {
             applicationTimer?.invalidate()
@@ -174,8 +201,11 @@ final class NetworkMonitor: ObservableObject {
     }
 
     private func scheduleSystemResourceTimer() {
-        let resourceInterval: TimeInterval = powerSaveMode ? 10.0 : 5.0
+        let resourceInterval = currentSamplingPolicy.systemResourceInterval
         systemResourceTimer?.invalidate()
+        systemResourceTimer = nil
+        guard resourceInterval > 0 else { return }
+
         systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.refreshSystemResources()
@@ -644,10 +674,10 @@ final class NetworkMonitor: ObservableObject {
 
     private func scheduleNextSample() {
         timer?.invalidate()
-        let interval: TimeInterval = {
-            let base = activityLevel.baseInterval
-            return ProcessInfo.processInfo.isLowPowerModeEnabled ? base * 2 : base
-        }()
+        timer = nil
+        let interval = currentSamplingPolicy.interfaceInterval
+        guard interval > 0 else { return }
+
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 self?.refresh()

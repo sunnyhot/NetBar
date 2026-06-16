@@ -783,6 +783,52 @@ final class SystemResourceTests: XCTestCase {
         monitor.stop()
     }
 
+    func testNetworkMonitorSamplingPolicyReflectsVisibilityAndPowerMode() {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: [])
+        )
+
+        monitor.start()
+        XCTAssertFalse(monitor.currentSamplingPolicy.isApplicationTrafficEnabled)
+        XCTAssertEqual(monitor.currentSamplingPolicy.systemResourceInterval, 5.0)
+
+        monitor.isApplicationTrafficVisible = true
+        XCTAssertTrue(monitor.currentSamplingPolicy.isApplicationTrafficEnabled)
+        XCTAssertEqual(monitor.currentSamplingPolicy.applicationTrafficInterval, 1.0)
+
+        monitor.setPowerSaveMode(true)
+        XCTAssertEqual(monitor.currentSamplingPolicy.applicationTrafficInterval, 5.0)
+        XCTAssertEqual(monitor.currentSamplingPolicy.systemResourceInterval, 10.0)
+
+        monitor.stop()
+    }
+
+    func testNetworkMonitorLockedPolicyStopsSamplers() {
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[]]),
+            appTrafficReader: EmptyApplicationTrafficReader(),
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: [])
+        )
+
+        monitor.start()
+        monitor.setScreenLockedForSampling(true)
+
+        XCTAssertEqual(monitor.currentSamplingPolicy, .stopped)
+        XCTAssertFalse(monitor.samplingDiagnostics.isRunning)
+    }
+
     // MARK: - Application Traffic State Machine Tests (LUC-231)
 
     func testRefreshApplicationTrafficBlockedWhenSamplingDisabled() async {

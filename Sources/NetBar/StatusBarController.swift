@@ -293,11 +293,9 @@ final class StatusBarController {
                     self.flushAnimationPlaybackCount()
                     self.catAnimation?.pauseForScreenLock()
                     self.pauseGooglyEyesTracking()
-                    self.systemMetricsSampler.stop()
-                    self.monitor.stop()
+                    self.monitor.setScreenLockedForSampling(true)
                 } else {
-                    self.monitor.start()
-                    self.systemMetricsSampler.start()
+                    self.monitor.setScreenLockedForSampling(false)
                     self.catAnimation?.resumeFromScreenLock()
                     self.configureGooglyEyesTracking()
                     self.lastRenderSignature = nil
