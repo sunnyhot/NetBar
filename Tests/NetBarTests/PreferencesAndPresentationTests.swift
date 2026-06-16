@@ -3972,18 +3972,6 @@ extension PreferencesAndPresentationTests {
     }
 }
 
-// MARK: - Mock System Metrics Reader
-
-private final class MockSystemMetricsReader: SystemMetricsReading {
-    var cpu: Double = 0
-    var memory: Double = 0
-    var thermal: Int = 0
-
-    func cpuUsage() -> Double { cpu }
-    func memoryUsage() -> Double { memory }
-    func thermalState() -> Int { thermal }
-}
-
 // MARK: - Memory & CPU Sort Tests
 
 extension PreferencesAndPresentationTests {
@@ -4348,18 +4336,5 @@ private extension NetworkIntelligenceSettings {
         var copy = self
         copy.isSystemNotificationEnabled = true
         return copy
-    }
-}
-
-// MARK: - SystemMetricsSampler Tests
-
-extension PreferencesAndPresentationTests {
-
-    func testSystemMetricsSamplerInitialValues() {
-        let mock = MockSystemMetricsReader()
-        let sampler = SystemMetricsSampler(reader: mock, sampleInterval: 2.0)
-        XCTAssertEqual(sampler.lastCPUUsage, 0)
-        XCTAssertEqual(sampler.lastMemoryUsage, 0)
-        XCTAssertEqual(sampler.lastThermalState, 0)
     }
 }

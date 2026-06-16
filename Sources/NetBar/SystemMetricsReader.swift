@@ -149,6 +149,43 @@ enum AnimationSpeedMapper {
     }
 }
 
+extension AnimationSpeedMapper {
+    static func activityLevel(
+        fromSystemResources snapshot: SystemResourceSnapshot,
+        source: AnimationSpeedSource,
+        networkActivityLevel: ActivityLevel = .idle
+    ) -> ActivityLevel {
+        switch source {
+        case .networkSpeed:
+            return networkActivityLevel
+        case .memoryUsage:
+            return activityLevel(from: snapshot.memory.usedFraction)
+        case .cpuUsage:
+            return activityLevel(from: snapshot.cpu.usageFraction)
+        case .thermalState:
+            return activityLevel(fromThermalState: snapshot.thermal.state.animationSpeedValue)
+        case .autoComposite:
+            return autoCompositeActivityLevel(
+                cpuUsage: snapshot.cpu.usageFraction,
+                memoryUsage: snapshot.memory.usedFraction,
+                thermalState: snapshot.thermal.state.animationSpeedValue,
+                networkActivityLevel: networkActivityLevel
+            )
+        }
+    }
+}
+
+private extension ThermalPressureState {
+    var animationSpeedValue: Int {
+        switch self {
+        case .nominal: return 0
+        case .fair: return 1
+        case .serious: return 2
+        case .critical: return 3
+        }
+    }
+}
+
 // MARK: - System Metrics Sampler
 
 /// Periodically samples system metrics and publishes the latest values.

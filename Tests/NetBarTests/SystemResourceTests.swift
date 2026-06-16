@@ -100,6 +100,40 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(a, b)
     }
 
+    func testAnimationSpeedMapperUsesSystemResourceSnapshotValues() {
+        let snapshot = SystemResourceSnapshot(
+            memory: MemoryUsage(totalBytes: 100, usedBytes: 70, swapTotalBytes: 0, swapUsedBytes: 0),
+            cpu: CPUUsage(totalTicks: 100, userTicks: 80, systemTicks: 10, idleTicks: 10),
+            thermal: ThermalInfo(state: .serious)
+        )
+
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromSystemResources: snapshot, source: .memoryUsage), .moderate)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromSystemResources: snapshot, source: .cpuUsage), .high)
+        XCTAssertEqual(AnimationSpeedMapper.activityLevel(fromSystemResources: snapshot, source: .thermalState), .moderate)
+    }
+
+    func testAnimationSpeedMapperAutoCompositeUsesNetworkAndSystemResources() {
+        let snapshot = SystemResourceSnapshot(
+            memory: MemoryUsage(totalBytes: 100, usedBytes: 10, swapTotalBytes: 0, swapUsedBytes: 0),
+            cpu: CPUUsage(totalTicks: 100, userTicks: 10, systemTicks: 0, idleTicks: 90),
+            thermal: ThermalInfo(state: .nominal)
+        )
+
+        let idle = AnimationSpeedMapper.activityLevel(
+            fromSystemResources: snapshot,
+            source: .autoComposite,
+            networkActivityLevel: .idle
+        )
+        let highNetwork = AnimationSpeedMapper.activityLevel(
+            fromSystemResources: snapshot,
+            source: .autoComposite,
+            networkActivityLevel: .high
+        )
+
+        XCTAssertEqual(idle, .idle)
+        XCTAssertEqual(highNetwork, .low)
+    }
+
     // MARK: - SystemResourceFormat Tests
 
     func testMemoryPercentageFormatting() {
