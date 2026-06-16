@@ -1404,6 +1404,21 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(presentation.peakDownload?.dateKey, "2026-06-30")
     }
 
+    func testTrafficHistoryWindowPresentationFiltersPointsAndSummarizesTotals() {
+        let latest = Date(timeIntervalSince1970: 1_000)
+        let points = [
+            RatePoint(timestamp: latest.addingTimeInterval(-400), downloadBytesPerSecond: 10, uploadBytesPerSecond: 1),
+            RatePoint(timestamp: latest.addingTimeInterval(-60), downloadBytesPerSecond: 20, uploadBytesPerSecond: 2),
+            RatePoint(timestamp: latest, downloadBytesPerSecond: 30, uploadBytesPerSecond: 3)
+        ]
+
+        let model = TrafficHistoryWindowPresentation.make(points: points, window: .seconds90)
+
+        XCTAssertEqual(model.points.map(\.downloadBytesPerSecond), [20, 30])
+        XCTAssertEqual(model.peakDownloadBytesPerSecond, 30)
+        XCTAssertEqual(model.peakUploadBytesPerSecond, 3)
+    }
+
     func testNetworkHistoryStoreAccumulatesTodayTopApplications() throws {
         let root = try temporaryDirectory()
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
@@ -3471,7 +3486,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
         download: Double,
         upload: Double,
         received: UInt64 = 0,
-        sent: UInt64 = 0
+        sent: UInt64 = 0,
+        memory: UInt64? = nil,
+        cpu: Double? = nil
     ) -> ApplicationTrafficRate {
         ApplicationTrafficRate(
             id: name,
@@ -3482,8 +3499,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             uploadBytesPerSecond: upload,
             totalReceivedBytes: received,
             totalSentBytes: sent,
-            residentMemory: nil,
-            cpuPercentage: nil
+            residentMemory: memory,
+            cpuPercentage: cpu
         )
     }
 
@@ -4116,6 +4133,63 @@ extension PreferencesAndPresentationTests {
             ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .cpu),
             [ApplicationTrafficMetric(kind: .cpu, value: "19.5%")]
         )
+    }
+
+    func testApplicationTrafficPresentationModelBuildsVisibleAppsAndSummary() {
+        let snapshot = sampleSnapshot(download: 4_000, upload: 2_000)
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appRate("Safari", download: 1_500, upload: 500, received: 10_000, sent: 2_000),
+                appRate("Helper", download: 0, upload: 0, received: 0, sent: 0, memory: 1_024, cpu: 2)
+            ],
+            sampleCount: 2,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let model = ApplicationTrafficPresentation.makeModel(
+            snapshot: snapshot,
+            state: state,
+            hidesSystemProcesses: false,
+            sortMode: .activity,
+            searchText: "",
+            limit: 18
+        )
+
+        XCTAssertEqual(model.visibleApplications.map(\.displayName), ["Safari"])
+        XCTAssertEqual(model.summaryMetrics, [
+            ApplicationTrafficMetric(kind: .download, value: "1.46 KB/s"),
+            ApplicationTrafficMetric(kind: .upload, value: "500 B/s")
+        ])
+        XCTAssertEqual(model.attributionSummary.applicationBytesPerSecond, 2_000)
+    }
+
+    func testApplicationTrafficPresentationModelKeepsMemoryModeResourceOnlyApps() {
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                appRate("Safari", download: 0, upload: 0, memory: 2_048, cpu: 1),
+                appRate("Mail", download: 0, upload: 0, memory: 4_096, cpu: 3)
+            ],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let model = ApplicationTrafficPresentation.makeModel(
+            snapshot: .empty,
+            state: state,
+            hidesSystemProcesses: false,
+            sortMode: .memory,
+            searchText: "mail",
+            limit: 18
+        )
+
+        XCTAssertEqual(model.visibleApplications.map(\.displayName), ["Mail"])
+        XCTAssertEqual(model.summaryMetrics, [ApplicationTrafficMetric(kind: .memory, value: "4.00 KB")])
     }
 
     func testApplicationAttributionSummaryShowsCoverageAndLikelyProxy() {

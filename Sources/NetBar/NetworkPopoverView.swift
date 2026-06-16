@@ -41,8 +41,12 @@ struct NetworkPopoverView: View {
                             completeOnboarding: appPreferences.completeOnboarding
                         )
                     } else {
+                        let chartPresentation = TrafficHistoryWindowPresentation.make(
+                            points: monitor.recentHistory,
+                            window: historyWindow
+                        )
                         TrafficChart(
-                            points: historyWindow.points(from: monitor.recentHistory),
+                            points: chartPresentation.points,
                             selectedWindow: $historyWindow,
                             appPreferences: appPreferences
                         )
@@ -964,15 +968,20 @@ private struct ApplicationTrafficList: View {
     @Binding var searchText: String
     let retry: () -> Void
 
-    private var visibleApplications: [ApplicationTrafficRate] {
-        ApplicationTrafficPresentation.visibleApplications(
-            from: appTraffic,
-            preferences: preferences,
+    private var presentationModel: ApplicationTrafficPresentationModel {
+        ApplicationTrafficPresentation.makeModel(
+            snapshot: snapshot,
+            state: appTraffic,
+            hidesSystemProcesses: preferences.hidesSystemProcesses,
+            sortMode: preferences.applicationSort,
             searchText: searchText
         )
     }
 
     var body: some View {
+        let model = presentationModel
+        let visibleApplications = model.visibleApplications
+
         VStack(alignment: .leading, spacing: 10) {
             NetBarSectionHeader(
                 title: preferences.text("应用流量", "Application Traffic"),
@@ -998,10 +1007,7 @@ private struct ApplicationTrafficList: View {
 
                 if appTraffic.sampleCount > 0 {
                     AppTrafficAttributionCard(
-                        summary: ApplicationTrafficPresentation.attributionSummary(
-                            snapshot: snapshot,
-                            applications: appTraffic.applications
-                        ),
+                        summary: model.attributionSummary,
                         preferences: preferences,
                         sampleCount: appTraffic.sampleCount,
                         applicationCount: visibleApplications.count
@@ -1009,10 +1015,7 @@ private struct ApplicationTrafficList: View {
                 }
 
                 if !visibleApplications.isEmpty {
-                    let summaryMetrics = ApplicationTrafficPresentation.summaryMetrics(
-                        for: visibleApplications,
-                        displayMode: preferences.applicationSort
-                    )
+                    let summaryMetrics = model.summaryMetrics
 
                     HStack(spacing: 8) {
                         Text(preferences.text("应用级汇总", "App-level Total"))

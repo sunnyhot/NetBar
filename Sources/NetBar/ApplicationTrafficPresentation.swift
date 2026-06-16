@@ -14,6 +14,12 @@ struct ApplicationTrafficMetric: Equatable, Identifiable {
     var id: String { "\(kind)-\(value)" }
 }
 
+struct ApplicationTrafficPresentationModel: Equatable {
+    let visibleApplications: [ApplicationTrafficRate]
+    let summaryMetrics: [ApplicationTrafficMetric]
+    let attributionSummary: ApplicationAttributionSummary
+}
+
 enum ApplicationAttributionStatus: Equatable {
     case idle
     case covered
@@ -90,9 +96,27 @@ enum ApplicationTrafficPresentation {
         searchText: String,
         limit: Int = 18
     ) -> [ApplicationTrafficRate] {
+        makeModel(
+            snapshot: .empty,
+            state: state,
+            hidesSystemProcesses: preferences.hidesSystemProcesses,
+            sortMode: preferences.applicationSort,
+            searchText: searchText,
+            limit: limit
+        ).visibleApplications
+    }
+
+    static func makeModel(
+        snapshot: NetworkSnapshot,
+        state: ApplicationTrafficState,
+        hidesSystemProcesses: Bool,
+        sortMode: ApplicationSortMode,
+        searchText: String,
+        limit: Int = 18
+    ) -> ApplicationTrafficPresentationModel {
         let normalizedSearch = searchText.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         let filtered = state.applications.filter { application in
-            if preferences.hidesSystemProcesses, isLikelySystemProcess(application) {
+            if hidesSystemProcesses, isLikelySystemProcess(application) {
                 return false
             }
 
@@ -103,8 +127,14 @@ enum ApplicationTrafficPresentation {
             return searchableText.localizedStandardContains(normalizedSearch)
         }
 
-        let displayFiltered = displayApplications(filtered, mode: preferences.applicationSort)
-        return Array(sorted(displayFiltered, by: preferences.applicationSort).prefix(limit))
+        let displayFiltered = displayApplications(filtered, mode: sortMode)
+        let visible = Array(sorted(displayFiltered, by: sortMode).prefix(limit))
+
+        return ApplicationTrafficPresentationModel(
+            visibleApplications: visible,
+            summaryMetrics: summaryMetrics(for: visible, displayMode: sortMode),
+            attributionSummary: attributionSummary(snapshot: snapshot, applications: state.applications)
+        )
     }
 
     static func displayApplications(
