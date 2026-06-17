@@ -288,6 +288,14 @@ struct CharacterPickerPreviewIcon: View {
 
     private static let imageCache = NSCache<NSString, NSImage>()
 
+    static func contrastShadowOpacity(for character: RunCatCharacter) -> Double {
+        character.isTemplate ? 0 : 0.32
+    }
+
+    private static func contrastShadowRadius(for character: RunCatCharacter) -> CGFloat {
+        character.isTemplate ? 0 : 0.7
+    }
+
     var body: some View {
         Group {
             if let image = Self.cachedImage(for: character, frameIndex: frameIndex) {
@@ -304,6 +312,12 @@ struct CharacterPickerPreviewIcon: View {
             }
         }
         .foregroundStyle(.primary)
+        .shadow(
+            color: Color.primary.opacity(Self.contrastShadowOpacity(for: character)),
+            radius: Self.contrastShadowRadius(for: character),
+            x: 0,
+            y: 0
+        )
         .frame(width: 24, height: 18)
         .accessibilityHidden(true)
     }

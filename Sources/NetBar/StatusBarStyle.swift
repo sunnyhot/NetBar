@@ -992,6 +992,12 @@ enum StatusBarDisplayRenderer {
         return cache
     }()
 
+    private static let gradientDetailPreservingImageCache: NSCache<GradientTintImageCacheKey, NSImage> = {
+        let cache = NSCache<GradientTintImageCacheKey, NSImage>()
+        cache.countLimit = 30
+        return cache
+    }()
+
     private final class CharacterImageCacheKey: NSObject {
         let characterID: String
         let frameIndex: Int
@@ -1321,7 +1327,10 @@ enum StatusBarDisplayRenderer {
                         } else {
                             // Fancy mode: use gradient/multi-color tinting
                             let colors = colorMode.gradientColors(at: now, frameIndex: frameIdx, baseColor: settings.catColor, size: catImg.size)
-                            if let tinted = tintImageGradient(catImg, colors: colors) {
+                            let tinted = character.isTemplate
+                                ? tintImageGradient(catImg, colors: colors)
+                                : tintImageGradientPreservingDetails(catImg, colors: colors)
+                            if let tinted {
                                 tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
                             } else {
                                 // Fallback to single-color tint
@@ -1892,6 +1901,58 @@ enum StatusBarDisplayRenderer {
 
         // Mask with the original image's alpha channel
         image.draw(in: NSRect(origin: .zero, size: size), from: NSRect(origin: .zero, size: image.size), operation: .destinationIn, fraction: 1.0)
+
+        NSGraphicsContext.restoreGraphicsState()
+
+        let tinted = NSImage(size: size)
+        tinted.addRepresentation(bitmapRep)
+        return tinted
+    }
+
+    /// Apply a gradient color effect to full-color sprites while preserving their
+    /// original luminosity, shadows, and dark outline pixels.
+    private static func tintImageGradientPreservingDetails(_ image: NSImage, colors: [(color: NSColor, position: CGFloat)]) -> NSImage? {
+        guard colors.count >= 2 else { return nil }
+
+        let cacheKey = GradientTintImageCacheKey(image: image, colors: colors)
+        if let cached = gradientDetailPreservingImageCache.object(forKey: cacheKey) {
+            return cached
+        }
+
+        let result = _renderGradientDetailPreservingImage(image, colors: colors)
+        if let result {
+            gradientDetailPreservingImageCache.setObject(result, forKey: cacheKey)
+        }
+        return result
+    }
+
+    private static func _renderGradientDetailPreservingImage(_ image: NSImage, colors: [(color: NSColor, position: CGFloat)]) -> NSImage? {
+        let size = image.size
+        guard
+            let gradientTint = _renderGradientTintImage(image, colors: colors),
+            let bitmapRep = NSBitmapImageRep(
+                bitmapDataPlanes: nil,
+                pixelsWide: Int(size.width * 2),
+                pixelsHigh: Int(size.height * 2),
+                bitsPerSample: 8,
+                samplesPerPixel: 4,
+                hasAlpha: true,
+                isPlanar: false,
+                colorSpaceName: .deviceRGB,
+                bytesPerRow: 0,
+                bitsPerPixel: 0
+            )
+        else { return nil }
+
+        let rect = NSRect(origin: .zero, size: size)
+        bitmapRep.size = size
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: bitmapRep)
+
+        image.draw(in: rect, from: NSRect(origin: .zero, size: image.size), operation: .sourceOver, fraction: 1.0)
+        gradientTint.draw(in: rect, from: NSRect(origin: .zero, size: gradientTint.size), operation: .color, fraction: 1.0)
+        image.draw(in: rect, from: NSRect(origin: .zero, size: image.size), operation: .multiply, fraction: 0.35)
+        image.draw(in: rect, from: NSRect(origin: .zero, size: image.size), operation: .destinationIn, fraction: 1.0)
 
         NSGraphicsContext.restoreGraphicsState()
 

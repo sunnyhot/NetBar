@@ -1875,6 +1875,17 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(unsupported, ["sushi"])
     }
 
+    func testFullColorCharacterPickerPreviewsUseContrastShadow() {
+        XCTAssertEqual(
+            CharacterPickerPreviewIcon.contrastShadowOpacity(for: RunCatCharacter.byId("cat")),
+            0
+        )
+        XCTAssertGreaterThan(
+            CharacterPickerPreviewIcon.contrastShadowOpacity(for: RunCatCharacter.byId("chroma_slime")),
+            0
+        )
+    }
+
     func testGoldenCatUsesSelectedSolidColorInsteadOfOriginalColor() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsCat = true
@@ -1899,6 +1910,75 @@ final class PreferencesAndPresentationTests: XCTestCase {
             10,
             dominantColorSummary(in: image)
         )
+    }
+
+    func testFullColorChromaModePreservesDarkCharacterDetails() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "chroma_slime"
+        settings.catColorMode = CatColorMode.crystalPrism.rawValue
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.backgroundColor = .olive
+        settings.usesSystemTextColor = false
+        settings.textColor = .black
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0
+        )
+
+        XCTAssertGreaterThan(
+            darkPixelCount(in: image, horizontalRegion: 0.0..<0.34),
+            8,
+            dominantColorSummary(in: image)
+        )
+    }
+
+    func testFullColorChromaModesPreserveDarkDetailsForAllDetailedBuiltInSprites() throws {
+        let detailedCharacters = try RunCatCharacter.allCharacters.filter { character in
+            guard !character.isTemplate, !character.isGooglyEyes, character.supportsColorControls else {
+                return false
+            }
+            let firstFrame = try runnerFrameURLs(for: character)[0]
+            guard let image = NSImage(contentsOf: firstFrame) else {
+                return false
+            }
+            return darkPixelCount(in: image, horizontalRegion: 0.0..<1.0) > 8
+        }
+
+        XCTAssertFalse(detailedCharacters.isEmpty)
+
+        for character in detailedCharacters {
+            let settings = StatusBarSettings(defaults: isolatedDefaults())
+            settings.showsCat = true
+            settings.catCharacter = character.id
+            settings.catColorMode = CatColorMode.crystalPrism.rawValue
+            settings.catPosition = .right
+            settings.usesAutomaticWidth = false
+            settings.itemWidth = 220
+            settings.showsBackground = true
+            settings.backgroundOpacity = 1
+            settings.backgroundColor = .olive
+            settings.usesSystemTextColor = false
+            settings.textColor = .black
+
+            let image = StatusBarDisplayRenderer.image(
+                snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+                settings: settings,
+                scale: 2,
+                catFrameIndex: 0
+            )
+            let characterRegion = ((220.0 - 8.0 - Double(character.frameWidth)) / 220.0)..<((220.0 - 8.0) / 220.0)
+
+            XCTAssertGreaterThan(
+                darkPixelCount(in: image, horizontalRegion: characterRegion),
+                8,
+                "\(character.id): \(dominantColorSummary(in: image))"
+            )
+        }
     }
 
     func testRockKingdomInspiredChromaModesUseRichMultiStopPalettes() {
@@ -3739,6 +3819,32 @@ final class PreferencesAndPresentationTests: XCTestCase {
                     color.blueComponent > 0.72,
                     color.blueComponent > color.redComponent + 0.35,
                     color.blueComponent > color.greenComponent + 0.35
+                else { continue }
+                count += 1
+            }
+        }
+
+        return count
+    }
+
+    private func darkPixelCount(in image: NSImage, horizontalRegion: Range<Double>) -> Int {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        let minX = max(Int(Double(bitmap.pixelsWide) * horizontalRegion.lowerBound), 0)
+        let maxX = min(Int(Double(bitmap.pixelsWide) * horizontalRegion.upperBound), bitmap.pixelsWide)
+        var count = 0
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in minX..<maxX {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5,
+                    color.redComponent < 0.32,
+                    color.greenComponent < 0.32,
+                    color.blueComponent < 0.32
                 else { continue }
                 count += 1
             }
