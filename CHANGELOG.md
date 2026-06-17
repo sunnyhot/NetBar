@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.39.5 (2026-06-17)
+
+### Fix — Release 发布校验修正
+
+- Release workflow 增加发布包签名策略校验，明确区分完整 app bundle 签名和 SwiftPM linker-signed 发布包
+- 本地 `package-release.sh` 同步执行发布包校验，避免打包日志误导为已完成 strict bundle signing
+- 保持 GitHub Actions 作为 release 资产上传方，避免手动创建 release 导致发布者显示不一致
+
 ## v0.39.4 (2026-06-17)
 
 ### Fix — 炫彩角色轮廓保真
