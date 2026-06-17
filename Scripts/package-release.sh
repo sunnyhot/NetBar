@@ -10,6 +10,7 @@ ZIP_PATH="$DIST_DIR/$APP_NAME.app.zip"
 cd "$ROOT_DIR"
 
 "$ROOT_DIR/Scripts/build-app.sh"
+"$ROOT_DIR/Scripts/verify-release-app.sh" "$APP_DIR"
 
 rm -rf "$DIST_DIR"
 mkdir -p "$DIST_DIR"

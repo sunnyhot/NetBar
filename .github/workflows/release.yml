@@ -39,6 +39,8 @@ jobs:
         run: |
           test -d "build/NetBar.app" || { echo "Build failed"; exit 1; }
           test -x "build/NetBar.app/Contents/MacOS/NetBar" || { echo "Executable not found"; exit 1; }
+          chmod +x Scripts/verify-release-app.sh
+          ./Scripts/verify-release-app.sh build/NetBar.app
           echo "Build verified: $(du -sh build/NetBar.app)"
 
       - name: Package
