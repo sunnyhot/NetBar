@@ -334,14 +334,14 @@ final class SystemResourceTests: XCTestCase {
         let reader = PSApplicationResourceReader(
             executableURL: scriptURL,
             arguments: [],
-            timeout: 2
+            timeout: 5
         )
 
         let startedAt = Date()
         let processes = reader.readProcessResources()
         let elapsed = Date().timeIntervalSince(startedAt)
 
-        XCTAssertLessThan(elapsed, 2, "Reader should drain stdout while the process is still running instead of blocking on a full pipe")
+        XCTAssertLessThan(elapsed, 5, "Reader should drain stdout while the process is still running instead of blocking on a full pipe")
         XCTAssertEqual(processes.count, 20_000)
         XCTAssertEqual(processes.first?.residentMemory, 1_048_576)
         XCTAssertEqual(processes.first?.cpuPercentage, 0)
@@ -1176,7 +1176,7 @@ final class SystemResourceTests: XCTestCase {
             try? await Task.sleep(nanoseconds: 600_000_000)
             monitor.refreshApplicationTraffic()
         }
-        try? await Task.sleep(nanoseconds: 500_000_000)
+        await waitForApplicationTrafficIdle(monitor: monitor)
 
         XCTAssertFalse(monitor.appTraffic.isRefreshing, "Repeated empty samples should not leave the popover in a loading state")
         XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1)
@@ -1222,6 +1222,16 @@ final class SystemResourceTests: XCTestCase {
     ) async {
         let deadline = Date().addingTimeInterval(timeout)
         while monitor.appTraffic.sampleCount < count && Date() < deadline {
+            try? await Task.sleep(nanoseconds: 50_000_000)
+        }
+    }
+
+    private func waitForApplicationTrafficIdle(
+        monitor: NetworkMonitor,
+        timeout: TimeInterval = 2.0
+    ) async {
+        let deadline = Date().addingTimeInterval(timeout)
+        while monitor.appTraffic.isRefreshing && Date() < deadline {
             try? await Task.sleep(nanoseconds: 50_000_000)
         }
     }

@@ -53,6 +53,10 @@ struct MenuBarPreferencesView: View {
                         isOn: intelligenceBinding(\.isSmartStatusBarModeEnabled)
                     )
                     Toggle(
+                        appPreferences.text("智能推荐角色", "Smart character suggestions"),
+                        isOn: intelligenceBinding(\.isSmartCharacterSuggestionEnabled)
+                    )
+                    Toggle(
                         appPreferences.text("异常状态标识", "Anomaly marker"),
                         isOn: intelligenceBinding(\.showsSmartAnomalyMarker)
                     )

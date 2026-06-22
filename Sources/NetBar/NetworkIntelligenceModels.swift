@@ -31,6 +31,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var insightRetentionLimit: Int
     var isInsightSuggestionEnabled: Bool
     var isSmartStatusBarModeEnabled: Bool
+    var isSmartCharacterSuggestionEnabled: Bool
     var showsSmartAnomalyMarker: Bool
     var showsSmartTopApplication: Bool
     var historyRetentionDays: Int
@@ -49,6 +50,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         insightRetentionLimit: Int = 20,
         isInsightSuggestionEnabled: Bool = true,
         isSmartStatusBarModeEnabled: Bool = false,
+        isSmartCharacterSuggestionEnabled: Bool = false,
         showsSmartAnomalyMarker: Bool = true,
         showsSmartTopApplication: Bool = true,
         historyRetentionDays: Int = 30,
@@ -66,6 +68,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         self.insightRetentionLimit = insightRetentionLimit
         self.isInsightSuggestionEnabled = isInsightSuggestionEnabled
         self.isSmartStatusBarModeEnabled = isSmartStatusBarModeEnabled
+        self.isSmartCharacterSuggestionEnabled = isSmartCharacterSuggestionEnabled
         self.showsSmartAnomalyMarker = showsSmartAnomalyMarker
         self.showsSmartTopApplication = showsSmartTopApplication
         self.historyRetentionDays = historyRetentionDays
@@ -124,6 +127,10 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             Bool.self,
             forKey: .isSmartStatusBarModeEnabled
         ) ?? defaultSettings.isSmartStatusBarModeEnabled
+        isSmartCharacterSuggestionEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isSmartCharacterSuggestionEnabled
+        ) ?? defaultSettings.isSmartCharacterSuggestionEnabled
         showsSmartAnomalyMarker = try container.decodeIfPresent(
             Bool.self,
             forKey: .showsSmartAnomalyMarker
@@ -157,6 +164,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(insightRetentionLimit, forKey: .insightRetentionLimit)
         try container.encode(isInsightSuggestionEnabled, forKey: .isInsightSuggestionEnabled)
         try container.encode(isSmartStatusBarModeEnabled, forKey: .isSmartStatusBarModeEnabled)
+        try container.encode(isSmartCharacterSuggestionEnabled, forKey: .isSmartCharacterSuggestionEnabled)
         try container.encode(showsSmartAnomalyMarker, forKey: .showsSmartAnomalyMarker)
         try container.encode(showsSmartTopApplication, forKey: .showsSmartTopApplication)
         try container.encode(historyRetentionDays, forKey: .historyRetentionDays)
@@ -176,6 +184,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         insightRetentionLimit: 20,
         isInsightSuggestionEnabled: true,
         isSmartStatusBarModeEnabled: false,
+        isSmartCharacterSuggestionEnabled: false,
         showsSmartAnomalyMarker: true,
         showsSmartTopApplication: true,
         historyRetentionDays: 30,
@@ -195,6 +204,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case insightRetentionLimit
         case isInsightSuggestionEnabled
         case isSmartStatusBarModeEnabled
+        case isSmartCharacterSuggestionEnabled
         case showsSmartAnomalyMarker
         case showsSmartTopApplication
         case historyRetentionDays

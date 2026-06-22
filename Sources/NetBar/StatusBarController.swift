@@ -114,6 +114,59 @@ private struct DisplaySpeeds: Equatable {
 }
 
 @MainActor
+final class ApplicationTrafficVisibilityScheduler {
+    private let resumeDelay: Duration
+    private let pauseDelay: Duration
+    private let isDetailWindowVisible: () -> Bool
+    private let setApplicationTrafficVisible: (Bool) -> Void
+    private var resumeTask: Task<Void, Never>?
+    private var pauseTask: Task<Void, Never>?
+
+    init(
+        resumeDelay: Duration = .milliseconds(500),
+        pauseDelay: Duration = .seconds(30),
+        isDetailWindowVisible: @escaping () -> Bool,
+        setApplicationTrafficVisible: @escaping (Bool) -> Void
+    ) {
+        self.resumeDelay = resumeDelay
+        self.pauseDelay = pauseDelay
+        self.isDetailWindowVisible = isDetailWindowVisible
+        self.setApplicationTrafficVisible = setApplicationTrafficVisible
+    }
+
+    func scheduleResume() {
+        pauseTask?.cancel()
+        pauseTask = nil
+        resumeTask?.cancel()
+        let resumeDelay = self.resumeDelay
+        resumeTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: resumeDelay)
+            guard let self, self.isDetailWindowVisible() else { return }
+            self.setApplicationTrafficVisible(true)
+        }
+    }
+
+    func schedulePause() {
+        resumeTask?.cancel()
+        resumeTask = nil
+        pauseTask?.cancel()
+        let pauseDelay = self.pauseDelay
+        pauseTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(for: pauseDelay)
+            guard let self, !self.isDetailWindowVisible() else { return }
+            self.setApplicationTrafficVisible(false)
+        }
+    }
+
+    func invalidate() {
+        resumeTask?.cancel()
+        resumeTask = nil
+        pauseTask?.cancel()
+        pauseTask = nil
+    }
+}
+
+@MainActor
 final class StatusBarController {
     private let monitor: NetworkMonitor
     private let settings: StatusBarSettings
@@ -126,6 +179,7 @@ final class StatusBarController {
     private let showAbout: () -> Void
     private let statusItem: NSStatusItem
     private let detailsWindowController: DetailsWindowController
+    private var applicationTrafficVisibilityScheduler: ApplicationTrafficVisibilityScheduler?
     private var cancellables: Set<AnyCancellable> = []
     private var lastRenderSignature: StatusBarRenderSignature?
     private var lastColorTimeBucket: Int?  // Tracked separately for color pipeline decoupling
@@ -188,6 +242,15 @@ final class StatusBarController {
             appPreferences: appPreferences,
             customCharacterStore: customCharacterStore,
             openPreferences: openPreferences
+        )
+        let detailsWindowController = self.detailsWindowController
+        self.applicationTrafficVisibilityScheduler = ApplicationTrafficVisibilityScheduler(
+            isDetailWindowVisible: { [weak detailsWindowController] in
+                detailsWindowController?.isVisible == true
+            },
+            setApplicationTrafficVisible: { [weak monitor] visible in
+                monitor?.isApplicationTrafficVisible = visible
+            }
         )
 
         configureStatusItem()
@@ -499,13 +562,20 @@ final class StatusBarController {
 
         // Color pipeline: compute time bucket independently from position tracking
         let currentColorBucket = StatusBarDisplayRenderer.colorTimeBucket(forMode: settings.catColorMode)
+        let intelligenceSettings = appPreferences.networkIntelligenceSettings
         let smartContext = StatusBarContextEvaluator.evaluate(
             snapshot: monitor.snapshot,
             appTraffic: monitor.appTraffic,
             intelligenceSummary: monitor.intelligenceSummary,
-            settings: appPreferences.networkIntelligenceSettings,
+            settings: intelligenceSettings,
             language: appPreferences.resolvedLanguage
         )
+        let characterOverrideID = settings.showsCat ? SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: monitor.snapshot,
+            appTraffic: monitor.appTraffic,
+            intelligenceSummary: monitor.intelligenceSummary,
+            settings: intelligenceSettings
+        ) : nil
 
         let signature = StatusBarDisplayRenderer.signature(
             snapshot: monitor.snapshot,
@@ -513,6 +583,7 @@ final class StatusBarController {
             appearanceName: appearanceName,
             customCharacterStore: customCharacterStore,
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+            characterOverrideID: characterOverrideID,
             googlyEyesState: activeGooglyEyesState,
             smartContext: smartContext
         )
@@ -535,6 +606,7 @@ final class StatusBarController {
                 scale: scale,
                 customCharacterStore: customCharacterStore,
                 catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
+                characterOverrideID: characterOverrideID,
                 googlyEyesState: activeGooglyEyesState,
                 smartContext: smartContext
             )
@@ -551,8 +623,8 @@ final class StatusBarController {
     }
 
     func showDetailsWindow(anchorToMenuBar: Bool = false) {
-        monitor.resumeApplicationTrafficSampling()
         detailsWindowController.show(anchor: anchorToMenuBar ? statusItem.button : nil)
+        applicationTrafficVisibilityScheduler?.scheduleResume()
     }
 
     func clearNetworkHistory() {
@@ -563,20 +635,9 @@ final class StatusBarController {
         monitor.flushNetworkHistory()
     }
 
-    private var applicationTrafficPauseTask: Task<Void, Never>?
-
     private func configureDetailsWindowObserver() {
         detailsWindowController.onWindowClosed = { [weak self] in
-            self?.scheduleApplicationTrafficPause()
-        }
-    }
-
-    private func scheduleApplicationTrafficPause() {
-        applicationTrafficPauseTask?.cancel()
-        applicationTrafficPauseTask = Task { @MainActor [weak self] in
-            try? await Task.sleep(for: .seconds(30))
-            guard let self, !self.detailsWindowController.isVisible else { return }
-            self.monitor.pauseApplicationTrafficSampling()
+            self?.applicationTrafficVisibilityScheduler?.schedulePause()
         }
     }
 
@@ -588,9 +649,8 @@ final class StatusBarController {
         if detailsWindowController.isVisible {
             detailsWindowController.toggle(anchor: statusItem.button)
         } else {
-            applicationTrafficPauseTask?.cancel()
-            monitor.resumeApplicationTrafficSampling()
             detailsWindowController.toggle(anchor: statusItem.button)
+            applicationTrafficVisibilityScheduler?.scheduleResume()
         }
     }
 

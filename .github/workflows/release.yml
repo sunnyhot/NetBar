@@ -30,6 +30,9 @@ jobs:
           /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString ${{ steps.version.outputs.version }}" Resources/Info.plist
           /usr/libexec/PlistBuddy -c "Set :CFBundleVersion ${{ steps.version.outputs.version }}" Resources/Info.plist
 
+      - name: Run tests
+        run: swift test
+
       - name: Build macOS App
         run: |
           chmod +x Scripts/build-app.sh
@@ -136,7 +139,3 @@ jobs:
             dist/latest.json
           draft: false
           prerelease: false
-
-      - name: Run tests
-        continue-on-error: true
-        run: swift test

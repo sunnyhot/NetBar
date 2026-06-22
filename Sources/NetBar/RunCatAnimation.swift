@@ -23,7 +23,7 @@ struct RunCatCharacter: Equatable, Identifiable {
 
     var resourceDir: String { id }
     var isGooglyEyes: Bool { id == Self.googlyEyesID }
-    var supportsColorControls: Bool { id != "sushi" }
+    var supportsColorControls: Bool { !Self.originalColorOnlyIDs.contains(id) }
 
     var displayName: String {
         // Use Chinese name by default; can be switched based on locale
@@ -66,6 +66,12 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 5, frameWidth: 40, isTemplate: false, category: .animal),
         RunCatCharacter(id: "starlight_dragon", nameZh: "星辉幼龙", nameEn: "Starlight Dragon", nameJa: "スターライトドラゴン",
                         frameCount: 5, frameWidth: 46, isTemplate: false, category: .animal),
+        RunCatCharacter(id: "shiba_inu", nameZh: "柴犬", nameEn: "Shiba Inu", nameJa: "柴犬",
+                        frameCount: 6, frameWidth: 28, isTemplate: false, category: .animal),
+        RunCatCharacter(id: "bunny", nameZh: "兔兔", nameEn: "Bunny", nameJa: "うさぎ",
+                        frameCount: 6, frameWidth: 24, isTemplate: false, category: .animal),
+        RunCatCharacter(id: "penguin", nameZh: "企鹅", nameEn: "Penguin", nameJa: "ペンギン",
+                        frameCount: 6, frameWidth: 26, isTemplate: false, category: .animal),
 
         // Inanimate runners
         RunCatCharacter(id: "cogwheel", nameZh: "齿轮", nameEn: "Cogwheel", nameJa: "歯車",
@@ -78,6 +84,12 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 5, frameWidth: 18, isTemplate: true, category: .inanimate),
         RunCatCharacter(id: "pendulum", nameZh: "钟摆", nameEn: "Pendulum", nameJa: "振り子",
                         frameCount: 8, frameWidth: 12, isTemplate: true, category: .inanimate),
+        RunCatCharacter(id: "coffee_cup", nameZh: "咖啡杯", nameEn: "Coffee Cup", nameJa: "コーヒーカップ",
+                        frameCount: 6, frameWidth: 24, isTemplate: false, category: .inanimate),
+        RunCatCharacter(id: "little_cloud", nameZh: "小云朵", nameEn: "Little Cloud", nameJa: "小さな雲",
+                        frameCount: 6, frameWidth: 28, isTemplate: false, category: .inanimate),
+        RunCatCharacter(id: "tiny_plant", nameZh: "小盆栽", nameEn: "Tiny Plant", nameJa: "小さな鉢植え",
+                        frameCount: 6, frameWidth: 24, isTemplate: false, category: .inanimate),
 
         // Seasonal runners
         RunCatCharacter(id: "reindeer", nameZh: "驯鹿与雪橇", nameEn: "Reindeer & Sleigh", nameJa: "トナカイとソリ",
@@ -111,6 +123,15 @@ struct RunCatCharacter: Equatable, Identifiable {
     }
 
     private static let googlyEyesID = "googly_eyes"
+    private static let originalColorOnlyIDs: Set<String> = [
+        "shiba_inu",
+        "bunny",
+        "penguin",
+        "coffee_cup",
+        "little_cloud",
+        "tiny_plant",
+        "sushi"
+    ]
     static let defaultCat = allCharacters[0]
 }
 

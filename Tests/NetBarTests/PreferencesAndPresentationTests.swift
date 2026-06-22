@@ -143,7 +143,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             severity: .critical,
             title: "Network drop",
             message: "Network activity dropped.",
-            timestamp: Date(timeIntervalSince1970: 10),
+            timestamp: Date(),
             cooldownKey: "networkDrop"
         )
         let summary = NetworkIntelligenceSummary(
@@ -168,11 +168,44 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(context.overrideLine, "! Network drop")
     }
 
+    func testStatusBarContextEvaluatorIgnoresStaleAnomaly() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartStatusBarModeEnabled = true
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            timestamp: Date().addingTimeInterval(-61),
+            cooldownKey: "networkDrop"
+        )
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: event,
+            today: .empty(dateKey: "2026-06-12"),
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [:],
+            insightCards: []
+        )
+
+        let context = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty,
+            intelligenceSummary: summary,
+            settings: settings,
+            language: .english
+        )
+
+        XCTAssertEqual(context.emphasis, .manual)
+        XCTAssertNil(context.overrideLine)
+    }
+
     func testStatusBarContextEvaluatorShortensTopApplicationName() {
         var settings = NetworkIntelligenceSettings.default
         settings.isSmartStatusBarModeEnabled = true
         let appTraffic = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
+            timestamp: Date(),
             applications: [appRate("VeryLongApplicationNameThatWouldOverflow", download: 8_000_000, upload: 500_000)],
             sampleCount: 1,
             isRefreshing: false,
@@ -192,7 +225,56 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(context.overrideLine, "VeryLongA...")
     }
 
-    func testStatusBarPresentationUsesSmartOverrideLine() {
+    func testStatusBarContextEvaluatorIgnoresStaleTopApplicationSample() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartStatusBarModeEnabled = true
+        let appTraffic = ApplicationTrafficState(
+            timestamp: Date().addingTimeInterval(-11),
+            applications: [appRate("Safari", download: 8_000_000, upload: 500_000)],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let context = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
+            appTraffic: appTraffic,
+            intelligenceSummary: .empty,
+            settings: settings,
+            language: .english
+        )
+
+        XCTAssertEqual(context.emphasis, .manual)
+        XCTAssertNil(context.overrideLine)
+    }
+
+    func testStatusBarContextEvaluatorUsesConfiguredHighTrafficThreshold() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartStatusBarModeEnabled = true
+        settings.highTrafficThreshold = .mbps25
+
+        let belowThreshold = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 12_000_000, upload: 500_000),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings,
+            language: .english
+        )
+        let aboveThreshold = StatusBarContextEvaluator.evaluate(
+            snapshot: sampleSnapshot(download: 27_000_000, upload: 500_000),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings,
+            language: .english
+        )
+
+        XCTAssertEqual(belowThreshold.emphasis, .manual)
+        XCTAssertEqual(aboveThreshold.emphasis, .totalTraffic)
+        XCTAssertEqual(aboveThreshold.trafficDisplayModeOverride, .total)
+    }
+
+    func testStatusBarPresentationUsesSmartOverrideLineAndKeepsTrafficSpeedVisible() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsArrows = true
         let context = SmartStatusBarContext(
@@ -207,7 +289,159 @@ final class PreferencesAndPresentationTests: XCTestCase {
             smartContext: context
         )
 
-        XCTAssertEqual(presentation.lines, ["VeryLongA..."])
+        XCTAssertEqual(presentation.lines, ["VeryLongA...", "↕ 8.11 MB/s"])
+    }
+
+    func testSmartOverrideLineKeepsAutomaticWidthAtLeastManualWidth() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.usesAutomaticWidth = true
+        settings.showsArrows = true
+        let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
+        let manual = StatusBarDisplayRenderer.presentation(snapshot: snapshot, settings: settings)
+        let smart = StatusBarDisplayRenderer.presentation(
+            snapshot: snapshot,
+            settings: settings,
+            smartContext: SmartStatusBarContext(
+                emphasis: .topApplication("Arc"),
+                trafficDisplayModeOverride: nil,
+                overrideLine: "Arc"
+            )
+        )
+
+        XCTAssertGreaterThanOrEqual(smart.width, manual.width)
+    }
+
+    func testSmartCharacterSuggestionReturnsNilWhenDisabled() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartCharacterSuggestionEnabled = false
+
+        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 40_000_000, upload: 2_000_000),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings
+        )
+
+        XCTAssertNil(suggestion)
+    }
+
+    func testSmartCharacterSuggestionHighlightsFreshNetworkDrop() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartCharacterSuggestionEnabled = true
+        let now = Date(timeIntervalSince1970: 100)
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            timestamp: now.addingTimeInterval(-5),
+            cooldownKey: "networkDrop"
+        )
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: event,
+            today: .empty(dateKey: "2026-06-12"),
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [:],
+            insightCards: []
+        )
+
+        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty,
+            intelligenceSummary: summary,
+            settings: settings,
+            now: now
+        )
+
+        XCTAssertEqual(suggestion, "little_cloud")
+    }
+
+    func testSmartCharacterSuggestionIgnoresStaleNetworkDrop() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartCharacterSuggestionEnabled = true
+        let now = Date(timeIntervalSince1970: 100)
+        let event = NetworkAnomalyEvent(
+            kind: .networkDrop,
+            severity: .critical,
+            title: "Network drop",
+            message: "Network activity dropped.",
+            timestamp: now.addingTimeInterval(-61),
+            cooldownKey: "networkDrop"
+        )
+        let summary = NetworkIntelligenceSummary(
+            latestEvent: event,
+            today: .empty(dateKey: "2026-06-12"),
+            recentDays: [],
+            realtimeTopApplications: [],
+            todayTopApplications: [],
+            animationPlaybackCountsByCharacter: [:],
+            insightCards: []
+        )
+
+        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            appTraffic: .empty,
+            intelligenceSummary: summary,
+            settings: settings,
+            now: now
+        )
+
+        XCTAssertEqual(suggestion, "tiny_plant")
+    }
+
+    func testSmartCharacterSuggestionUsesTrafficShape() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartCharacterSuggestionEnabled = true
+        settings.highTrafficThreshold = .mbps25
+
+        let uploadDominant = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 400_000, upload: 3_000_000),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings
+        )
+        let highTotal = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 30_000_000, upload: 500_000),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings
+        )
+        let idle = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 20, upload: 10),
+            appTraffic: .empty,
+            intelligenceSummary: .empty,
+            settings: settings
+        )
+
+        XCTAssertEqual(uploadDominant, "little_cloud")
+        XCTAssertEqual(highTotal, "penguin")
+        XCTAssertEqual(idle, "tiny_plant")
+    }
+
+    func testSmartCharacterSuggestionUsesFreshTopApplicationBurst() {
+        var settings = NetworkIntelligenceSettings.default
+        settings.isSmartCharacterSuggestionEnabled = true
+        let now = Date(timeIntervalSince1970: 100)
+        let appTraffic = ApplicationTrafficState(
+            timestamp: now.addingTimeInterval(-2),
+            applications: [appRate("Safari", download: 8_000_000, upload: 500_000)],
+            sampleCount: 1,
+            isRefreshing: false,
+            errorMessage: nil,
+            systemResources: .empty
+        )
+
+        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
+            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
+            appTraffic: appTraffic,
+            intelligenceSummary: .empty,
+            settings: settings,
+            now: now
+        )
+
+        XCTAssertEqual(suggestion, "shiba_inu")
     }
 
     func testDiagnosticsCenterBuildsPrivacySafeSummaryText() {
@@ -441,6 +675,126 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(DetailsWindowDismissalPolicy.autoDismissInterval, 30)
     }
 
+    func testDeferredMainActorActionSchedulerRunsAfterDelay() async throws {
+        var calls: [String] = []
+        let scheduler = DeferredMainActorActionScheduler(delay: .milliseconds(20))
+        defer { scheduler.cancel() }
+
+        scheduler.schedule {
+            calls.append("refresh")
+        }
+
+        XCTAssertEqual(
+            calls,
+            [],
+            "Opening the panel should not synchronously refresh the whole detail model before the first frame"
+        )
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(calls, ["refresh"])
+    }
+
+    func testDeferredMainActorActionSchedulerCancelsAndCoalescesWork() async throws {
+        var calls: [String] = []
+        let scheduler = DeferredMainActorActionScheduler(delay: .milliseconds(20))
+        defer { scheduler.cancel() }
+
+        scheduler.schedule {
+            calls.append("first")
+        }
+        scheduler.schedule {
+            calls.append("second")
+        }
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(calls, ["second"])
+
+        scheduler.schedule {
+            calls.append("cancelled")
+        }
+        scheduler.cancel()
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(calls, ["second"])
+    }
+
+    func testAppBadgeIconResolverUsesCacheBeforeProvider() {
+        let cache = NSCache<NSNumber, NSImage>()
+        let cachedIcon = NSImage(size: NSSize(width: 12, height: 12))
+        cache.setObject(cachedIcon, forKey: NSNumber(value: 42))
+        var requestedPIDs: [Int32] = []
+
+        let icon = AppBadgeIconResolver.resolveIcon(
+            for: [42],
+            cache: cache,
+            iconForPID: { pid in
+                requestedPIDs.append(pid)
+                return nil
+            }
+        )
+
+        XCTAssertTrue(icon === cachedIcon)
+        XCTAssertEqual(requestedPIDs, [])
+    }
+
+    func testAppBadgeIconResolverCachesProviderResult() {
+        let cache = NSCache<NSNumber, NSImage>()
+        let providedIcon = NSImage(size: NSSize(width: 14, height: 14))
+        var requestedPIDs: [Int32] = []
+
+        let icon = AppBadgeIconResolver.resolveIcon(
+            for: [7, 8],
+            cache: cache,
+            iconForPID: { pid in
+                requestedPIDs.append(pid)
+                return pid == 8 ? providedIcon : nil
+            }
+        )
+
+        XCTAssertTrue(icon === providedIcon)
+        XCTAssertEqual(requestedPIDs, [7, 8])
+        XCTAssertTrue(cache.object(forKey: NSNumber(value: 8)) === providedIcon)
+    }
+
+    func testApplicationTrafficVisibilitySchedulerDefersResumeAndKeepsShortReopensWarm() async throws {
+        var isDetailVisible = true
+        var visibilityChanges: [Bool] = []
+        let scheduler = ApplicationTrafficVisibilityScheduler(
+            resumeDelay: .milliseconds(20),
+            pauseDelay: .milliseconds(20),
+            isDetailWindowVisible: { isDetailVisible },
+            setApplicationTrafficVisible: { visibilityChanges.append($0) }
+        )
+        defer { scheduler.invalidate() }
+
+        scheduler.scheduleResume()
+
+        XCTAssertEqual(
+            visibilityChanges,
+            [],
+            "Opening the panel should not synchronously start nettop before the UI is on screen"
+        )
+
+        try await Task.sleep(for: .milliseconds(50))
+        XCTAssertEqual(visibilityChanges, [true])
+
+        isDetailVisible = false
+        scheduler.schedulePause()
+        isDetailVisible = true
+        scheduler.scheduleResume()
+
+        try await Task.sleep(for: .milliseconds(50))
+
+        XCTAssertEqual(
+            visibilityChanges,
+            [true, true],
+            "Reopening before the pause window expires should keep app traffic sampling warm"
+        )
+    }
+
     // MARK: - DockIconVisibility model tests
 
     func testDockIconVisibilityMapsVisibleToRegularPolicy() {
@@ -575,6 +929,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(settings.insightRetentionLimit, 20)
         XCTAssertTrue(settings.isInsightSuggestionEnabled)
         XCTAssertFalse(settings.isSmartStatusBarModeEnabled)
+        XCTAssertFalse(settings.isSmartCharacterSuggestionEnabled)
         XCTAssertTrue(settings.showsSmartAnomalyMarker)
         XCTAssertTrue(settings.showsSmartTopApplication)
         XCTAssertEqual(settings.historyRetentionDays, 30)
@@ -623,6 +978,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(decoded.isInsightStreamEnabled)
         XCTAssertEqual(decoded.insightRetentionLimit, 20)
         XCTAssertFalse(decoded.isSmartStatusBarModeEnabled)
+        XCTAssertFalse(decoded.isSmartCharacterSuggestionEnabled)
         XCTAssertEqual(decoded.historyRetentionDays, 30)
         XCTAssertTrue(decoded.isApplicationHistoryRankingEnabled)
     }
@@ -639,7 +995,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             isApplicationSpikeAlertEnabled: false,
             isNetworkDropAlertEnabled: true,
             isProxyAttributionAlertEnabled: false,
-            isHistoryTrackingEnabled: true
+            isHistoryTrackingEnabled: true,
+            isSmartCharacterSuggestionEnabled: true
         )
 
         let reloaded = AppPreferences(defaults: defaults, loginItemManager: FakeLoginItemManager())
@@ -651,6 +1008,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(reloaded.networkIntelligenceSettings.isApplicationSpikeAlertEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isNetworkDropAlertEnabled)
         XCTAssertFalse(reloaded.networkIntelligenceSettings.isProxyAttributionAlertEnabled)
+        XCTAssertTrue(reloaded.networkIntelligenceSettings.isSmartCharacterSuggestionEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isHistoryTrackingEnabled)
     }
 
@@ -1867,12 +2225,15 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(character.frameWidth, 36)
     }
 
-    func testAllBuiltInCharactersExceptSushiSupportColorControls() {
+    func testOriginalColorBuiltInCharactersOptOutOfColorControls() {
         let unsupported = RunCatCharacter.allCharacters
             .filter { !$0.supportsColorControls }
             .map(\.id)
 
-        XCTAssertEqual(unsupported, ["sushi"])
+        XCTAssertEqual(
+            unsupported,
+            ["shiba_inu", "bunny", "penguin", "coffee_cup", "little_cloud", "tiny_plant", "sushi"]
+        )
     }
 
     func testFullColorCharacterPickerPreviewsUseContrastShadow() {
@@ -1902,7 +2263,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
             settings: settings,
             scale: 2,
-            catFrameIndex: 0
+            catFrameIndex: 0,
+            renderTime: 19.25
         )
 
         XCTAssertGreaterThan(
@@ -1927,7 +2289,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
             settings: settings,
             scale: 2,
-            catFrameIndex: 0
+            catFrameIndex: 0,
+            renderTime: 19.25
         )
 
         XCTAssertGreaterThan(
@@ -1969,7 +2332,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
                 snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
                 settings: settings,
                 scale: 2,
-                catFrameIndex: 0
+                catFrameIndex: 0,
+                renderTime: 19.25
             )
             let characterRegion = ((220.0 - 8.0 - Double(character.frameWidth)) / 220.0)..<((220.0 - 8.0) / 220.0)
 
@@ -2039,7 +2403,13 @@ final class PreferencesAndPresentationTests: XCTestCase {
             "prism_fox": (5, 40),
             "starlight_dragon": (5, 46),
             "chroma_slime": (6, 30),
-            "sushi": (16, 58)
+            "sushi": (16, 58),
+            "shiba_inu": (6, 28),
+            "bunny": (6, 24),
+            "penguin": (6, 26),
+            "coffee_cup": (6, 24),
+            "little_cloud": (6, 28),
+            "tiny_plant": (6, 24)
         ]
 
         for (id, metadata) in expected {
@@ -2047,6 +2417,17 @@ final class PreferencesAndPresentationTests: XCTestCase {
             XCTAssertEqual(character.frameCount, metadata.frameCount, id)
             XCTAssertEqual(character.frameWidth, metadata.frameWidth, id)
         }
+    }
+
+    func testCutePetAndSmallObjectCharactersAreAvailableInExpectedCategories() {
+        XCTAssertEqual(RunCatCharacter.byId("shiba_inu").category, .animal)
+        XCTAssertEqual(RunCatCharacter.byId("bunny").category, .animal)
+        XCTAssertEqual(RunCatCharacter.byId("penguin").category, .animal)
+        XCTAssertEqual(RunCatCharacter.byId("coffee_cup").category, .inanimate)
+        XCTAssertEqual(RunCatCharacter.byId("little_cloud").category, .inanimate)
+        XCTAssertEqual(RunCatCharacter.byId("tiny_plant").category, .inanimate)
+        XCTAssertEqual(RunCatCharacter.byId("shiba_inu").displayName(language: .english), "Shiba Inu")
+        XCTAssertEqual(RunCatCharacter.byId("little_cloud").displayName(language: .simplifiedChinese), "小云朵")
     }
 
     func testOfficialRunnerResourcesContainRoleDefiningAnimationFrames() throws {
@@ -2368,6 +2749,31 @@ final class PreferencesAndPresentationTests: XCTestCase {
         ).width
 
         XCTAssertGreaterThan(enlargedWidth - defaultWidth, 10)
+    }
+
+    func testCharacterOverrideChangesRenderSignatureWithoutPersistingSelection() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "cat"
+
+        let selectedSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua",
+            catFrameIndex: 0
+        )
+        let overrideSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua",
+            catFrameIndex: 0,
+            characterOverrideID: "tiny_plant"
+        )
+
+        XCTAssertEqual(selectedSignature.catCharacter, "cat")
+        XCTAssertEqual(overrideSignature.catCharacter, "tiny_plant")
+        XCTAssertNotEqual(selectedSignature.presentation.width, overrideSignature.presentation.width)
+        XCTAssertEqual(settings.catCharacter, "cat")
     }
 
     func testGooglyEyesCharacterCanRenderOnEitherSideOfText() {

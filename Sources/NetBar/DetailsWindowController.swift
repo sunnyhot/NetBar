@@ -11,6 +11,35 @@ enum DetailsWindowDismissalPolicy {
 }
 
 @MainActor
+final class DeferredMainActorActionScheduler {
+    private let delay: Duration
+    private var task: Task<Void, Never>?
+
+    init(delay: Duration) {
+        self.delay = delay
+    }
+
+    deinit {
+        task?.cancel()
+    }
+
+    func schedule(_ action: @escaping @MainActor () -> Void) {
+        task?.cancel()
+        let delay = self.delay
+        task = Task { @MainActor in
+            try? await Task.sleep(for: delay)
+            guard !Task.isCancelled else { return }
+            action()
+        }
+    }
+
+    func cancel() {
+        task?.cancel()
+        task = nil
+    }
+}
+
+@MainActor
 final class DetailsWindowOutsideClickMonitor {
     typealias ClickHandler = (CGPoint) -> Void
     typealias MonitorInstaller = (@escaping ClickHandler) -> Any?
@@ -113,6 +142,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private var becomeKeyObserver: Any?
     private var escapeMonitor: Any?
     private var activityMonitor: Any?
+    private let deferredRefreshScheduler = DeferredMainActorActionScheduler(delay: .milliseconds(220))
     private lazy var outsideClickMonitor = DetailsWindowOutsideClickMonitor { [weak self] in
         self?.panel?.frame
     }
@@ -138,9 +168,6 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     }
 
     func show(anchor: NSStatusBarButton? = nil) {
-        monitor.isApplicationTrafficVisible = true
-        monitor.refresh()
-
         let floatingPanel = makePanelIfNeeded()
         position(floatingPanel, near: anchor)
         NSApplication.shared.activate(ignoringOtherApps: true)
@@ -157,6 +184,10 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             return event
         }
         scheduleAutoDismiss()
+        deferredRefreshScheduler.schedule { [weak self] in
+            guard let self, self.isVisible else { return }
+            self.monitor.refresh()
+        }
     }
 
     private func makePanelIfNeeded() -> NSPanel {
@@ -257,13 +288,13 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
 
     private func closePanel() {
         guard let panel, panel.isVisible else { return }
+        deferredRefreshScheduler.cancel()
         cancelAutoDismissTimer()
         if let monitor = activityMonitor {
             NSEvent.removeMonitor(monitor)
             activityMonitor = nil
         }
         outsideClickMonitor.setActive(false)
-        monitor.isApplicationTrafficVisible = false
         panel.orderOut(nil)
         onWindowClosed?()
     }

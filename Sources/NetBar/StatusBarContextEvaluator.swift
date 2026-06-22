@@ -21,17 +21,22 @@ struct SmartStatusBarContext: Equatable {
 }
 
 enum StatusBarContextEvaluator {
+    private static let anomalyFreshnessInterval: TimeInterval = 60
+    private static let appTrafficFreshnessInterval: TimeInterval = 10
+
     static func evaluate(
         snapshot: NetworkSnapshot,
         appTraffic: ApplicationTrafficState,
         intelligenceSummary: NetworkIntelligenceSummary,
         settings: NetworkIntelligenceSettings,
-        language: AppLanguage
+        language: AppLanguage,
+        now: Date = Date()
     ) -> SmartStatusBarContext {
         guard settings.isSmartStatusBarModeEnabled else { return .manual }
 
         if settings.showsSmartAnomalyMarker,
            let event = intelligenceSummary.latestEvent,
+           isFresh(event.timestamp, now: now, interval: anomalyFreshnessInterval),
            event.severity != .info {
             return SmartStatusBarContext(
                 emphasis: .anomaly(event.kind),
@@ -41,6 +46,7 @@ enum StatusBarContextEvaluator {
         }
 
         if settings.showsSmartTopApplication,
+           appTraffic.timestamp.map({ isFresh($0, now: now, interval: appTrafficFreshnessInterval) }) == true,
            let app = topApplication(from: appTraffic),
            app.downloadBytesPerSecond + app.uploadBytesPerSecond >= 5_242_880 {
             let label = shortened(app.displayName)
@@ -59,7 +65,7 @@ enum StatusBarContextEvaluator {
             )
         }
 
-        if snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond >= 10_485_760 {
+        if snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond >= settings.highTrafficThreshold.rawValue {
             return SmartStatusBarContext(
                 emphasis: .totalTraffic,
                 trafficDisplayModeOverride: .total,
@@ -68,6 +74,10 @@ enum StatusBarContextEvaluator {
         }
 
         return .manual
+    }
+
+    private static func isFresh(_ timestamp: Date, now: Date, interval: TimeInterval) -> Bool {
+        now.timeIntervalSince(timestamp) <= interval
     }
 
     private static func topApplication(from appTraffic: ApplicationTrafficState) -> ApplicationTrafficRate? {
@@ -80,5 +90,70 @@ enum StatusBarContextEvaluator {
     private static func shortened(_ name: String) -> String {
         guard name.count > 12 else { return name }
         return "\(name.prefix(9))..."
+    }
+}
+
+enum SmartCharacterSuggestionEvaluator {
+    private static let anomalyFreshnessInterval: TimeInterval = 60
+    private static let appTrafficFreshnessInterval: TimeInterval = 10
+    private static let topApplicationBurstThreshold: Double = 5_242_880
+    private static let uploadDominantThreshold: Double = 1_048_576
+    private static let idleThreshold: Double = 100
+
+    static func suggestedCharacterID(
+        snapshot: NetworkSnapshot,
+        appTraffic: ApplicationTrafficState,
+        intelligenceSummary: NetworkIntelligenceSummary,
+        settings: NetworkIntelligenceSettings,
+        now: Date = Date()
+    ) -> String? {
+        guard settings.isSmartCharacterSuggestionEnabled else { return nil }
+
+        if let event = intelligenceSummary.latestEvent,
+           isFresh(event.timestamp, now: now, interval: anomalyFreshnessInterval),
+           event.severity != .info {
+            switch event.kind {
+            case .networkDrop, .proxyAttributionGap:
+                return "little_cloud"
+            case .applicationSpike:
+                return "shiba_inu"
+            case .highTraffic:
+                return "penguin"
+            case .networkRecovered:
+                return "bunny"
+            }
+        }
+
+        if appTraffic.timestamp.map({ isFresh($0, now: now, interval: appTrafficFreshnessInterval) }) == true,
+           let app = topApplication(from: appTraffic),
+           app.downloadBytesPerSecond + app.uploadBytesPerSecond >= topApplicationBurstThreshold {
+            return "shiba_inu"
+        }
+
+        if snapshot.uploadBytesPerSecond >= max(snapshot.downloadBytesPerSecond * 1.5, uploadDominantThreshold) {
+            return "little_cloud"
+        }
+
+        let totalBytesPerSecond = snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond
+        if totalBytesPerSecond >= settings.highTrafficThreshold.rawValue {
+            return "penguin"
+        }
+
+        if totalBytesPerSecond < idleThreshold {
+            return "tiny_plant"
+        }
+
+        return nil
+    }
+
+    private static func isFresh(_ timestamp: Date, now: Date, interval: TimeInterval) -> Bool {
+        now.timeIntervalSince(timestamp) <= interval
+    }
+
+    private static func topApplication(from appTraffic: ApplicationTrafficState) -> ApplicationTrafficRate? {
+        ApplicationTrafficPresentation.sorted(
+            ApplicationTrafficPresentation.displayApplications(appTraffic.applications, mode: .activity),
+            by: .activity
+        ).first
     }
 }

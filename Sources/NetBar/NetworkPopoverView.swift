@@ -19,7 +19,7 @@ struct NetworkPopoverView: View {
             Divider().opacity(0.55)
 
             ScrollView {
-                VStack(alignment: .leading, spacing: 16) {
+                LazyVStack(alignment: .leading, spacing: 16) {
                     NetworkIntelligenceStatusCard(
                         presentation: NetworkIntelligenceStatusPresentation(
                             event: monitor.intelligenceSummary.latestEvent,
@@ -1419,28 +1419,59 @@ private extension ApplicationTrafficMetric {
 
 private let appIconCache = NSCache<NSNumber, NSImage>()
 
-private struct AppBadge: View {
-    let title: String
-    let pids: [Int32]
+enum AppBadgeIconResolver {
+    static func cachedIcon(for pids: [Int32]) -> NSImage? {
+        cachedIcon(for: pids, cache: appIconCache)
+    }
 
-    private var appIcon: NSImage? {
+    static func cachedIcon(for pids: [Int32], cache: NSCache<NSNumber, NSImage>) -> NSImage? {
         for pid in pids {
-            let key = NSNumber(value: pid)
-            if let cached = appIconCache.object(forKey: key) {
+            if let cached = cache.object(forKey: NSNumber(value: pid)) {
                 return cached
-            }
-            if let app = NSRunningApplication(processIdentifier: pid),
-               let icon = app.icon {
-                appIconCache.setObject(icon, forKey: key)
-                return icon
             }
         }
         return nil
     }
 
+    static func resolveIcon(for pids: [Int32]) -> NSImage? {
+        resolveIcon(for: pids, cache: appIconCache) { pid in
+            guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
+            return app.icon
+        }
+    }
+
+    static func resolveIcon(
+        for pids: [Int32],
+        cache: NSCache<NSNumber, NSImage>,
+        iconForPID: (Int32) -> NSImage?
+    ) -> NSImage? {
+        if let cached = cachedIcon(for: pids, cache: cache) {
+            return cached
+        }
+
+        for pid in pids {
+            guard let icon = iconForPID(pid) else { continue }
+            cache.setObject(icon, forKey: NSNumber(value: pid))
+            return icon
+        }
+
+        return nil
+    }
+}
+
+private struct AppBadge: View {
+    let title: String
+    let pids: [Int32]
+    @State private var loadedIcon: NSImage?
+    @State private var iconLoadTask: Task<Void, Never>?
+
+    private var displayedIcon: NSImage? {
+        loadedIcon ?? AppBadgeIconResolver.cachedIcon(for: pids)
+    }
+
     var body: some View {
         Group {
-            if let icon = appIcon {
+            if let icon = displayedIcon {
                 Image(nsImage: icon)
                     .resizable()
                     .aspectRatio(contentMode: .fit)
@@ -1460,10 +1491,42 @@ private struct AppBadge: View {
         }
         .frame(width: 24, height: 24)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .onAppear(perform: scheduleIconLoad)
+        .onDisappear(perform: cancelIconLoad)
+        .onChange(of: pids) { _ in
+            loadedIcon = AppBadgeIconResolver.cachedIcon(for: pids)
+            scheduleIconLoad()
+        }
     }
 
     private var initial: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "?"
+    }
+
+    private func scheduleIconLoad() {
+        if let cached = AppBadgeIconResolver.cachedIcon(for: pids) {
+            cancelIconLoad()
+            loadedIcon = cached
+            return
+        }
+
+        guard !pids.isEmpty else {
+            cancelIconLoad()
+            return
+        }
+        iconLoadTask?.cancel()
+        let pids = self.pids
+        iconLoadTask = Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(80))
+            guard !Task.isCancelled else { return }
+            loadedIcon = AppBadgeIconResolver.resolveIcon(for: pids)
+            iconLoadTask = nil
+        }
+    }
+
+    private func cancelIconLoad() {
+        iconLoadTask?.cancel()
+        iconLoadTask = nil
     }
 }
 
