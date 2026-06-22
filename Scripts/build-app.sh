@@ -5,6 +5,13 @@ ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="NetBar"
 CONFIGURATION="${CONFIGURATION:-release}"
 NETBAR_BUILD_UNIVERSAL="${NETBAR_BUILD_UNIVERSAL:-0}"
+if [ -z "${NETBAR_CODESIGN_APP+x}" ]; then
+    if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
+        NETBAR_CODESIGN_APP=1
+    else
+        NETBAR_CODESIGN_APP=0
+    fi
+fi
 APP_DIR="$ROOT_DIR/build/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"
@@ -67,7 +74,7 @@ fi
 
 chmod +x "$MACOS_DIR/$APP_NAME"
 
-if [ "${NETBAR_CODESIGN_APP:-0}" = "1" ]; then
+if [ "$NETBAR_CODESIGN_APP" = "1" ]; then
     CODESIGN_IDENTITY="${CODESIGN_IDENTITY:--}"
     ENTITLEMENTS="${NETBAR_CODESIGN_ENTITLEMENTS-$ROOT_DIR/Resources/NetBar.entitlements}"
     # Preserve the 4K CodeDirectory page size produced by SwiftPM's linker

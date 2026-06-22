@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.39.8 (2026-06-22)
+
+### Fix — 恢复 Release Bundle 签名
+
+- GitHub Actions release 构建默认恢复完整 App bundle ad-hoc 签名，避免下载包被 Gatekeeper 判定为 damaged
+- 保留 4K CodeDirectory page size，避免此前默认重签 page size 导致的启动失败风险
+
 ## v0.39.7 (2026-06-22)
 
 ### Fix — Release 构建兜底
