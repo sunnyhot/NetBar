@@ -1733,15 +1733,23 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testNetworkHistoryPresentationBuildsSevenAndThirtyDaySummaries() {
-        let days = (1...30).map { day in
-            NetworkDailySummary(
-                dateKey: "2026-06-\(String(format: "%02d", day))",
-                downloadBytes: UInt64(day * 1_000),
-                uploadBytes: UInt64(day * 100),
-                peakDownloadBytesPerSecond: Double(day * 10),
-                peakUploadBytesPerSecond: Double(day * 5),
+        let days: [NetworkDailySummary] = (1...30).map { day -> NetworkDailySummary in
+            let paddedDay = String(format: "%02d", day)
+            let dateKey = "2026-06-\(paddedDay)"
+            let downloadBytes = UInt64(day) * 1_000
+            let uploadBytes = UInt64(day) * 100
+            let peakDownloadBytesPerSecond = Double(day) * 10
+            let peakUploadBytesPerSecond = Double(day) * 5
+            let activeSeconds = TimeInterval(day * 60)
+
+            return NetworkDailySummary(
+                dateKey: dateKey,
+                downloadBytes: downloadBytes,
+                uploadBytes: uploadBytes,
+                peakDownloadBytesPerSecond: peakDownloadBytesPerSecond,
+                peakUploadBytesPerSecond: peakUploadBytesPerSecond,
                 sampleCount: day,
-                activeSeconds: TimeInterval(day * 60),
+                activeSeconds: activeSeconds,
                 topApplications: []
             )
         }
