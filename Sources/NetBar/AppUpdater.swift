@@ -712,15 +712,17 @@ final class AppUpdater: ObservableObject {
             throw UpdateError.downloadedVersionIsOlder
         }
 
+        let executableName = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String ?? "NetBar"
+        let executableURL = appURL
+            .appendingPathComponent("Contents", isDirectory: true)
+            .appendingPathComponent("MacOS", isDirectory: true)
+            .appendingPathComponent(executableName)
+        guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
+            throw UpdateError.codeSignatureInvalid
+        }
+        try validateExecutableArchitecture(executableURL)
+
         if !Self.codesignSucceeds(arguments: ["--verify", "--deep", "--strict", appURL.path]) {
-            let executableName = bundle.object(forInfoDictionaryKey: "CFBundleExecutable") as? String ?? "NetBar"
-            let executableURL = appURL
-                .appendingPathComponent("Contents", isDirectory: true)
-                .appendingPathComponent("MacOS", isDirectory: true)
-                .appendingPathComponent(executableName)
-            guard FileManager.default.isExecutableFile(atPath: executableURL.path) else {
-                throw UpdateError.codeSignatureInvalid
-            }
             statusMessage = "App 包使用 SwiftPM 签名，将继续安装"
         }
 
@@ -739,6 +741,47 @@ final class AppUpdater: ObservableObject {
             return process.terminationStatus == 0
         } catch {
             return false
+        }
+    }
+
+    private func validateExecutableArchitecture(_ executableURL: URL) throws {
+        guard let currentArchitecture = Self.currentExecutableArchitecture else { return }
+        let architectures = Self.executableArchitectures(at: executableURL)
+        guard architectures.contains(currentArchitecture) else {
+            throw UpdateError.incompatibleArchitecture(
+                current: currentArchitecture,
+                available: architectures.sorted()
+            )
+        }
+    }
+
+    private static var currentExecutableArchitecture: String? {
+        #if arch(arm64)
+        return "arm64"
+        #elseif arch(x86_64)
+        return "x86_64"
+        #else
+        return nil
+        #endif
+    }
+
+    private static func executableArchitectures(at executableURL: URL) -> Set<String> {
+        let process = Process()
+        let output = Pipe()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/lipo")
+        process.arguments = ["-archs", executableURL.path]
+        process.standardOutput = output
+        process.standardError = Pipe()
+
+        do {
+            try process.run()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return [] }
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            let text = String(data: data, encoding: .utf8) ?? ""
+            return Set(text.split(whereSeparator: \.isWhitespace).map(String.init))
+        } catch {
+            return []
         }
     }
 
@@ -764,12 +807,7 @@ final class AppUpdater: ObservableObject {
             /bin/mv "$TARGET_APP" "$BACKUP_APP"
         fi
 
-        /bin/mkdir -p "$TARGET_APP/Contents/MacOS" "$TARGET_APP/Contents/Resources"
-
-        if ! /bin/cp "$SOURCE_APP/Contents/Info.plist" "$TARGET_APP/Contents/Info.plist" \
-            || ! /bin/cp "$SOURCE_APP/Contents/MacOS/NetBar" "$TARGET_APP/Contents/MacOS/NetBar" \
-            || ! /bin/chmod +x "$TARGET_APP/Contents/MacOS/NetBar" \
-            || ! /bin/cp -R "$SOURCE_APP/Contents/Resources/." "$TARGET_APP/Contents/Resources/"; then
+        if ! /usr/bin/ditto "$SOURCE_APP" "$TARGET_APP"; then
             /bin/rm -rf "$TARGET_APP"
             if [ -d "$BACKUP_APP" ]; then
                 /bin/mv "$BACKUP_APP" "$TARGET_APP"
@@ -777,6 +815,7 @@ final class AppUpdater: ObservableObject {
             exit 1
         fi
 
+        /usr/bin/xattr -dr com.apple.quarantine "$TARGET_APP" 2>/dev/null || true
         /bin/rm -rf "$BACKUP_APP"
         /usr/bin/open "$TARGET_APP"
         /bin/rm -rf "$(dirname "$(dirname "$SOURCE_APP")")"
@@ -930,6 +969,7 @@ enum UpdateError: LocalizedError {
     case bundleIdentifierMismatch
     case downloadedVersionIsOlder
     case codeSignatureInvalid
+    case incompatibleArchitecture(current: String, available: [String])
     case checksumMismatch
 
     var errorDescription: String? {
@@ -958,6 +998,9 @@ enum UpdateError: LocalizedError {
             return "下载的版本低于当前版本"
         case .codeSignatureInvalid:
             return "下载的 App 签名校验失败"
+        case .incompatibleArchitecture(let current, let available):
+            let availableText = available.isEmpty ? "未知架构" : available.joined(separator: ", ")
+            return "下载的 App 不支持当前 Mac（需要 \(current)，安装包为 \(availableText)）"
         case .checksumMismatch:
             return "下载的安装包校验失败"
         }

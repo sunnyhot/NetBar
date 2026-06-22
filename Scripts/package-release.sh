@@ -10,6 +10,9 @@ ZIP_PATH="$DIST_DIR/$APP_NAME.app.zip"
 cd "$ROOT_DIR"
 
 "$ROOT_DIR/Scripts/build-app.sh"
+if [ "${NETBAR_BUILD_UNIVERSAL:-0}" = "1" ] && [ -z "${NETBAR_EXPECT_ARCHS:-}" ]; then
+    export NETBAR_EXPECT_ARCHS="arm64 x86_64"
+fi
 "$ROOT_DIR/Scripts/verify-release-app.sh" "$APP_DIR"
 
 rm -rf "$DIST_DIR"

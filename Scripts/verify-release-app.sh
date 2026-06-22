@@ -3,6 +3,7 @@ set -euo pipefail
 
 APP_DIR="${1:-build/NetBar.app}"
 EXECUTABLE="$APP_DIR/Contents/MacOS/NetBar"
+EXPECTED_ARCHS="${NETBAR_EXPECT_ARCHS:-}"
 VERIFY_STDOUT="$(mktemp /tmp/netbar-codesign-verify.out.XXXXXX)"
 VERIFY_STDERR="$(mktemp /tmp/netbar-codesign-verify.err.XXXXXX)"
 trap 'rm -f "$VERIFY_STDOUT" "$VERIFY_STDERR"' EXIT
@@ -15,6 +16,17 @@ fi
 if [ ! -x "$EXECUTABLE" ]; then
     echo "error: executable not found: $EXECUTABLE" >&2
     exit 1
+fi
+
+if [ -n "$EXPECTED_ARCHS" ]; then
+    ARCHS="$(lipo -archs "$EXECUTABLE")"
+    for EXPECTED_ARCH in $EXPECTED_ARCHS; do
+        if [[ " $ARCHS " != *" $EXPECTED_ARCH "* ]]; then
+            echo "error: expected executable architecture $EXPECTED_ARCH, got: $ARCHS" >&2
+            exit 1
+        fi
+    done
+    echo "arch: $ARCHS"
 fi
 
 if codesign --verify --deep --strict --verbose=2 "$APP_DIR" >"$VERIFY_STDOUT" 2>"$VERIFY_STDERR"; then

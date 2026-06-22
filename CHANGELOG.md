@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.39.6 (2026-06-22)
+
+### Fix — Release 安装包兼容性
+
+- Release 构建改为 universal app，避免 Intel Mac 更新到 arm64-only 安装包后无法打开
+- 自更新安装改为整包替换，保留 App bundle 签名结构并清理 quarantine 属性
+- 更新安装前校验下载 App 是否支持当前 Mac 架构，避免安装不兼容版本
+- 构建脚本保留 Developer ID 签名参数入口；当前无 Developer ID 时继续发布未公证包
+
 ## v0.39.5 (2026-06-17)
 
 ### Fix — Release 发布校验修正
