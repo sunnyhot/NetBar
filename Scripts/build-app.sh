@@ -4,13 +4,7 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_NAME="NetBar"
 CONFIGURATION="${CONFIGURATION:-release}"
-if [ -z "${NETBAR_BUILD_UNIVERSAL+x}" ]; then
-    if [ "${GITHUB_ACTIONS:-false}" = "true" ]; then
-        NETBAR_BUILD_UNIVERSAL=1
-    else
-        NETBAR_BUILD_UNIVERSAL=0
-    fi
-fi
+NETBAR_BUILD_UNIVERSAL="${NETBAR_BUILD_UNIVERSAL:-0}"
 APP_DIR="$ROOT_DIR/build/$APP_NAME.app"
 CONTENTS_DIR="$APP_DIR/Contents"
 MACOS_DIR="$CONTENTS_DIR/MacOS"

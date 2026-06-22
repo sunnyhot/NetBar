@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.39.7 (2026-06-22)
+
+### Fix — Release 构建兜底
+
+- 取消 GitHub Actions 环境下自动启用 universal build，避免当前 release workflow 在构建阶段失败
+- 保留显式 `NETBAR_BUILD_UNIVERSAL=1` 的本地/CI 架构校验入口，后续可在具备 runner 支持时重新开启
+
 ## v0.39.6 (2026-06-22)
 
 ### Fix — Release 安装包兼容性
