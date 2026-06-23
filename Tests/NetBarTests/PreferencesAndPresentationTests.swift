@@ -759,6 +759,36 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(cache.object(forKey: NSNumber(value: 8)) === providedIcon)
     }
 
+    func testAppBadgeIconResolverAsyncResolvesUncachedIconOffMainThread() async {
+        let cache = NSCache<NSNumber, NSImage>()
+        let providedIcon = NSImage(size: NSSize(width: 14, height: 14))
+        let recorder = ThreadRecordingBox()
+
+        let icon = await AppBadgeIconResolver.resolveIconAsync(
+            for: [9],
+            cache: cache,
+            iconForPID: { pid in
+                recorder.record(pid: pid, isMainThread: Thread.isMainThread)
+                return pid == 9 ? providedIcon : nil
+            }
+        )
+
+        XCTAssertTrue(icon === providedIcon)
+        XCTAssertEqual(recorder.requestedPIDs, [9])
+        XCTAssertEqual(recorder.threadFlags, [false])
+        XCTAssertTrue(cache.object(forKey: NSNumber(value: 9)) === providedIcon)
+    }
+
+    func testDetailsWindowActivityRefreshPolicyThrottlesHighFrequencyPointerEvents() {
+        var policy = DetailsWindowActivityRefreshPolicy(minimumRefreshInterval: 1.0)
+
+        XCTAssertFalse(DetailsWindowActivityRefreshPolicy.eventMask.contains(.mouseMoved))
+        XCTAssertTrue(DetailsWindowActivityRefreshPolicy.eventMask.contains(.scrollWheel))
+        XCTAssertTrue(policy.shouldRefresh(at: Date(timeIntervalSince1970: 10)))
+        XCTAssertFalse(policy.shouldRefresh(at: Date(timeIntervalSince1970: 10.2)))
+        XCTAssertTrue(policy.shouldRefresh(at: Date(timeIntervalSince1970: 11.1)))
+    }
+
     func testApplicationTrafficVisibilitySchedulerDefersResumeAndKeepsShortReopensWarm() async throws {
         var isDetailVisible = true
         var visibilityChanges: [Bool] = []
@@ -4956,6 +4986,27 @@ extension PreferencesAndPresentationTests {
 
         // Same memory, so sorted by display name ascending
         XCTAssertEqual(visible.map(\.displayName), ["Apple", "Zebra"])
+    }
+}
+
+private final class ThreadRecordingBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var recordedPIDs: [Int32] = []
+    private var recordedThreadFlags: [Bool] = []
+
+    var requestedPIDs: [Int32] {
+        lock.withLock { recordedPIDs }
+    }
+
+    var threadFlags: [Bool] {
+        lock.withLock { recordedThreadFlags }
+    }
+
+    func record(pid: Int32, isMainThread: Bool) {
+        lock.withLock {
+            recordedPIDs.append(pid)
+            recordedThreadFlags.append(isMainThread)
+        }
     }
 }
 

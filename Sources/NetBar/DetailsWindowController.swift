@@ -10,6 +10,36 @@ enum DetailsWindowDismissalPolicy {
     }
 }
 
+struct DetailsWindowActivityRefreshPolicy {
+    static let eventMask: NSEvent.EventTypeMask = [
+        .leftMouseDown,
+        .rightMouseDown,
+        .otherMouseDown,
+        .scrollWheel,
+        .leftMouseDragged,
+        .rightMouseDragged
+    ]
+
+    let minimumRefreshInterval: TimeInterval
+    private var lastRefreshDate: Date?
+
+    init(minimumRefreshInterval: TimeInterval = 1.0) {
+        self.minimumRefreshInterval = minimumRefreshInterval
+    }
+
+    mutating func shouldRefresh(at date: Date) -> Bool {
+        if let lastRefreshDate, date.timeIntervalSince(lastRefreshDate) < minimumRefreshInterval {
+            return false
+        }
+        lastRefreshDate = date
+        return true
+    }
+
+    mutating func reset() {
+        lastRefreshDate = nil
+    }
+}
+
 @MainActor
 final class DeferredMainActorActionScheduler {
     private let delay: Duration
@@ -142,6 +172,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private var becomeKeyObserver: Any?
     private var escapeMonitor: Any?
     private var activityMonitor: Any?
+    private var activityRefreshPolicy = DetailsWindowActivityRefreshPolicy()
     private let deferredRefreshScheduler = DeferredMainActorActionScheduler(delay: .milliseconds(220))
     private lazy var outsideClickMonitor = DetailsWindowOutsideClickMonitor { [weak self] in
         self?.panel?.frame
@@ -175,13 +206,16 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
         outsideClickMonitor.setActive(true) { [weak self] in
             self?.closePanel()
         }
-        activityMonitor = NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown, .rightMouseDown, .scrollWheel, .leftMouseDragged, .rightMouseDragged]) { [weak self] event in
-            guard let self, let panel = self.panel, panel.isVisible else { return event }
-            let screenLocation = NSEvent.mouseLocation
-            if panel.frame.contains(screenLocation) {
-                self.scheduleAutoDismiss()
+        activityRefreshPolicy.reset()
+        if activityMonitor == nil {
+            activityMonitor = NSEvent.addLocalMonitorForEvents(matching: DetailsWindowActivityRefreshPolicy.eventMask) { [weak self] event in
+                guard let self, let panel = self.panel, panel.isVisible else { return event }
+                let screenLocation = NSEvent.mouseLocation
+                if panel.frame.contains(screenLocation), self.activityRefreshPolicy.shouldRefresh(at: Date()) {
+                    self.scheduleAutoDismiss()
+                }
+                return event
             }
-            return event
         }
         scheduleAutoDismiss()
         deferredRefreshScheduler.schedule { [weak self] in
@@ -294,6 +328,7 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             NSEvent.removeMonitor(monitor)
             activityMonitor = nil
         }
+        activityRefreshPolicy.reset()
         outsideClickMonitor.setActive(false)
         panel.orderOut(nil)
         onWindowClosed?()

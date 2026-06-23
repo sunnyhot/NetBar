@@ -1419,6 +1419,26 @@ private extension ApplicationTrafficMetric {
 
 private let appIconCache = NSCache<NSNumber, NSImage>()
 
+private final class AppBadgeIconCacheReference: @unchecked Sendable {
+    let cache: NSCache<NSNumber, NSImage>
+
+    init(_ cache: NSCache<NSNumber, NSImage>) {
+        self.cache = cache
+    }
+}
+
+private final class AppBadgeIconProviderReference: @unchecked Sendable {
+    private let iconForPID: (Int32) -> NSImage?
+
+    init(_ iconForPID: @escaping (Int32) -> NSImage?) {
+        self.iconForPID = iconForPID
+    }
+
+    func icon(for pid: Int32) -> NSImage? {
+        iconForPID(pid)
+    }
+}
+
 enum AppBadgeIconResolver {
     static func cachedIcon(for pids: [Int32]) -> NSImage? {
         cachedIcon(for: pids, cache: appIconCache)
@@ -1437,6 +1457,34 @@ enum AppBadgeIconResolver {
         resolveIcon(for: pids, cache: appIconCache) { pid in
             guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
             return app.icon
+        }
+    }
+
+    static func resolveIconAsync(for pids: [Int32]) async -> NSImage? {
+        await resolveIconAsync(for: pids, cache: appIconCache) { pid in
+            guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
+            return app.icon
+        }
+    }
+
+    static func resolveIconAsync(
+        for pids: [Int32],
+        cache: NSCache<NSNumber, NSImage>,
+        iconForPID: @escaping (Int32) -> NSImage?
+    ) async -> NSImage? {
+        if let cached = cachedIcon(for: pids, cache: cache) {
+            return cached
+        }
+
+        let cacheReference = AppBadgeIconCacheReference(cache)
+        let providerReference = AppBadgeIconProviderReference(iconForPID)
+        return await withCheckedContinuation { continuation in
+            DispatchQueue.global(qos: .utility).async {
+                let icon = resolveIcon(for: pids, cache: cacheReference.cache) { pid in
+                    providerReference.icon(for: pid)
+                }
+                continuation.resume(returning: icon)
+            }
         }
     }
 
@@ -1519,7 +1567,9 @@ private struct AppBadge: View {
         iconLoadTask = Task { @MainActor in
             try? await Task.sleep(for: .milliseconds(80))
             guard !Task.isCancelled else { return }
-            loadedIcon = AppBadgeIconResolver.resolveIcon(for: pids)
+            let icon = await AppBadgeIconResolver.resolveIconAsync(for: pids)
+            guard !Task.isCancelled else { return }
+            loadedIcon = icon
             iconLoadTask = nil
         }
     }
