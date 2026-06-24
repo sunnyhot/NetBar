@@ -276,23 +276,7 @@ struct MenuBarCharacterSection: View {
                 title: appPreferences.text("角色颜色", "Character Color")
             )
 
-            HStack {
-                Text(appPreferences.text("颜色模式", "Color Mode"))
-                    .font(.subheadline)
-                Picker("", selection: $settings.catColorMode) {
-                    ForEach(CatColorMode.allCases) { mode in
-                        Text(mode.displayName(zh: appPreferences.resolvedLanguage == .simplifiedChinese))
-                            .tag(mode.rawValue)
-                    }
-                }
-                .labelsHidden()
-                .frame(maxWidth: 220)
-                .onChange(of: settings.catColorMode) { newMode in
-                    if newMode != CatColorMode.solid.rawValue && settings.usesSystemTextColor {
-                        settings.usesSystemTextColor = false
-                    }
-                }
-            }
+            CharacterColorModePicker(settings: settings, appPreferences: appPreferences)
 
             if settings.catColorMode == CatColorMode.solid.rawValue {
                 HStack {

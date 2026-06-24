@@ -528,6 +528,22 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(MenuBarPreferenceGroup.animation.title(language: .english), "Animation & Rotation")
     }
 
+    func testAnimationSectionExposesSharedCharacterColorModeControl() throws {
+        let animationSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarAnimationPreferencesView.swift"]
+        )
+        let sharedControlsSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarSubcomponents.swift"]
+        )
+        let combinedSource = animationSource + "\n" + sharedControlsSource
+
+        XCTAssertTrue(animationSource.contains("CharacterColorModePicker"))
+        XCTAssertTrue(combinedSource.contains("settings.catColorMode"))
+        XCTAssertTrue(combinedSource.contains("CatColorMode.allCases"))
+        XCTAssertTrue(combinedSource.contains("\"颜色模式\""))
+        XCTAssertTrue(combinedSource.contains("\"Color Mode\""))
+    }
+
     func testMenuBarPresetAppliesTotalTrafficMode() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
 
@@ -3900,6 +3916,18 @@ final class PreferencesAndPresentationTests: XCTestCase {
             .sorted {
                 $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending
             }
+    }
+
+    private func sourceFileContent(pathComponents: [String]) throws -> String {
+        let sourceFile = URL(fileURLWithPath: #filePath)
+        var url = sourceFile
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+            .deletingLastPathComponent()
+        for pathComponent in pathComponents {
+            url.appendPathComponent(pathComponent)
+        }
+        return try String(contentsOf: url, encoding: .utf8)
     }
 
     private func isolatedDefaults() -> UserDefaults {

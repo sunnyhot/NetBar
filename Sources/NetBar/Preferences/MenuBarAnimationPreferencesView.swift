@@ -69,6 +69,21 @@ struct MenuBarAnimationSection: View {
                 Divider()
 
                 Toggle(appPreferences.text("摇头效果", "Head Swing"), isOn: $settings.catHeadSwing)
+
+                MenuBarSubsectionHeader(
+                    systemImage: "paintpalette",
+                    title: appPreferences.text("角色颜色", "Character Color")
+                )
+                CharacterColorModePicker(settings: settings, appPreferences: appPreferences)
+                if settings.catColorMode != CatColorMode.solid.rawValue {
+                    Text(appPreferences.text(
+                        "炫彩模式会自动变化颜色。",
+                        "Dynamic modes change color automatically."
+                    ))
+                    .font(.system(size: 10))
+                    .foregroundColor(.secondary)
+                }
+
                 Toggle(appPreferences.text("角色轮换", "Character Rotation"), isOn: $settings.catRotationEnabled)
 
                 if settings.catRotationEnabled {
