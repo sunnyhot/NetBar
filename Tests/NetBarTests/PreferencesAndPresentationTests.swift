@@ -32,6 +32,38 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testStatusBarBackgroundAutomaticWidthUsesCompactHorizontalPadding() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsBackground = true
+        settings.showsCat = false
+        settings.trafficDisplayMode = .upDown
+        settings.showsArrows = true
+
+        let font = NSFont.monospacedDigitSystemFont(
+            ofSize: settings.clampedFontSize,
+            weight: settings.fontWeight
+        )
+        let stableTextWidth = [
+            "↑ 999 KB/s",
+            "↓ 999 KB/s",
+            "↑ 9.99 MB/s",
+            "↓ 9.99 MB/s"
+        ]
+            .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
+            .max() ?? 1
+
+        let presentation = StatusBarDisplayRenderer.presentation(
+            snapshot: sampleSnapshot(download: 48_000, upload: 163_000),
+            settings: settings
+        )
+
+        XCTAssertEqual(presentation.width, ceil(stableTextWidth + 10))
+        XCTAssertEqual(
+            StatusBarDisplayRenderer.stableMinimumWidth(settings: settings),
+            ceil(stableTextWidth + 10)
+        )
+    }
+
     func testStatusBarRenderedImageCacheReusesMatchingSignatureAndEvictsOldest() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         let cache = StatusBarRenderedImageCache(limit: 2)

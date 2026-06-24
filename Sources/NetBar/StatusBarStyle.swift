@@ -1657,6 +1657,10 @@ enum StatusBarDisplayRenderer {
         max(2, 3 * settings.clampedCatScale)
     }
 
+    private static func horizontalPadding(settings: StatusBarSettings) -> CGFloat {
+        settings.showsBackground ? 5 : 2
+    }
+
     static func shouldMirrorCharacter(settings: StatusBarSettings, frameIndex: Int) -> Bool {
         let baseMirror = settings.catFacing == .left
         let swingMirror = settings.catHeadSwing && frameIndex % 2 == 1
@@ -1684,7 +1688,7 @@ enum StatusBarDisplayRenderer {
             ofSize: settings.clampedFontSize,
             weight: settings.fontWeight
         )
-        let horizontalPadding: CGFloat = settings.showsBackground ? 8 : 2
+        let horizontalPadding = horizontalPadding(settings: settings)
         let stableWidth = stableWidthTemplates(settings: settings)
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
             .max() ?? 1
@@ -1730,7 +1734,7 @@ enum StatusBarDisplayRenderer {
                 return [total]
             }
         }()
-        let horizontalPadding: CGFloat = settings.showsBackground ? 8 : 2
+        let horizontalPadding = horizontalPadding(settings: settings)
         let cacheKey = StatusBarTextLayoutCacheKey(
             lines: lines,
             fontSize: settings.fontSize,
