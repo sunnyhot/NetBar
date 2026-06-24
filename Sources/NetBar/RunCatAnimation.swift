@@ -93,7 +93,7 @@ struct RunCatCharacter: Equatable, Identifiable {
 
         // Seasonal runners
         RunCatCharacter(id: "reindeer", nameZh: "驯鹿与雪橇", nameEn: "Reindeer & Sleigh", nameJa: "トナカイとソリ",
-                        frameCount: 5, frameWidth: 58, isTemplate: false, category: .seasonal),
+                        frameCount: 5, frameWidth: 58, isTemplate: true, category: .seasonal),
         RunCatCharacter(id: "snowman", nameZh: "雪人", nameEn: "Snowman", nameJa: "雪だるま",
                         frameCount: 5, frameWidth: 26, isTemplate: true, category: .seasonal),
         RunCatCharacter(id: "wind_chime", nameZh: "风铃", nameEn: "Wind Chime", nameJa: "風鈴",

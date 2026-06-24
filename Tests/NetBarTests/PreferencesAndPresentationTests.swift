@@ -2399,6 +2399,37 @@ final class PreferencesAndPresentationTests: XCTestCase {
         }
     }
 
+    func testRandomCycleModeTintsSilhouetteRunnerDuringCharacterRotation() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = "reindeer"
+        settings.catColorMode = CatColorMode.randomCycle.rawValue
+        settings.catPosition = .right
+        settings.usesAutomaticWidth = false
+        settings.itemWidth = 220
+        settings.showsBackground = true
+        settings.backgroundOpacity = 1
+        settings.backgroundColor = .olive
+        settings.usesSystemTextColor = false
+        settings.textColor = .black
+        settings.catRotationEnabled = true
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0,
+            renderTime: 19.25
+        )
+        let characterRegion = ((220.0 - 8.0 - 58.0) / 220.0)..<((220.0 - 8.0) / 220.0)
+
+        XCTAssertGreaterThan(
+            saturatedPixelCount(in: image, horizontalRegion: characterRegion),
+            20,
+            dominantColorSummary(in: image)
+        )
+    }
+
     func testRockKingdomInspiredChromaModesUseRichMultiStopPalettes() {
         let modes: [CatColorMode] = [.crystalPrism, .starlightShift, .phantomChroma]
 
@@ -4318,6 +4349,36 @@ final class PreferencesAndPresentationTests: XCTestCase {
                     color.greenComponent < 0.32,
                     color.blueComponent < 0.32
                 else { continue }
+                count += 1
+            }
+        }
+
+        return count
+    }
+
+    private func saturatedPixelCount(in image: NSImage, horizontalRegion: Range<Double>) -> Int {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation")
+            return 0
+        }
+
+        let minX = max(Int(Double(bitmap.pixelsWide) * horizontalRegion.lowerBound), 0)
+        let maxX = min(Int(Double(bitmap.pixelsWide) * horizontalRegion.upperBound), bitmap.pixelsWide)
+        var count = 0
+
+        for y in 0..<bitmap.pixelsHigh {
+            for x in minX..<maxX {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5
+                else { continue }
+
+                var hue = CGFloat.zero
+                var saturation = CGFloat.zero
+                var brightness = CGFloat.zero
+                var alpha = CGFloat.zero
+                color.getHue(&hue, saturation: &saturation, brightness: &brightness, alpha: &alpha)
+                guard saturation > 0.45, brightness > 0.45 else { continue }
                 count += 1
             }
         }
