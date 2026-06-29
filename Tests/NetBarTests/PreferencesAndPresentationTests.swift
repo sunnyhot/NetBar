@@ -100,6 +100,77 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(cache.image(for: thirdSignature) === thirdImage)
     }
 
+    func testStatusBarPulseRenderPolicyDisablesBucketForIdleAndReducedMotion() {
+        XCTAssertEqual(
+            StatusBarPulseRenderPolicy.timeBucket(
+                snapshot: sampleSnapshot(download: 0, upload: 0),
+                reduceMotion: false,
+                renderTime: 12.4
+            ),
+            0
+        )
+
+        XCTAssertEqual(
+            StatusBarPulseRenderPolicy.timeBucket(
+                snapshot: sampleSnapshot(download: 2_000_000, upload: 100_000),
+                reduceMotion: true,
+                renderTime: 12.4
+            ),
+            0
+        )
+    }
+
+    func testStatusBarPulseRenderPolicyQuantizesActiveTrafficAtTwoHz() {
+        let snapshot = sampleSnapshot(download: 2_000_000, upload: 100_000)
+
+        XCTAssertEqual(
+            StatusBarPulseRenderPolicy.timeBucket(
+                snapshot: snapshot,
+                reduceMotion: false,
+                renderTime: 10.24
+            ),
+            20
+        )
+        XCTAssertEqual(
+            StatusBarPulseRenderPolicy.timeBucket(
+                snapshot: snapshot,
+                reduceMotion: false,
+                renderTime: 10.26
+            ),
+            20
+        )
+        XCTAssertEqual(
+            StatusBarPulseRenderPolicy.timeBucket(
+                snapshot: snapshot,
+                reduceMotion: false,
+                renderTime: 10.51
+            ),
+            21
+        )
+    }
+
+    func testStatusBarSignatureIncludesPulseBucketOnlyForActiveTraffic() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+
+        let idleSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua",
+            renderTime: 10.51,
+            reduceMotion: false
+        )
+        XCTAssertEqual(idleSignature.statusPulseTimeBucket, 0)
+
+        let activeSignature = StatusBarDisplayRenderer.signature(
+            snapshot: sampleSnapshot(download: 2_000_000, upload: 100_000),
+            settings: settings,
+            appearanceName: "NSAppearanceNameAqua",
+            renderTime: 10.51,
+            reduceMotion: false
+        )
+        XCTAssertEqual(activeSignature.statusPulseTimeBucket, 21)
+    }
+
     func testStatusBarTextLayoutCacheReusesMatchingInputs() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         let cache = StatusBarTextLayoutCache(limit: 2)

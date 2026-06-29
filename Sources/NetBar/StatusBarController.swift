@@ -576,6 +576,7 @@ final class StatusBarController {
             intelligenceSummary: monitor.intelligenceSummary,
             settings: intelligenceSettings
         ) : nil
+        let renderTime = Date().timeIntervalSince1970
 
         let signature = StatusBarDisplayRenderer.signature(
             snapshot: monitor.snapshot,
@@ -585,7 +586,8 @@ final class StatusBarController {
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
             characterOverrideID: characterOverrideID,
             googlyEyesState: activeGooglyEyesState,
-            smartContext: smartContext
+            smartContext: smartContext,
+            renderTime: renderTime
         )
         guard signature != lastRenderSignature else {
             lastColorTimeBucket = currentColorBucket
@@ -608,7 +610,8 @@ final class StatusBarController {
                 catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
                 characterOverrideID: characterOverrideID,
                 googlyEyesState: activeGooglyEyesState,
-                smartContext: smartContext
+                smartContext: smartContext,
+                renderTime: renderTime
             )
             renderedImageCache.store(image, for: signature)
         }

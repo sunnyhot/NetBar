@@ -955,6 +955,7 @@ struct StatusBarRenderSignature: Equatable {
     let usesSystemTextColor: Bool
     let textColor: PersistedColor
     let backgroundColor: PersistedColor
+    let statusPulseTimeBucket: Int
     let appearanceName: String
     let catFrameIndex: Int?
     let catCharacter: String
@@ -973,6 +974,35 @@ struct GooglyEyesRenderState: Equatable {
     let mouseLocation: CGPoint
     let statusItemFrame: CGRect
     let isBlinking: Bool
+}
+
+enum StatusBarPulseRenderPolicy {
+    static let activeTrafficThresholdBytesPerSecond: Double = 100_000
+
+    static func isActive(snapshot: NetworkSnapshot) -> Bool {
+        snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond >= activeTrafficThresholdBytesPerSecond
+    }
+
+    static func timeBucket(
+        snapshot: NetworkSnapshot,
+        reduceMotion: Bool,
+        renderTime: TimeInterval
+    ) -> Int {
+        guard !reduceMotion, isActive(snapshot: snapshot) else { return 0 }
+        return Int(renderTime * 2)
+    }
+
+    static func pulseAlpha(
+        snapshot: NetworkSnapshot,
+        reduceMotion: Bool,
+        renderTime: TimeInterval
+    ) -> CGFloat {
+        guard timeBucket(snapshot: snapshot, reduceMotion: reduceMotion, renderTime: renderTime) > 0 else {
+            return 0
+        }
+        let wave = 0.5 + 0.5 * sin(renderTime * .pi * 2)
+        return CGFloat(0.08 + wave * 0.1)
+    }
 }
 
 @MainActor
@@ -1108,7 +1138,9 @@ enum StatusBarDisplayRenderer {
         catFrameIndex: Int? = nil,
         characterOverrideID: String? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil,
-        smartContext: SmartStatusBarContext = .manual
+        smartContext: SmartStatusBarContext = .manual,
+        renderTime: TimeInterval = Date().timeIntervalSince1970,
+        reduceMotion: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     ) -> StatusBarRenderSignature {
         let effectiveCharacter = characterAsset(
             settings: settings,
@@ -1139,6 +1171,11 @@ enum StatusBarDisplayRenderer {
             usesSystemTextColor: settings.usesSystemTextColor,
             textColor: settings.textColor,
             backgroundColor: settings.backgroundColor,
+            statusPulseTimeBucket: StatusBarPulseRenderPolicy.timeBucket(
+                snapshot: snapshot,
+                reduceMotion: reduceMotion,
+                renderTime: renderTime
+            ),
             appearanceName: appearanceName,
             catFrameIndex: catFrameIndex,
             catCharacter: effectiveCharacter.id,
@@ -1241,6 +1278,18 @@ enum StatusBarDisplayRenderer {
                 .withAlphaComponent(CGFloat(settings.backgroundOpacity.clamped(to: 0...1)))
                 .setFill()
             NSRect(origin: .zero, size: size).fill()
+            let pulseAlpha = StatusBarPulseRenderPolicy.pulseAlpha(
+                snapshot: snapshot,
+                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
+                renderTime: renderTime
+            )
+            if pulseAlpha > 0 {
+                let pulseColor = snapshot.uploadBytesPerSecond > snapshot.downloadBytesPerSecond
+                    ? NSColor.systemOrange
+                    : NSColor.systemTeal
+                pulseColor.withAlphaComponent(pulseAlpha).setFill()
+                NSRect(origin: .zero, size: size).fill()
+            }
         }
 
         // Determine if cat has custom coloring (non-default-white solid or fancy mode)
