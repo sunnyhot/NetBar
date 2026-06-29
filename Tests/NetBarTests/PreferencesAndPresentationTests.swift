@@ -5250,6 +5250,29 @@ extension PreferencesAndPresentationTests {
     }
 }
 
+// MARK: - Popover Decomposition Tests
+
+extension PreferencesAndPresentationTests {
+    func testLivingSignalPopoverOwnsInsightAndSummaryFiles() throws {
+        let insightSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "InsightStreamView.swift"]
+        )
+        let summarySource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"]
+        )
+        let rootSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "NetworkPopoverView.swift"]
+        )
+
+        XCTAssertTrue(insightSource.contains("struct InsightStreamView"))
+        XCTAssertTrue(insightSource.contains("struct NetworkIntelligenceStatusCard"))
+        XCTAssertTrue(summarySource.contains("struct TodayNetworkSummaryPanel"))
+        XCTAssertTrue(summarySource.contains("struct HistoryLedgerPanel"))
+        XCTAssertFalse(rootSource.contains("struct TodayNetworkSummary: View"))
+        XCTAssertFalse(rootSource.contains("private var insightStreamSection"))
+    }
+}
+
 private final class ThreadRecordingBox: @unchecked Sendable {
     private let lock = NSLock()
     private var recordedPIDs: [Int32] = []
