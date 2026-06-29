@@ -354,7 +354,7 @@ struct ApplicationTrafficRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            AppBadge(title: application.displayName, pids: application.pids)
+            AppBadge(title: application.displayName)
 
             VStack(alignment: .leading, spacing: 1) {
                 HStack(spacing: 5) {
@@ -488,165 +488,26 @@ private extension ApplicationTrafficMetric {
     }
 }
 
-private let appIconCache = NSCache<NSNumber, NSImage>()
-
-private final class AppBadgeIconCacheReference: @unchecked Sendable {
-    let cache: NSCache<NSNumber, NSImage>
-
-    init(_ cache: NSCache<NSNumber, NSImage>) {
-        self.cache = cache
-    }
-}
-
-private final class AppBadgeIconProviderReference: @unchecked Sendable {
-    private let iconForPID: (Int32) -> NSImage?
-
-    init(_ iconForPID: @escaping (Int32) -> NSImage?) {
-        self.iconForPID = iconForPID
-    }
-
-    func icon(for pid: Int32) -> NSImage? {
-        iconForPID(pid)
-    }
-}
-
-enum AppBadgeIconResolver {
-    static func cachedIcon(for pids: [Int32]) -> NSImage? {
-        cachedIcon(for: pids, cache: appIconCache)
-    }
-
-    static func cachedIcon(for pids: [Int32], cache: NSCache<NSNumber, NSImage>) -> NSImage? {
-        for pid in pids {
-            if let cached = cache.object(forKey: NSNumber(value: pid)) {
-                return cached
-            }
-        }
-        return nil
-    }
-
-    static func resolveIcon(for pids: [Int32]) -> NSImage? {
-        resolveIcon(for: pids, cache: appIconCache) { pid in
-            guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
-            return app.icon
-        }
-    }
-
-    static func resolveIconAsync(for pids: [Int32]) async -> NSImage? {
-        await resolveIconAsync(for: pids, cache: appIconCache) { pid in
-            guard let app = NSRunningApplication(processIdentifier: pid) else { return nil }
-            return app.icon
-        }
-    }
-
-    static func resolveIconAsync(
-        for pids: [Int32],
-        cache: NSCache<NSNumber, NSImage>,
-        iconForPID: @escaping (Int32) -> NSImage?
-    ) async -> NSImage? {
-        if let cached = cachedIcon(for: pids, cache: cache) {
-            return cached
-        }
-
-        let cacheReference = AppBadgeIconCacheReference(cache)
-        let providerReference = AppBadgeIconProviderReference(iconForPID)
-        return await withCheckedContinuation { continuation in
-            DispatchQueue.global(qos: .utility).async {
-                let icon = resolveIcon(for: pids, cache: cacheReference.cache) { pid in
-                    providerReference.icon(for: pid)
-                }
-                continuation.resume(returning: icon)
-            }
-        }
-    }
-
-    static func resolveIcon(
-        for pids: [Int32],
-        cache: NSCache<NSNumber, NSImage>,
-        iconForPID: (Int32) -> NSImage?
-    ) -> NSImage? {
-        if let cached = cachedIcon(for: pids, cache: cache) {
-            return cached
-        }
-
-        for pid in pids {
-            guard let icon = iconForPID(pid) else { continue }
-            cache.setObject(icon, forKey: NSNumber(value: pid))
-            return icon
-        }
-
-        return nil
-    }
-}
-
 struct AppBadge: View {
     let title: String
-    let pids: [Int32]
-    @State private var loadedIcon: NSImage?
-    @State private var iconLoadTask: Task<Void, Never>?
-
-    private var displayedIcon: NSImage? {
-        loadedIcon ?? AppBadgeIconResolver.cachedIcon(for: pids)
-    }
 
     var body: some View {
-        Group {
-            if let icon = displayedIcon {
-                Image(nsImage: icon)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-            } else {
-                Text(initial)
-                    .font(.system(size: 10, weight: .bold, design: .rounded))
-                    .foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .background(
-                        LinearGradient(
-                            colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
-                            startPoint: .topLeading,
-                            endPoint: .bottomTrailing
-                        )
-                    )
-            }
-        }
+        Text(initial)
+            .font(.system(size: 10, weight: .bold, design: .rounded))
+            .foregroundStyle(.white)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .background(
+                LinearGradient(
+                    colors: [Color(nsColor: .controlAccentColor), Color(nsColor: .controlAccentColor).opacity(0.65)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+            )
         .frame(width: 24, height: 24)
         .clipShape(RoundedRectangle(cornerRadius: 6))
-        .onAppear(perform: scheduleIconLoad)
-        .onDisappear(perform: cancelIconLoad)
-        .onChange(of: pids) { _ in
-            loadedIcon = AppBadgeIconResolver.cachedIcon(for: pids)
-            scheduleIconLoad()
-        }
     }
 
     private var initial: String {
         title.trimmingCharacters(in: .whitespacesAndNewlines).first.map { String($0).uppercased() } ?? "?"
-    }
-
-    private func scheduleIconLoad() {
-        if let cached = AppBadgeIconResolver.cachedIcon(for: pids) {
-            cancelIconLoad()
-            loadedIcon = cached
-            return
-        }
-
-        guard !pids.isEmpty else {
-            cancelIconLoad()
-            return
-        }
-        iconLoadTask?.cancel()
-        let pids = self.pids
-        iconLoadTask = Task { @MainActor in
-            try? await Task.sleep(for: .milliseconds(80))
-            guard !Task.isCancelled else { return }
-            let icon = await AppBadgeIconResolver.resolveIconAsync(for: pids)
-            guard !Task.isCancelled else { return }
-            loadedIcon = icon
-            iconLoadTask = nil
-        }
-    }
-
-    private func cancelIconLoad() {
-        iconLoadTask?.cancel()
-        iconLoadTask = nil
     }
 }

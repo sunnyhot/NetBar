@@ -889,64 +889,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(calls, ["second"])
     }
 
-    func testAppBadgeIconResolverUsesCacheBeforeProvider() {
-        let cache = NSCache<NSNumber, NSImage>()
-        let cachedIcon = NSImage(size: NSSize(width: 12, height: 12))
-        cache.setObject(cachedIcon, forKey: NSNumber(value: 42))
-        var requestedPIDs: [Int32] = []
-
-        let icon = AppBadgeIconResolver.resolveIcon(
-            for: [42],
-            cache: cache,
-            iconForPID: { pid in
-                requestedPIDs.append(pid)
-                return nil
-            }
-        )
-
-        XCTAssertTrue(icon === cachedIcon)
-        XCTAssertEqual(requestedPIDs, [])
-    }
-
-    func testAppBadgeIconResolverCachesProviderResult() {
-        let cache = NSCache<NSNumber, NSImage>()
-        let providedIcon = NSImage(size: NSSize(width: 14, height: 14))
-        var requestedPIDs: [Int32] = []
-
-        let icon = AppBadgeIconResolver.resolveIcon(
-            for: [7, 8],
-            cache: cache,
-            iconForPID: { pid in
-                requestedPIDs.append(pid)
-                return pid == 8 ? providedIcon : nil
-            }
-        )
-
-        XCTAssertTrue(icon === providedIcon)
-        XCTAssertEqual(requestedPIDs, [7, 8])
-        XCTAssertTrue(cache.object(forKey: NSNumber(value: 8)) === providedIcon)
-    }
-
-    func testAppBadgeIconResolverAsyncResolvesUncachedIconOffMainThread() async {
-        let cache = NSCache<NSNumber, NSImage>()
-        let providedIcon = NSImage(size: NSSize(width: 14, height: 14))
-        let recorder = ThreadRecordingBox()
-
-        let icon = await AppBadgeIconResolver.resolveIconAsync(
-            for: [9],
-            cache: cache,
-            iconForPID: { pid in
-                recorder.record(pid: pid, isMainThread: Thread.isMainThread)
-                return pid == 9 ? providedIcon : nil
-            }
-        )
-
-        XCTAssertTrue(icon === providedIcon)
-        XCTAssertEqual(recorder.requestedPIDs, [9])
-        XCTAssertEqual(recorder.threadFlags, [false])
-        XCTAssertTrue(cache.object(forKey: NSNumber(value: 9)) === providedIcon)
-    }
-
     func testDetailsWindowActivityRefreshPolicyThrottlesHighFrequencyPointerEvents() {
         var policy = DetailsWindowActivityRefreshPolicy(minimumRefreshInterval: 1.0)
 
@@ -5416,26 +5358,35 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(interfaceSource.contains(".animation(NetBarMotion.quick, value: isHovering)"))
         XCTAssertFalse(summarySource.contains("repeatForever"))
     }
-}
 
-private final class ThreadRecordingBox: @unchecked Sendable {
-    private let lock = NSLock()
-    private var recordedPIDs: [Int32] = []
-    private var recordedThreadFlags: [Bool] = []
+    func testMenuPopoverDisablesContinuousScrollBlockingAnimations() throws {
+        let headerSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "PopoverHeaderView.swift"]
+        )
+        let chartSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "TrafficPulseChartView.swift"]
+        )
 
-    var requestedPIDs: [Int32] {
-        lock.withLock { recordedPIDs }
+        XCTAssertFalse(headerSource.contains("repeatForever"))
+        XCTAssertFalse(headerSource.contains("withAnimation"))
+        XCTAssertFalse(headerSource.contains("isPulsing"))
+        XCTAssertFalse(chartSource.contains("repeatForever"))
+        XCTAssertFalse(chartSource.contains("withAnimation"))
+        XCTAssertFalse(chartSource.contains("scanOffset"))
+        XCTAssertFalse(chartSource.contains("allowsScan"))
     }
 
-    var threadFlags: [Bool] {
-        lock.withLock { recordedThreadFlags }
-    }
+    func testApplicationTrafficRowsUseStaticBadgesWhileScrolling() throws {
+        let appSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
+        )
 
-    func record(pid: Int32, isMainThread: Bool) {
-        lock.withLock {
-            recordedPIDs.append(pid)
-            recordedThreadFlags.append(isMainThread)
-        }
+        XCTAssertTrue(appSource.contains("AppBadge(title: application.displayName)"))
+        XCTAssertFalse(appSource.contains("pids: application.pids"))
+        XCTAssertFalse(appSource.contains("iconLoadTask"))
+        XCTAssertFalse(appSource.contains("scheduleIconLoad"))
+        XCTAssertFalse(appSource.contains("resolveIconAsync"))
+        XCTAssertFalse(appSource.contains(".onAppear(perform:"))
     }
 }
 

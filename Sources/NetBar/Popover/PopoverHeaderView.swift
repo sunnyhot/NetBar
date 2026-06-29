@@ -4,16 +4,8 @@ struct PopoverHeaderView: View {
     let presentation: LivingSignalStatusPresentation
     let snapshot: NetworkSnapshot
     @ObservedObject var appPreferences: AppPreferences
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var isPulsing = false
 
     var body: some View {
-        let policy = LivingSignalMotionPolicy.make(
-            reduceMotion: reduceMotion,
-            windowVisible: true,
-            isActive: presentation.tone != .idle
-        )
-
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
                 Image(systemName: presentation.symbolName)
@@ -22,12 +14,11 @@ struct PopoverHeaderView: View {
                     .frame(width: LivingSignalLayout.iconTileSize, height: LivingSignalLayout.iconTileSize)
                     .background(presentation.tone.gradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .shadow(
-                        color: presentation.tone.color.opacity(policy.pulseOpacity),
-                        radius: isPulsing ? 12 : 4,
+                        color: presentation.tone.color.opacity(0.18),
+                        radius: 6,
                         x: 0,
                         y: 0
                     )
-                    .scaleEffect(isPulsing ? policy.pulseScale : 1)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(presentation.title)
@@ -66,12 +57,6 @@ struct PopoverHeaderView: View {
             }
         }
         .livingSignalPanel(tone: presentation.tone, isElevated: true, padding: 14)
-        .onAppear {
-            guard policy.allowsLoopingEffects else { return }
-            withAnimation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true)) {
-                isPulsing = true
-            }
-        }
     }
 }
 

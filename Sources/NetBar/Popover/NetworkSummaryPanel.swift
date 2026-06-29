@@ -452,7 +452,7 @@ private struct DailyApplicationUsageRow: View {
 
     var body: some View {
         HStack(spacing: 8) {
-            AppBadge(title: application.displayName, pids: [])
+            AppBadge(title: application.displayName)
 
             VStack(alignment: .leading, spacing: 2) {
                 HStack(spacing: 5) {

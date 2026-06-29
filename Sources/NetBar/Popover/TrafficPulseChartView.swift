@@ -13,16 +13,9 @@ struct TrafficPulseChartView: View {
     let presentation: TrafficHistoryWindowPresentationModel
     @Binding var selectedWindow: TrafficHistoryWindow
     @ObservedObject var appPreferences: AppPreferences
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var scanOffset: CGFloat = -1
 
     var body: some View {
         let isActive = presentation.peakDownloadBytesPerSecond > 0 || presentation.peakUploadBytesPerSecond > 0
-        let policy = LivingSignalMotionPolicy.make(
-            reduceMotion: reduceMotion,
-            windowVisible: true,
-            isActive: isActive
-        )
 
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
@@ -55,17 +48,6 @@ struct TrafficPulseChartView: View {
                         .fill(Color.primary.opacity(0.035))
 
                     TrafficPulseGrid()
-
-                    if policy.allowsScan {
-                        LinearGradient(
-                            colors: [.clear, LivingSignalTone.active.color.opacity(0.2), .clear],
-                            startPoint: .leading,
-                            endPoint: .trailing
-                        )
-                        .frame(width: geometry.size.width * 0.36)
-                        .offset(x: scanOffset * geometry.size.width)
-                        .allowsHitTesting(false)
-                    }
 
                     TrafficPulseLine(
                         values: presentation.points.map(\.uploadBytesPerSecond),
@@ -102,13 +84,6 @@ struct TrafficPulseChartView: View {
             .frame(height: LivingSignalLayout.chartHeight)
         }
         .livingSignalPanel(tone: isActive ? .active : .idle, isElevated: true, padding: 12)
-        .onAppear {
-            guard policy.allowsScan else { return }
-            scanOffset = -1
-            withAnimation(.linear(duration: policy.scanDuration).repeatForever(autoreverses: false)) {
-                scanOffset = 1.4
-            }
-        }
     }
 }
 
