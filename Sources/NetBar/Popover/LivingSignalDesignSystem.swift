@@ -186,12 +186,13 @@ struct LivingSignalPanelModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let radius = isElevated ? LivingSignalLayout.elevatedPanelCornerRadius : LivingSignalLayout.panelCornerRadius
+        let baseFill = Color(nsColor: .controlBackgroundColor).opacity(isElevated ? 0.86 : 0.72)
 
         content
             .padding(padding)
             .background(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(baseFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
                             .fill(tone.softColor.opacity(isElevated ? 0.85 : 0.45))

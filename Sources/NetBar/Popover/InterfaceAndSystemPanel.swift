@@ -93,7 +93,6 @@ private struct EmptyInterfacesView: View {
 
 private struct InterfaceRow: View {
     let interface: InterfaceRate
-    @State private var isHovering = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -168,10 +167,8 @@ private struct InterfaceRow: View {
         .livingSignalPanel(tone: interface.isPrimary ? .active : .neutral, padding: 10)
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .strokeBorder(Color.primary.opacity(isHovering ? 0.12 : 0.0), lineWidth: 0.7)
+                .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.7)
         )
-        .animation(NetBarMotion.quick, value: isHovering)
-        .onHover { isHovering = $0 }
     }
 }
 
@@ -285,7 +282,7 @@ struct MetricPill: View {
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 5)
-                    .fill(.ultraThinMaterial)
+                    .fill(Color.primary.opacity(0.035))
                     .overlay(RoundedRectangle(cornerRadius: 5).fill(tint.opacity(0.08)))
             )
             .overlay(RoundedRectangle(cornerRadius: 5).strokeBorder(tint.opacity(0.15), lineWidth: 0.5))

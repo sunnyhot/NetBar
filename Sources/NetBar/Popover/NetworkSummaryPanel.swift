@@ -327,7 +327,6 @@ struct HistoryLedgerPanel: View {
 private struct DailySummaryCell: View {
     let card: NetworkDailySummaryCard
     let tone: NetBarTone
-    @State private var isMilestoneLit = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -344,12 +343,11 @@ private struct DailySummaryCell: View {
                         .font(.system(size: 10, weight: .heavy))
                         .foregroundStyle(milestone.strokeGradient)
                         .shadow(
-                            color: milestone.accent.opacity(isMilestoneLit ? 0.55 : 0.2),
-                            radius: isMilestoneLit ? 4 : 1,
+                            color: milestone.accent.opacity(0.24),
+                            radius: 3,
                             x: 0,
                             y: 0
                         )
-                        .scaleEffect(isMilestoneLit ? 1.08 : 0.96)
                         .accessibilityHidden(true)
                 }
             }
@@ -366,7 +364,7 @@ private struct DailySummaryCell: View {
             if let milestone = card.milestone {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .fill(milestone.backgroundGradient)
-                    .opacity(isMilestoneLit ? 0.85 : 0.48)
+                    .opacity(0.56)
                     .allowsHitTesting(false)
             }
         }
@@ -374,15 +372,11 @@ private struct DailySummaryCell: View {
             summaryStroke
         )
         .shadow(
-            color: card.milestone?.accent.opacity(isMilestoneLit ? card.milestone?.glowOpacity ?? 0 : 0.08) ?? .clear,
-            radius: card.milestone?.glowRadius ?? 0,
+            color: card.milestone?.accent.opacity(0.12) ?? .clear,
+            radius: card.milestone == nil ? 0 : 4,
             x: 0,
             y: 0
         )
-        .onAppear {
-            isMilestoneLit = card.milestone != nil
-        }
-        .animation(.easeInOut(duration: 1.8).repeatForever(autoreverses: true), value: isMilestoneLit)
     }
 
     @ViewBuilder
@@ -390,7 +384,7 @@ private struct DailySummaryCell: View {
         if let milestone = card.milestone {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(milestone.strokeGradient, lineWidth: 1.05)
-                .opacity(isMilestoneLit ? 0.9 : 0.48)
+                .opacity(0.56)
         } else {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(tone.color.opacity(0.12), lineWidth: 0.6)

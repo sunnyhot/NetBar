@@ -89,56 +89,123 @@ private struct PreferencesView: View {
     @ObservedObject var petController: PetController
     let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     let clearNetworkHistory: () -> Void
-    @State private var selectedTab = 0
+    @State private var selectedTab: PreferencesTab = .general
 
     var body: some View {
         VStack(spacing: 16) {
             PreferencesHeroHeader(appPreferences: appPreferences, updater: updater)
 
-            TabView(selection: $selectedTab) {
-                GeneralPreferencesView(appPreferences: appPreferences)
-                    .tabItem {
-                        Label(appPreferences.text("通用", "General"), systemImage: "gearshape")
-                    }
-                    .tag(0)
+            PreferencesTabBar(selectedTab: $selectedTab, appPreferences: appPreferences)
 
-                MenuBarPreferencesView(
-                    settings: settings,
-                    appPreferences: appPreferences,
-                    customCharacterStore: customCharacterStore,
-                    historyStore: historyStore
-                )
-                    .tabItem {
-                        Label(appPreferences.text("菜单栏", "Menu Bar"), systemImage: "menubar.rectangle")
-                    }
-                    .tag(1)
-
-                IntelligencePreferencesView(
-                    appPreferences: appPreferences,
-                    notificationController: notificationController,
-                    petController: petController,
-                    clearHistory: clearNetworkHistory
-                )
-                    .tabItem {
-                        Label(appPreferences.text("智能", "Intelligence"), systemImage: "sparkles")
-                    }
-                    .tag(2)
-
-                AboutPreferencesView(
-                    appPreferences: appPreferences,
-                    updater: updater,
-                    diagnosticsSnapshot: diagnosticsSnapshot()
-                )
-                    .tabItem {
-                        Label(appPreferences.text("关于", "About"), systemImage: "info.circle")
-                    }
-                    .tag(3)
-            }
-            .animation(.easeInOut(duration: 0.2), value: selectedTab)
+            selectedContent
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .transaction { transaction in
+                    transaction.animation = nil
+                }
         }
         .padding(20)
         .frame(minWidth: 620, minHeight: 520)
         .livingSignalPanelBackground()
         .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
+    }
+
+    @ViewBuilder
+    private var selectedContent: some View {
+        switch selectedTab {
+        case .general:
+            GeneralPreferencesView(appPreferences: appPreferences)
+        case .menuBar:
+            MenuBarPreferencesView(
+                settings: settings,
+                appPreferences: appPreferences,
+                customCharacterStore: customCharacterStore,
+                historyStore: historyStore
+            )
+        case .intelligence:
+            IntelligencePreferencesView(
+                appPreferences: appPreferences,
+                notificationController: notificationController,
+                petController: petController,
+                clearHistory: clearNetworkHistory
+            )
+        case .about:
+            AboutPreferencesView(
+                appPreferences: appPreferences,
+                updater: updater,
+                diagnosticsSnapshot: diagnosticsSnapshot()
+            )
+        }
+    }
+}
+
+private enum PreferencesTab: Int, CaseIterable, Identifiable {
+    case general
+    case menuBar
+    case intelligence
+    case about
+
+    var id: Int { rawValue }
+
+    var systemImage: String {
+        switch self {
+        case .general:
+            return "gearshape"
+        case .menuBar:
+            return "menubar.rectangle"
+        case .intelligence:
+            return "sparkles"
+        case .about:
+            return "info.circle"
+        }
+    }
+
+    @MainActor
+    func title(appPreferences: AppPreferences) -> String {
+        switch self {
+        case .general:
+            return appPreferences.text("通用", "General")
+        case .menuBar:
+            return appPreferences.text("菜单栏", "Menu Bar")
+        case .intelligence:
+            return appPreferences.text("智能", "Intelligence")
+        case .about:
+            return appPreferences.text("关于", "About")
+        }
+    }
+}
+
+private struct PreferencesTabBar: View {
+    @Binding var selectedTab: PreferencesTab
+    @ObservedObject var appPreferences: AppPreferences
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(PreferencesTab.allCases) { tab in
+                Button {
+                    selectedTab = tab
+                } label: {
+                    Label(tab.title(appPreferences: appPreferences), systemImage: tab.systemImage)
+                        .font(.system(size: 12, weight: .bold))
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(selectedTab == tab ? LivingSignalTone.active.color : Color.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .frame(minWidth: 92)
+                        .background(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .fill(selectedTab == tab ? LivingSignalTone.active.softColor : Color.clear)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                                .strokeBorder(
+                                    selectedTab == tab ? LivingSignalTone.active.color.opacity(0.18) : Color.clear,
+                                    lineWidth: 0.6
+                                )
+                        )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .livingSignalPanel(tone: .neutral, padding: 4)
     }
 }

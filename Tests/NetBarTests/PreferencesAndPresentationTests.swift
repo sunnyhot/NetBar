@@ -5384,6 +5384,38 @@ extension PreferencesAndPresentationTests {
 
         XCTAssertTrue(source.contains("livingSignalPanelBackground()"))
     }
+
+    func testPreferencesWindowUsesLightweightManualTabs() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesWindowController.swift"]
+        )
+
+        XCTAssertTrue(source.contains("enum PreferencesTab"))
+        XCTAssertTrue(source.contains("struct PreferencesTabBar"))
+        XCTAssertFalse(source.contains("TabView(selection:"))
+        XCTAssertFalse(source.contains(".animation(.easeInOut(duration: 0.2), value: selectedTab)"))
+    }
+
+    func testLivingSignalScrollingPanelsAvoidExpensivePerRowEffects() throws {
+        let designSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "LivingSignalDesignSystem.swift"]
+        )
+        let appSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
+        )
+        let interfaceSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
+        )
+        let summarySource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"]
+        )
+
+        XCTAssertFalse(designSource.contains(".fill(.regularMaterial)"))
+        XCTAssertFalse(interfaceSource.contains(".fill(.ultraThinMaterial)"))
+        XCTAssertFalse(appSource.contains(".animation(NetBarMotion.quick, value: isHovering)"))
+        XCTAssertFalse(interfaceSource.contains(".animation(NetBarMotion.quick, value: isHovering)"))
+        XCTAssertFalse(summarySource.contains("repeatForever"))
+    }
 }
 
 private final class ThreadRecordingBox: @unchecked Sendable {

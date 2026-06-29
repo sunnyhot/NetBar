@@ -351,7 +351,6 @@ struct ApplicationTrafficRow: View {
     let role: ApplicationAttributionRole
     let language: AppLanguage
     let displayMode: ApplicationSortMode
-    @State private var isHovering = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -383,10 +382,8 @@ struct ApplicationTrafficRow: View {
         .livingSignalPanel(tone: rowTone, padding: 6)
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .strokeBorder(Color.primary.opacity(isHovering ? 0.12 : 0.0), lineWidth: 0.5)
+                .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.5)
         )
-        .animation(NetBarMotion.quick, value: isHovering)
-        .onHover { isHovering = $0 }
     }
 
     private var detailSubtitle: String {
