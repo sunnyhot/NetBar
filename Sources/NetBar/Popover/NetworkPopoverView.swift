@@ -11,7 +11,7 @@ struct NetworkPopoverView: View {
     var body: some View {
         VStack(spacing: 0) {
             HeaderView(snapshot: monitor.snapshot, appPreferences: appPreferences)
-                .padding(.horizontal, 18)
+                .padding(.horizontal, LivingSignalLayout.horizontalPadding)
                 .padding(.top, 18)
                 .padding(.bottom, 14)
                 .layoutPriority(1)
@@ -50,7 +50,7 @@ struct NetworkPopoverView: View {
                             selectedWindow: $historyWindow,
                             appPreferences: appPreferences
                         )
-                            .frame(height: 132)
+                            .frame(height: LivingSignalLayout.chartHeight)
                     }
 
                     TodayNetworkSummary(
@@ -90,7 +90,7 @@ struct NetworkPopoverView: View {
                         refresh: monitor.refresh
                     )
                 }
-                .padding(.horizontal, 18)
+                .padding(.horizontal, LivingSignalLayout.horizontalPadding)
                 .padding(.bottom, 16)
             }
             .frame(minHeight: 0)
@@ -98,13 +98,20 @@ struct NetworkPopoverView: View {
             Divider().opacity(0.55)
 
             FooterView(monitor: monitor, appPreferences: appPreferences, openPreferences: openPreferences)
-                .padding(.horizontal, 18)
+                .padding(.horizontal, LivingSignalLayout.horizontalPadding)
                 .padding(.vertical, 11)
                 .fixedSize(horizontal: false, vertical: true)
                 .layoutPriority(1)
         }
-        .frame(minWidth: 440, idealWidth: 440, maxWidth: 440, minHeight: 500, idealHeight: 720, maxHeight: .infinity)
-        .netBarPanelBackground()
+        .frame(
+            minWidth: LivingSignalLayout.minimumPopoverWidth,
+            idealWidth: LivingSignalLayout.preferredPopoverWidth,
+            maxWidth: LivingSignalLayout.preferredPopoverWidth,
+            minHeight: LivingSignalLayout.minimumPopoverHeight,
+            idealHeight: LivingSignalLayout.preferredPopoverHeight,
+            maxHeight: .infinity
+        )
+        .livingSignalPanelBackground()
         .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
     }
 

@@ -624,7 +624,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let anchorFrame = NSRect(x: 470, y: 540, width: 20, height: 20)
 
         let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: 440, height: 700),
+            forWindowSize: NSSize(
+                width: LivingSignalLayout.preferredPopoverWidth,
+                height: 700
+            ),
             visibleFrame: visibleFrame,
             anchorFrame: anchorFrame,
             padding: 10
@@ -639,13 +642,20 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let anchorFrame = NSRect(x: 590, y: 880, width: 20, height: 20)
 
         let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: 440, height: 720),
+            forWindowSize: NSSize(
+                width: LivingSignalLayout.preferredPopoverWidth,
+                height: LivingSignalLayout.preferredPopoverHeight
+            ),
+            minimumSize: NSSize(
+                width: LivingSignalLayout.minimumPopoverWidth,
+                height: LivingSignalLayout.minimumPopoverHeight
+            ),
             visibleFrame: visibleFrame,
             anchorFrame: anchorFrame,
             padding: 10
         )
 
-        XCTAssertEqual(frame.width, 440)
+        XCTAssertEqual(frame.width, LivingSignalLayout.preferredPopoverWidth)
         XCTAssertEqual(frame.maxY, anchorFrame.minY, accuracy: 0.5)
     }
 
@@ -654,14 +664,53 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let anchorFrame = NSRect(x: 590, y: 878, width: 20, height: 20)
 
         let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: 440, height: 720),
+            forWindowSize: NSSize(
+                width: LivingSignalLayout.preferredPopoverWidth,
+                height: LivingSignalLayout.preferredPopoverHeight
+            ),
+            minimumSize: NSSize(
+                width: LivingSignalLayout.minimumPopoverWidth,
+                height: LivingSignalLayout.minimumPopoverHeight
+            ),
             visibleFrame: visibleFrame,
             anchorFrame: anchorFrame,
             padding: 10
         )
 
-        XCTAssertEqual(frame.width, 440)
+        XCTAssertEqual(frame.width, LivingSignalLayout.preferredPopoverWidth)
         XCTAssertEqual(frame.maxY, visibleFrame.maxY, accuracy: 0.5)
+    }
+
+    func testDetailsWindowLayoutShrinksLivingSignalWidthForSmallVisibleFrame() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 470, height: 700)
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(
+                width: LivingSignalLayout.preferredPopoverWidth,
+                height: LivingSignalLayout.preferredPopoverHeight
+            ),
+            minimumSize: NSSize(
+                width: LivingSignalLayout.minimumPopoverWidth,
+                height: LivingSignalLayout.minimumPopoverHeight
+            ),
+            visibleFrame: visibleFrame,
+            anchorFrame: nil,
+            padding: 10
+        )
+
+        XCTAssertLessThanOrEqual(frame.width, 450)
+        XCTAssertGreaterThanOrEqual(frame.minX, visibleFrame.minX + 10)
+        XCTAssertLessThanOrEqual(frame.maxX, visibleFrame.maxX - 10)
+    }
+
+    func testDetailsWindowControllerUsesLivingSignalWindowSizes() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "DetailsWindowController.swift"]
+        )
+
+        XCTAssertTrue(source.contains("LivingSignalLayout.preferredPopoverWidth"))
+        XCTAssertTrue(source.contains("LivingSignalLayout.preferredPopoverHeight"))
+        XCTAssertTrue(source.contains("LivingSignalLayout.minimumPopoverWidth"))
+        XCTAssertTrue(source.contains("LivingSignalLayout.minimumPopoverHeight"))
     }
 
     func testDetailsWindowDismissesForOutsideClickButKeepsInsideClick() {

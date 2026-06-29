@@ -158,8 +158,14 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
     private let customCharacterStore: CustomCharacterStore
     private let openPreferences: () -> Void
     private var panel: NSPanel?
-    private let defaultWindowSize = NSSize(width: 440, height: 720)
-    private let minimumWindowSize = NSSize(width: 440, height: 500)
+    private let defaultWindowSize = NSSize(
+        width: LivingSignalLayout.preferredPopoverWidth,
+        height: LivingSignalLayout.preferredPopoverHeight
+    )
+    private let minimumWindowSize = NSSize(
+        width: LivingSignalLayout.minimumPopoverWidth,
+        height: LivingSignalLayout.minimumPopoverHeight
+    )
 
     var onWindowClosed: (() -> Void)?
 
