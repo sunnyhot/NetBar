@@ -5271,6 +5271,30 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(rootSource.contains("struct TodayNetworkSummary: View"))
         XCTAssertFalse(rootSource.contains("private var insightStreamSection"))
     }
+
+    func testLivingSignalPopoverOwnsApplicationInterfaceAndFooterFiles() throws {
+        let appSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
+        )
+        let interfaceSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
+        )
+        let footerSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "PopoverFooterView.swift"]
+        )
+        let rootSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "NetworkPopoverView.swift"]
+        )
+
+        XCTAssertTrue(appSource.contains("struct ApplicationTrafficPanel"))
+        XCTAssertTrue(appSource.contains("struct ApplicationTrafficRow"))
+        XCTAssertTrue(interfaceSource.contains("struct InterfaceAndSystemPanel"))
+        XCTAssertTrue(interfaceSource.contains("struct InterfaceRow"))
+        XCTAssertTrue(footerSource.contains("struct PopoverFooterView"))
+        XCTAssertFalse(rootSource.contains("struct ApplicationTrafficList"))
+        XCTAssertFalse(rootSource.contains("struct InterfaceList"))
+        XCTAssertFalse(rootSource.contains("struct FooterView"))
+    }
 }
 
 private final class ThreadRecordingBox: @unchecked Sendable {
