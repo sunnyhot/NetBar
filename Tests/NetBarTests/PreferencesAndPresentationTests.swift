@@ -100,6 +100,78 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(cache.image(for: thirdSignature) === thirdImage)
     }
 
+    func testStatusBarPreviewRenderCacheReusesMatchingPreviewImage() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = RunCatCharacter.defaultCat.id
+        let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
+        let cache = StatusBarPreviewRenderCache(limit: 2)
+        var renderCount = 0
+
+        let first = cache.render(
+            snapshot: snapshot,
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0,
+            renderTime: 100,
+            imageFactory: { _, _, _, _, _ in
+                renderCount += 1
+                return NSImage(size: NSSize(width: 18, height: 18))
+            }
+        )
+        let second = cache.render(
+            snapshot: snapshot,
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 0,
+            renderTime: 100,
+            imageFactory: { _, _, _, _, _ in
+                renderCount += 1
+                return NSImage(size: NSSize(width: 24, height: 18))
+            }
+        )
+        let third = cache.render(
+            snapshot: snapshot,
+            settings: settings,
+            scale: 2,
+            catFrameIndex: 1,
+            renderTime: 100,
+            imageFactory: { _, _, _, _, _ in
+                renderCount += 1
+                return NSImage(size: NSSize(width: 30, height: 18))
+            }
+        )
+
+        XCTAssertEqual(renderCount, 2)
+        XCTAssertTrue(first.image === second.image)
+        XCTAssertFalse(second.image === third.image)
+        XCTAssertEqual(first.presentation, second.presentation)
+    }
+
+    func testCatAnimationConfigurationIgnoresTextOnlySettings() {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.showsCat = true
+        settings.catCharacter = RunCatCharacter.defaultCat.id
+        let baseline = StatusBarCatAnimationConfiguration(settings: settings, customCharacterRevision: 1)
+
+        settings.isBold.toggle()
+        settings.showsArrows.toggle()
+        settings.usesSystemTextColor.toggle()
+        settings.fontSize += 1
+
+        XCTAssertEqual(
+            baseline,
+            StatusBarCatAnimationConfiguration(settings: settings, customCharacterRevision: 1)
+        )
+
+        settings.catSpeedMultiplier += 0.25
+
+        XCTAssertNotEqual(
+            baseline,
+            StatusBarCatAnimationConfiguration(settings: settings, customCharacterRevision: 1)
+        )
+    }
+
     func testStatusBarPulseRenderPolicyDisablesBucketForIdleAndReducedMotion() {
         XCTAssertEqual(
             StatusBarPulseRenderPolicy.timeBucket(
@@ -629,6 +701,18 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
         XCTAssertEqual(MenuBarPreferenceGroup.display.title(language: .simplifiedChinese), "显示内容")
         XCTAssertEqual(MenuBarPreferenceGroup.animation.title(language: .english), "Animation & Rotation")
+    }
+
+    func testAnimatedCharacterCatalogDoesNotRunItsOwnTimer() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarSubcomponents.swift"]
+        )
+        let catalogStart = try XCTUnwrap(source.range(of: "struct AnimatedCharacterCatalog"))
+        let catalogEnd = source.range(of: "// MARK: -", range: catalogStart.upperBound..<source.endIndex)?.lowerBound ?? source.endIndex
+        let catalogSource = String(source[catalogStart.lowerBound..<catalogEnd])
+
+        XCTAssertFalse(catalogSource.contains("Timer.publish"))
+        XCTAssertTrue(catalogSource.contains("characterPickerFrameTick ?? 0"))
     }
 
     func testAnimationSectionExposesSharedCharacterColorModeControl() throws {

@@ -114,6 +114,27 @@ private struct DisplaySpeeds: Equatable {
 }
 
 @MainActor
+struct StatusBarCatAnimationConfiguration: Equatable {
+    let showsCat: Bool
+    let catCharacter: String
+    let catSpeedMultiplier: Double
+    let catRotationEnabled: Bool
+    let catRotationIntervalMinutes: Double
+    let catRotationPool: String
+    let customCharacterRevision: Int
+
+    init(settings: StatusBarSettings, customCharacterRevision: Int) {
+        self.showsCat = settings.showsCat
+        self.catCharacter = settings.catCharacter
+        self.catSpeedMultiplier = settings.catSpeedMultiplier
+        self.catRotationEnabled = settings.catRotationEnabled
+        self.catRotationIntervalMinutes = settings.catRotationIntervalMinutes
+        self.catRotationPool = settings.catRotationPool
+        self.customCharacterRevision = customCharacterRevision
+    }
+}
+
+@MainActor
 final class ApplicationTrafficVisibilityScheduler {
     private let resumeDelay: Duration
     private let pauseDelay: Duration
@@ -184,6 +205,7 @@ final class StatusBarController {
     private var lastRenderSignature: StatusBarRenderSignature?
     private var lastColorTimeBucket: Int?  // Tracked separately for color pipeline decoupling
     private var catAnimation: RunCatAnimation?
+    private var lastCatAnimationConfiguration: StatusBarCatAnimationConfiguration?
     private var currentCatFrameIndex: Int?
     private var currentCatCharacter: CharacterAsset = CharacterAsset(builtIn: .defaultCat)
     private var mouseMovedMonitorGlobal: Any?
@@ -324,7 +346,7 @@ final class StatusBarController {
         settings.objectWillChange
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.setupCatAnimation()
+                self?.setupCatAnimationIfNeeded()
                 self?.requestRender()
             }
             .store(in: &cancellables)
@@ -332,7 +354,7 @@ final class StatusBarController {
         customCharacterStore.objectWillChange
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
-                self?.setupCatAnimation()
+                self?.setupCatAnimationIfNeeded(force: true)
                 self?.requestRender()
             }
             .store(in: &cancellables)
@@ -380,7 +402,7 @@ final class StatusBarController {
             }
             .store(in: &cancellables)
 
-        setupCatAnimation()
+        setupCatAnimationIfNeeded(force: true)
     }
 
     private func handleNetworkIntelligenceUpdate() {
@@ -465,6 +487,19 @@ final class StatusBarController {
             flushAnimationPlaybackCount()
             configureGooglyEyesTracking()
         }
+    }
+
+    private func setupCatAnimationIfNeeded(force: Bool = false) {
+        let configuration = StatusBarCatAnimationConfiguration(
+            settings: settings,
+            customCharacterRevision: customCharacterStore.revision
+        )
+        guard force || configuration != lastCatAnimationConfiguration else { return }
+        setupCatAnimation()
+        lastCatAnimationConfiguration = StatusBarCatAnimationConfiguration(
+            settings: settings,
+            customCharacterRevision: customCharacterStore.revision
+        )
     }
 
     private func recordAnimationPlaybackCompleted(characterID: String) {

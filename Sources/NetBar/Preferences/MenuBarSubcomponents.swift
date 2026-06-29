@@ -171,6 +171,7 @@ struct StatusBarPreview: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var customCharacterStore: CustomCharacterStore
     let catFrameIndex: Int?
+    @State private var renderCache = StatusBarPreviewRenderCache(limit: 48)
 
     private let previewSnapshot = NetworkSnapshot(
         timestamp: Date(timeIntervalSince1970: 0),
@@ -185,12 +186,16 @@ struct StatusBarPreview: View {
     var body: some View {
         HStack {
             Spacer()
-            let presentation = StatusBarDisplayRenderer.presentation(
+            let scale = NSScreen.main?.backingScaleFactor ?? 2
+            let renderOutput = renderCache.render(
                 snapshot: previewSnapshot,
                 settings: settings,
+                scale: scale,
                 customCharacterStore: customCharacterStore,
-                catFrameIndex: catFrameIndex
+                catFrameIndex: catFrameIndex,
+                appearanceName: NSApp?.effectiveAppearance.name.rawValue ?? appPreferences.appearanceMode.rawValue
             )
+            let presentation = renderOutput.presentation
 
             if presentation.kind == .nativeTitle {
                 Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
@@ -200,12 +205,7 @@ struct StatusBarPreview: View {
                         height: max(NSStatusBar.system.thickness, 24)
                     )
             } else {
-                Image(nsImage: StatusBarDisplayRenderer.image(
-                    snapshot: previewSnapshot,
-                    settings: settings,
-                    customCharacterStore: customCharacterStore,
-                    catFrameIndex: catFrameIndex
-                ))
+                Image(nsImage: renderOutput.image)
                 .frame(
                     width: presentation.width,
                     height: max(NSStatusBar.system.thickness, 24)
@@ -441,10 +441,6 @@ struct AnimatedCharacterCatalog: View {
     let playbackCounts: [String: UInt64]
     let language: AppLanguage
 
-    @State private var frameTick = 0
-
-    private static let frameInterval: TimeInterval = 1.0 / 8.0
-
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             ForEach(RunCatCharacter.Category.allCases, id: \.rawValue) { category in
@@ -462,7 +458,7 @@ struct AnimatedCharacterCatalog: View {
                                 CharacterGridCard(
                                     character: character,
                                     isSelected: settings.catCharacter == character.id,
-                                    frameIndex: frameTick,
+                                    frameIndex: characterPickerFrameTick ?? 0,
                                     playbackDetail: CharacterPlaybackPresentation.totalPlayCountText(
                                         playbackCounts[character.id] ?? 0,
                                         language: language
@@ -474,9 +470,6 @@ struct AnimatedCharacterCatalog: View {
                     }
                 }
             }
-        }
-        .onReceive(Timer.publish(every: Self.frameInterval, on: .main, in: .common).autoconnect()) { _ in
-            frameTick = (frameTick + 1) % 10_000
         }
     }
 }

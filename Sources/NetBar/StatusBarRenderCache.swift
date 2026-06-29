@@ -29,6 +29,86 @@ final class StatusBarRenderedImageCache {
     }
 }
 
+struct StatusBarPreviewRenderOutput {
+    let presentation: StatusBarPresentation
+    let image: NSImage
+}
+
+@MainActor
+final class StatusBarPreviewRenderCache {
+    typealias ImageFactory = (
+        _ snapshot: NetworkSnapshot,
+        _ settings: StatusBarSettings,
+        _ scale: CGFloat,
+        _ customCharacterStore: CustomCharacterStore?,
+        _ catFrameIndex: Int?
+    ) -> NSImage
+
+    private struct Key: Equatable {
+        let signature: StatusBarRenderSignature
+        let scaleBucket: Int
+    }
+
+    private let limit: Int
+    private var entries: [(key: Key, output: StatusBarPreviewRenderOutput)] = []
+
+    init(limit: Int = 36) {
+        self.limit = max(limit, 1)
+    }
+
+    func render(
+        snapshot: NetworkSnapshot,
+        settings: StatusBarSettings,
+        scale: CGFloat,
+        customCharacterStore: CustomCharacterStore? = nil,
+        catFrameIndex: Int? = nil,
+        appearanceName: String = "NetBarPreview",
+        renderTime: TimeInterval = Date().timeIntervalSince1970,
+        imageFactory: ImageFactory? = nil
+    ) -> StatusBarPreviewRenderOutput {
+        let signature = StatusBarDisplayRenderer.signature(
+            snapshot: snapshot,
+            settings: settings,
+            appearanceName: appearanceName,
+            customCharacterStore: customCharacterStore,
+            catFrameIndex: catFrameIndex,
+            renderTime: renderTime,
+            reduceMotion: true
+        )
+        let key = Key(signature: signature, scaleBucket: Int((scale * 100).rounded()))
+        if let index = entries.firstIndex(where: { $0.key == key }) {
+            let entry = entries.remove(at: index)
+            entries.append(entry)
+            return entry.output
+        }
+
+        let image: NSImage
+        if let imageFactory {
+            image = imageFactory(snapshot, settings, scale, customCharacterStore, catFrameIndex)
+        } else {
+            image = StatusBarDisplayRenderer.image(
+                snapshot: snapshot,
+                settings: settings,
+                scale: scale,
+                customCharacterStore: customCharacterStore,
+                catFrameIndex: catFrameIndex,
+                renderTime: renderTime
+            )
+        }
+        let output = StatusBarPreviewRenderOutput(presentation: signature.presentation, image: image)
+        entries.removeAll { $0.key == key }
+        entries.append((key, output))
+        while entries.count > limit {
+            entries.removeFirst()
+        }
+        return output
+    }
+
+    func removeAll() {
+        entries.removeAll()
+    }
+}
+
 struct StatusBarTextLayoutCacheKey: Hashable {
     let lines: [String]
     let fontSize: Double
