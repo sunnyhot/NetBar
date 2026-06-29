@@ -15,6 +15,24 @@ final class PreferencesAndPresentationTests: XCTestCase {
         super.tearDown()
     }
 
+    private func waitUntil(
+        _ description: String,
+        timeout: TimeInterval = 2,
+        pollInterval: Duration = .milliseconds(10),
+        file: StaticString = #filePath,
+        line: UInt = #line,
+        condition: @MainActor () -> Bool
+    ) async throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            if Date() >= deadline {
+                XCTFail("Timed out waiting for \(description)", file: file, line: line)
+                return
+            }
+            try await Task.sleep(for: pollInterval)
+        }
+    }
+
     func testStatusBarAlwaysUsesRetinaImage() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = false
@@ -942,7 +960,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             "Opening the panel should not synchronously refresh the whole detail model before the first frame"
         )
 
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitUntil("deferred refresh callback") {
+            calls == ["refresh"]
+        }
 
         XCTAssertEqual(calls, ["refresh"])
     }
@@ -959,7 +979,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             calls.append("second")
         }
 
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitUntil("coalesced deferred refresh callback") {
+            calls == ["second"]
+        }
 
         XCTAssertEqual(calls, ["second"])
 
@@ -1002,7 +1024,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             "Opening the panel should not synchronously start nettop before the UI is on screen"
         )
 
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitUntil("application traffic resume") {
+            visibilityChanges == [true]
+        }
         XCTAssertEqual(visibilityChanges, [true])
 
         isDetailVisible = false
@@ -1010,7 +1034,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
         isDetailVisible = true
         scheduler.scheduleResume()
 
-        try await Task.sleep(for: .milliseconds(50))
+        try await waitUntil("warm application traffic resume") {
+            visibilityChanges == [true, true]
+        }
 
         XCTAssertEqual(
             visibilityChanges,
