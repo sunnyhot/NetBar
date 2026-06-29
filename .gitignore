@@ -3,5 +3,6 @@
 build/
 dist/
 .worktrees/
+.superpowers/
 Resources/AppIcon.iconset/
 Resources/AppIcon.tiff
