@@ -5110,6 +5110,81 @@ extension PreferencesAndPresentationTests {
     }
 }
 
+// MARK: - Living Signal Design System Tests
+
+extension PreferencesAndPresentationTests {
+    func testLivingSignalLayoutUsesApprovedPopoverWidth() {
+        XCTAssertEqual(LivingSignalLayout.minimumPopoverWidth, 480)
+        XCTAssertEqual(LivingSignalLayout.preferredPopoverWidth, 500)
+        XCTAssertEqual(LivingSignalLayout.maximumPopoverWidth, 520)
+        XCTAssertGreaterThan(LivingSignalLayout.chartHeight, 132)
+    }
+
+    func testLivingSignalMotionPolicyDisablesLoopingEffectsWhenReduceMotionIsOn() {
+        let reduced = LivingSignalMotionPolicy.make(
+            reduceMotion: true,
+            windowVisible: true,
+            isActive: true
+        )
+
+        XCTAssertFalse(reduced.allowsLoopingEffects)
+        XCTAssertFalse(reduced.allowsScan)
+        XCTAssertEqual(reduced.pulseScale, 1)
+
+        let active = LivingSignalMotionPolicy.make(
+            reduceMotion: false,
+            windowVisible: true,
+            isActive: true
+        )
+
+        XCTAssertTrue(active.allowsLoopingEffects)
+        XCTAssertTrue(active.allowsScan)
+        XCTAssertGreaterThan(active.pulseScale, 1)
+    }
+
+    func testLivingSignalStatusPresentationClassifiesIdleActiveUploadAndAnomaly() {
+        let idle = LivingSignalStatusPresentation.make(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            latestEvent: nil,
+            language: .english
+        )
+        XCTAssertEqual(idle.tone, .idle)
+        XCTAssertEqual(idle.title, "Idle")
+
+        let active = LivingSignalStatusPresentation.make(
+            snapshot: sampleSnapshot(download: 420_000, upload: 60_000),
+            latestEvent: nil,
+            language: .english
+        )
+        XCTAssertEqual(active.tone, .active)
+        XCTAssertEqual(active.title, "Active")
+
+        let uploadHeavy = LivingSignalStatusPresentation.make(
+            snapshot: sampleSnapshot(download: 80_000, upload: 900_000),
+            latestEvent: nil,
+            language: .english
+        )
+        XCTAssertEqual(uploadHeavy.tone, .uploadHeavy)
+        XCTAssertEqual(uploadHeavy.title, "Upload Heavy")
+
+        let event = NetworkAnomalyEvent(
+            kind: .highTraffic,
+            severity: .critical,
+            title: "Traffic surge",
+            message: "Traffic stayed high.",
+            timestamp: Date(timeIntervalSince1970: 20),
+            cooldownKey: "surge"
+        )
+        let anomaly = LivingSignalStatusPresentation.make(
+            snapshot: sampleSnapshot(download: 0, upload: 0),
+            latestEvent: event,
+            language: .english
+        )
+        XCTAssertEqual(anomaly.tone, .critical)
+        XCTAssertEqual(anomaly.title, "Traffic surge")
+    }
+}
+
 private final class ThreadRecordingBox: @unchecked Sendable {
     private let lock = NSLock()
     private var recordedPIDs: [Int32] = []
