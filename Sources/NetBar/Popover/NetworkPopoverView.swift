@@ -10,7 +10,15 @@ struct NetworkPopoverView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            HeaderView(snapshot: monitor.snapshot, appPreferences: appPreferences)
+            PopoverHeaderView(
+                presentation: LivingSignalStatusPresentation.make(
+                    snapshot: monitor.snapshot,
+                    latestEvent: monitor.intelligenceSummary.latestEvent,
+                    language: appPreferences.resolvedLanguage
+                ),
+                snapshot: monitor.snapshot,
+                appPreferences: appPreferences
+            )
                 .padding(.horizontal, LivingSignalLayout.horizontalPadding)
                 .padding(.top, 18)
                 .padding(.bottom, 14)
@@ -45,12 +53,11 @@ struct NetworkPopoverView: View {
                             points: monitor.recentHistory,
                             window: historyWindow
                         )
-                        TrafficChart(
-                            points: chartPresentation.points,
+                        TrafficPulseChartView(
+                            presentation: chartPresentation,
                             selectedWindow: $historyWindow,
                             appPreferences: appPreferences
                         )
-                            .frame(height: LivingSignalLayout.chartHeight)
                     }
 
                     TodayNetworkSummary(
@@ -226,57 +233,6 @@ struct NetworkPopoverView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(8)
         .netBarCard(cornerRadius: 8, padding: 0)
-    }
-}
-
-// MARK: - Header
-
-private struct HeaderView: View {
-    let snapshot: NetworkSnapshot
-    @ObservedObject var appPreferences: AppPreferences
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .center) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("NetBar")
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .foregroundStyle(.primary)
-                    Text(appPreferences.text("实时网络仪表盘", "Realtime Network Console"))
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    NetBarBadge(text: appPreferences.text("实时", "Live"), tone: .success)
-                    Text(snapshot.timestamp, style: .time)
-                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.secondary)
-                }
-            }
-
-            HStack(spacing: 12) {
-                SpeedTile(
-                    title: appPreferences.text("下载", "Download"),
-                    value: ByteFormat.speed(snapshot.downloadBytesPerSecond),
-                    tone: .download,
-                    symbol: "arrow.down"
-                )
-                SpeedTile(
-                    title: appPreferences.text("上传", "Upload"),
-                    value: ByteFormat.speed(snapshot.uploadBytesPerSecond),
-                    tone: .upload,
-                    symbol: "arrow.up"
-                )
-            }
-
-            Text(appPreferences.text("接口级总速度，可能与应用级汇总存在差异", "Interface-level totals; may differ from app-level summary"))
-                .font(.system(size: 9, weight: .medium))
-                .foregroundStyle(.quaternary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
     }
 }
 
@@ -1906,156 +1862,6 @@ private struct FooterView: View {
                 .buttonStyle(NetBarIconButtonStyle(tone: .warning))
                 .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
             }
-        }
-    }
-}
-
-// MARK: - Traffic Chart
-
-private struct TrafficChart: View {
-    let points: [RatePoint]
-    @Binding var selectedWindow: TrafficHistoryWindow
-    @ObservedObject var appPreferences: AppPreferences
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(appPreferences.text("最近 \(selectedWindow.title(language: appPreferences.resolvedLanguage))", "Last \(selectedWindow.title(language: appPreferences.resolvedLanguage))"))
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(.primary)
-                    Text(appPreferences.text("下载 / 上传实时趋势", "Download / upload trend"))
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer(minLength: 8)
-
-                Picker("", selection: $selectedWindow) {
-                    ForEach(TrafficHistoryWindow.allCases) { window in
-                        Text(window.title(language: appPreferences.resolvedLanguage)).tag(window)
-                    }
-                }
-                .labelsHidden()
-                .pickerStyle(.segmented)
-                .frame(width: 150)
-            }
-
-            GeometryReader { geometry in
-                ZStack {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(Color.primary.opacity(0.035))
-                    chartGrid
-                    VStack {
-                        Spacer()
-                        HStack(spacing: 10) {
-                            LegendDot(title: appPreferences.text("下载", "Down"), color: .blue)
-                            LegendDot(title: appPreferences.text("上传", "Up"), color: .orange)
-                            Text("\(points.count) pts")
-                                .font(.system(size: 10, weight: .medium, design: .monospaced))
-                                .foregroundStyle(.tertiary)
-                        }
-                        .padding(.horizontal, 10)
-                        .padding(.bottom, 8)
-                    }
-
-                    ChartLine(
-                        points: points.map(\.uploadBytesPerSecond),
-                        size: geometry.size,
-                        color: .orange
-                    )
-                    ChartLine(
-                        points: points.map(\.downloadBytesPerSecond),
-                        size: geometry.size,
-                        color: .blue
-                    )
-                }
-            }
-        }
-        .netBarCard(cornerRadius: 14, padding: 12, isProminent: true)
-    }
-
-    private var chartGrid: some View {
-        VStack(spacing: 0) {
-            ForEach(0..<4, id: \.self) { _ in
-                Rectangle()
-                    .fill(Color.primary.opacity(0.055))
-                    .frame(height: 0.5)
-                Spacer()
-            }
-            Rectangle()
-                .fill(Color.primary.opacity(0.055))
-                .frame(height: 0.5)
-        }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 10)
-    }
-}
-
-private struct LegendDot: View {
-    let title: String
-    let color: Color
-
-    var body: some View {
-        HStack(spacing: 4) {
-            Circle()
-                .fill(color)
-                .frame(width: 6, height: 6)
-            Text(title)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(.tertiary)
-        }
-    }
-}
-
-private struct ChartLine: View {
-    let points: [Double]
-    let size: CGSize
-    let color: Color
-
-    var body: some View {
-        ZStack {
-            filledPath
-                .fill(LinearGradient(
-                    colors: [color.opacity(0.25), color.opacity(0.02)],
-                    startPoint: .top,
-                    endPoint: .bottom
-                ))
-            linePath
-                .stroke(color, style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 8)
-    }
-
-    private var linePath: Path {
-        Path { path in
-            guard points.count > 1 else { return }
-            let maxValue = max(points.max() ?? 1, 1)
-            let step = size.width / CGFloat(points.count - 1)
-            for i in points.indices {
-                let x = CGFloat(i) * step
-                let y = size.height - (CGFloat(points[i] / maxValue) * (size.height - 12)) - 6
-                if i == points.startIndex { path.move(to: CGPoint(x: x, y: y)) }
-                else { path.addLine(to: CGPoint(x: x, y: y)) }
-            }
-        }
-    }
-
-    private var filledPath: Path {
-        Path { path in
-            guard points.count > 1 else { return }
-            let maxValue = max(points.max() ?? 1, 1)
-            let step = size.width / CGFloat(points.count - 1)
-            for i in points.indices {
-                let x = CGFloat(i) * step
-                let y = size.height - (CGFloat(points[i] / maxValue) * (size.height - 12)) - 6
-                if i == points.startIndex { path.move(to: CGPoint(x: x, y: y)) }
-                else { path.addLine(to: CGPoint(x: x, y: y)) }
-            }
-            path.addLine(to: CGPoint(x: CGFloat(points.count - 1) * step, y: size.height))
-            path.addLine(to: CGPoint(x: 0, y: size.height))
-            path.closeSubpath()
         }
     }
 }

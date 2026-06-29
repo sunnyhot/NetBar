@@ -5234,6 +5234,22 @@ extension PreferencesAndPresentationTests {
     }
 }
 
+// MARK: - Traffic Pulse Chart Tests
+
+extension PreferencesAndPresentationTests {
+    func testTrafficPulseChartScaleNormalizesValuesAgainstLargestPoint() {
+        XCTAssertEqual(
+            TrafficPulseChartScale.normalizedValues([0, 50, 100]),
+            [0, 0.5, 1.0]
+        )
+    }
+
+    func testTrafficPulseChartScaleHandlesEmptyAndAllZeroValues() {
+        XCTAssertEqual(TrafficPulseChartScale.normalizedValues([]), [])
+        XCTAssertEqual(TrafficPulseChartScale.normalizedValues([0, 0]), [0, 0])
+    }
+}
+
 private final class ThreadRecordingBox: @unchecked Sendable {
     private let lock = NSLock()
     private var recordedPIDs: [Int32] = []
