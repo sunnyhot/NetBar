@@ -45,7 +45,7 @@ struct CollapsiblePreferenceSection<Content: View>: View {
                     content
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .netBarCard(cornerRadius: 12, padding: 12)
+                .livingSignalPanel(tone: .neutral, padding: 12)
                 .transition(.opacity.combined(with: .move(edge: .top)).animation(NetBarMotion.settle))
             }
         }
@@ -74,7 +74,7 @@ struct PreferenceSection<Content: View>: View {
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .netBarCard(cornerRadius: 12, padding: 12)
+            .livingSignalPanel(tone: .neutral, padding: 12)
         }
     }
 }
@@ -131,24 +131,29 @@ struct PreferencesHeroHeader: View {
 
     var body: some View {
         HStack(spacing: 12) {
-            NetBarIconTile(systemName: "waveform.path.ecg.rectangle", tone: .download, size: 38)
+            Image(systemName: "waveform.path.ecg.rectangle")
+                .font(.system(size: 17, weight: .bold))
+                .foregroundStyle(.white)
+                .frame(width: 40, height: 40)
+                .background(LivingSignalTone.active.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .shadow(color: LivingSignalTone.active.color.opacity(0.22), radius: 12, x: 0, y: 4)
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text(appPreferences.text("NetBar 设置工作台", "NetBar Control Center"))
+            VStack(alignment: .leading, spacing: 3) {
+                Text(appPreferences.text("NetBar 信号控制台", "NetBar Signal Console"))
                     .font(.system(size: 17, weight: .bold, design: .rounded))
                 Text(appPreferences.text(
-                    "调整菜单栏指标、悬浮面板、应用流量和更新策略。",
-                    "Tune menu bar metrics, floating panels, app traffic, and update behavior."
+                    "调整菜单栏指标、信号面板、应用流量和更新策略。",
+                    "Tune menu bar metrics, signal panels, app traffic, and update behavior."
                 ))
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(2)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.tertiary)
+                .lineLimit(2)
             }
 
             Spacer()
 
-            NetBarBadge(text: updater.currentVersionText, tone: .neutral)
+            LivingSignalStatusChip(text: updater.currentVersionText, tone: .neutral)
         }
-        .netBarCard(cornerRadius: 14, padding: 14, isProminent: true)
+        .livingSignalPanel(tone: LivingSignalTone.active, isElevated: true, padding: 14)
     }
 }

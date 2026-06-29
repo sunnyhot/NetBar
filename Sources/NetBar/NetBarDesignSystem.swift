@@ -213,18 +213,6 @@ extension View {
     }
 
     func netBarPanelBackground() -> some View {
-        background(
-            ZStack {
-                Color(nsColor: .windowBackgroundColor)
-                LinearGradient(
-                    colors: [
-                        Color.primary.opacity(0.035),
-                        Color(nsColor: .windowBackgroundColor).opacity(0.0)
-                    ],
-                    startPoint: .top,
-                    endPoint: .bottom
-                )
-            }
-        )
+        livingSignalPanelBackground()
     }
 }

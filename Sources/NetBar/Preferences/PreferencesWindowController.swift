@@ -138,7 +138,7 @@ private struct PreferencesView: View {
         }
         .padding(20)
         .frame(minWidth: 620, minHeight: 520)
-        .netBarPanelBackground()
+        .livingSignalPanelBackground()
         .preferredColorScheme(appPreferences.appearanceMode.preferredColorScheme)
     }
 }

@@ -5295,6 +5295,24 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(rootSource.contains("struct InterfaceList"))
         XCTAssertFalse(rootSource.contains("struct FooterView"))
     }
+
+    func testPreferencesComponentsUseLivingSignalPanelStyles() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesComponents.swift"]
+        )
+
+        XCTAssertTrue(source.contains("livingSignalPanel"))
+        XCTAssertTrue(source.contains("PreferencesHeroHeader"))
+        XCTAssertTrue(source.contains("LivingSignalTone.active"))
+    }
+
+    func testPreferencesWindowUsesLivingSignalPanelBackground() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesWindowController.swift"]
+        )
+
+        XCTAssertTrue(source.contains("livingSignalPanelBackground()"))
+    }
 }
 
 private final class ThreadRecordingBox: @unchecked Sendable {
