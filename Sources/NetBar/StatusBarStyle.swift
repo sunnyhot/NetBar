@@ -1707,7 +1707,7 @@ enum StatusBarDisplayRenderer {
     }
 
     private static func horizontalPadding(settings: StatusBarSettings) -> CGFloat {
-        settings.showsBackground ? 5 : 2
+        settings.showsBackground ? 3 : 2
     }
 
     static func shouldMirrorCharacter(settings: StatusBarSettings, frameIndex: Int) -> Bool {

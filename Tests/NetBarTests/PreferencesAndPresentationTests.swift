@@ -75,10 +75,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
             settings: settings
         )
 
-        XCTAssertEqual(presentation.width, ceil(stableTextWidth + 10))
+        XCTAssertEqual(presentation.width, ceil(stableTextWidth + 6))
         XCTAssertEqual(
             StatusBarDisplayRenderer.stableMinimumWidth(settings: settings),
-            ceil(stableTextWidth + 10)
+            ceil(stableTextWidth + 6)
         )
     }
 
