@@ -75,7 +75,7 @@ private struct EmptyInterfacesView: View {
             .buttonStyle(.bordered)
         }
         .frame(maxWidth: .infinity, minHeight: 120)
-        .livingSignalPanel(tone: hasKnownInterfaces ? .idle : .attention, padding: 12)
+        .livingSignalRow(tone: hasKnownInterfaces ? .idle : .attention, padding: 12)
     }
 
     private var title: String {
@@ -99,7 +99,7 @@ private struct InterfaceRow: View {
             HStack(alignment: .firstTextBaseline) {
                 Image(systemName: InterfacePresentation.iconName(for: interface.name))
                     .font(.system(size: 12, weight: .semibold))
-                    .foregroundStyle(interface.isPrimary ? Color.blue : Color.secondary)
+                    .foregroundStyle(interface.isPrimary ? LivingSignalTone.active.color : LivingSignalTone.neutral.color)
                     .frame(width: 18)
 
                 Text(interface.displayName)
@@ -118,8 +118,16 @@ private struct InterfaceRow: View {
             }
 
             HStack(spacing: 6) {
-                MetricPill(symbol: "arrow.down", value: ByteFormat.speed(interface.downloadBytesPerSecond), tint: .blue)
-                MetricPill(symbol: "arrow.up", value: ByteFormat.speed(interface.uploadBytesPerSecond), tint: .orange)
+                MetricPill(
+                    symbol: "arrow.down",
+                    value: ByteFormat.speed(interface.downloadBytesPerSecond),
+                    tint: LivingSignalTone.active.color
+                )
+                MetricPill(
+                    symbol: "arrow.up",
+                    value: ByteFormat.speed(interface.uploadBytesPerSecond),
+                    tint: LivingSignalTone.uploadHeavy.color
+                )
             }
 
             HStack(spacing: 0) {
@@ -164,7 +172,7 @@ private struct InterfaceRow: View {
                 }
             }
         }
-        .livingSignalPanel(tone: interface.isPrimary ? .active : .neutral, padding: 10)
+        .livingSignalRow(tone: interface.isPrimary ? .active : .neutral, padding: 10)
         .overlay(
             RoundedRectangle(cornerRadius: 12, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.7)
@@ -205,7 +213,7 @@ private struct SystemResourceCard: View {
                             RoundedRectangle(cornerRadius: 2)
                                 .fill(Color.primary.opacity(0.06))
                             RoundedRectangle(cornerRadius: 2)
-                                .fill(Color.purple.opacity(0.45))
+                                .fill(LivingSignalTone.neutral.color.opacity(0.45))
                                 .frame(width: geo.size.width * min(pct / 100.0, 1.0))
                         }
                     }
@@ -231,7 +239,7 @@ private struct SystemResourceCard: View {
                                 RoundedRectangle(cornerRadius: 2)
                                     .fill(Color.primary.opacity(0.06))
                                 RoundedRectangle(cornerRadius: 2)
-                                    .fill(Color.orange.opacity(0.45))
+                                    .fill(LivingSignalTone.attention.color.opacity(0.45))
                                     .frame(width: geo.size.width * min(cpu / 100.0, 1.0))
                             }
                         }
@@ -257,7 +265,7 @@ private struct SystemResourceCard: View {
             }
             .frame(width: 52)
         }
-        .livingSignalPanel(tone: .neutral, padding: 10)
+        .livingSignalRow(tone: .neutral, padding: 10)
     }
 }
 

@@ -5464,6 +5464,25 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(footerSource.contains(".livingSignalPanel(tone: monitor.isRunning ? .normal : .attention"))
     }
 
+    func testPopoverPanelsAvoidBroadSystemTrafficColorLiterals() throws {
+        let panelFiles = [
+            ["Sources", "NetBar", "Popover", "InsightStreamView.swift"],
+            ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"],
+            ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"],
+            ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
+        ]
+
+        for pathComponents in panelFiles {
+            let source = try sourceFileContent(pathComponents: pathComponents)
+            XCTAssertFalse(source.contains("return .blue"), pathComponents.joined(separator: "/"))
+            XCTAssertFalse(source.contains("return .orange"), pathComponents.joined(separator: "/"))
+            XCTAssertFalse(source.contains("return .green"), pathComponents.joined(separator: "/"))
+            XCTAssertFalse(source.contains("Color.blue"), pathComponents.joined(separator: "/"))
+            XCTAssertFalse(source.contains("Color.orange"), pathComponents.joined(separator: "/"))
+            XCTAssertFalse(source.contains("Color.mint"), pathComponents.joined(separator: "/"))
+        }
+    }
+
     func testPreferencesComponentsUseLivingSignalPanelStyles() throws {
         let source = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesComponents.swift"]

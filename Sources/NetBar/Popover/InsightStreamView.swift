@@ -72,7 +72,7 @@ struct InsightStreamView: View {
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .livingSignalPanel(tone: .idle, padding: 9)
+                    .livingSignalRow(tone: .idle, padding: 9)
             } else {
                 VStack(spacing: 7) {
                     ForEach(Array(summary.insightCards.prefix(5))) { card in
@@ -89,7 +89,7 @@ struct InsightStreamView: View {
                             }
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
-                        .livingSignalPanel(tone: .attention, padding: 9)
+                        .livingSignalRow(tone: .attention, padding: 9)
                     }
                 }
             }

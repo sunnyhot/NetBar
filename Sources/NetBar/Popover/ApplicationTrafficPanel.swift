@@ -195,7 +195,7 @@ private struct AppTrafficAttributionCard: View {
             Spacer(minLength: 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .livingSignalPanel(tone: livingTone, padding: 9)
+        .livingSignalRow(tone: livingTone, padding: 9)
     }
 
     private var title: String {
@@ -237,11 +237,11 @@ private struct AppTrafficAttributionCard: View {
     private var tint: Color {
         switch summary.status {
         case .idle:
-            return .secondary
+            return LivingSignalTone.neutral.color
         case .covered:
-            return .green
+            return LivingSignalTone.normal.color
         case .partial:
-            return .orange
+            return LivingSignalTone.attention.color
         }
     }
 
@@ -307,7 +307,7 @@ private struct AppTrafficControls: View {
             }
             .fixedSize()
         }
-        .livingSignalPanel(tone: .neutral, padding: 8)
+        .livingSignalRow(tone: .neutral, padding: 8)
     }
 }
 
@@ -342,7 +342,7 @@ private struct AppTrafficNotice: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .livingSignalPanel(tone: actionTitle == nil ? .idle : .attention, padding: 12)
+        .livingSignalRow(tone: actionTitle == nil ? .idle : .attention, padding: 12)
     }
 }
 
@@ -379,7 +379,7 @@ struct ApplicationTrafficRow: View {
                 }
             }
         }
-        .livingSignalPanel(tone: rowTone, padding: 6)
+        .livingSignalRow(tone: rowTone, padding: 6)
         .overlay(
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.5)
@@ -429,13 +429,13 @@ struct AttributionRoleBadge: View {
     private var tint: Color {
         switch role {
         case .application:
-            return .secondary
+            return LivingSignalTone.neutral.color
         case .proxyOrVPN:
-            return .orange
+            return LivingSignalTone.attention.color
         case .helper:
-            return .blue
+            return LivingSignalTone.active.color
         case .systemService:
-            return .gray
+            return LivingSignalTone.neutral.color.opacity(0.82)
         }
     }
 }
@@ -480,10 +480,14 @@ private extension ApplicationTrafficMetric {
 
     var tint: Color {
         switch kind {
-        case .download: return .blue
-        case .upload: return .orange
-        case .memory: return .purple
-        case .cpu: return .red
+        case .download:
+            return LivingSignalTone.active.color
+        case .upload:
+            return LivingSignalTone.uploadHeavy.color
+        case .memory:
+            return LivingSignalTone.neutral.color
+        case .cpu:
+            return LivingSignalTone.critical.color
         }
     }
 }

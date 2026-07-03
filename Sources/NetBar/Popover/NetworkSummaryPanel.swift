@@ -56,56 +56,30 @@ enum CharacterPlaybackMilestone: Equatable {
     var accent: Color {
         switch self {
         case .spark:
-            return .mint
+            return LivingSignalTone.active.color
         case .volt:
-            return .cyan
+            return LivingSignalTone.active.color.opacity(0.9)
         case .crown:
-            return .orange
+            return LivingSignalTone.attention.color
         case .legend:
-            return .pink
+            return LivingSignalTone.uploadHeavy.color
         }
     }
 
     var backgroundGradient: LinearGradient {
-        switch self {
-        case .spark:
-            return LinearGradient(
-                colors: [Color.mint.opacity(0.18), Color.green.opacity(0.08)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .volt:
-            return LinearGradient(
-                colors: [Color.cyan.opacity(0.2), Color.blue.opacity(0.1)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .crown:
-            return LinearGradient(
-                colors: [Color.orange.opacity(0.22), Color.yellow.opacity(0.12)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .legend:
-            return LinearGradient(
-                colors: [Color.pink.opacity(0.2), Color.orange.opacity(0.14), Color.mint.opacity(0.12)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        LinearGradient(
+            colors: [accent.opacity(0.11), accent.opacity(0.035)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     var strokeGradient: LinearGradient {
-        switch self {
-        case .spark:
-            return LinearGradient(colors: [.mint, .green], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .volt:
-            return LinearGradient(colors: [.cyan, .blue], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .crown:
-            return LinearGradient(colors: [.yellow, .orange], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .legend:
-            return LinearGradient(colors: [.pink, .orange, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
-        }
+        LinearGradient(
+            colors: [accent.opacity(0.84), accent.opacity(0.36)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 
     var glowRadius: CGFloat {
@@ -320,7 +294,7 @@ struct HistoryLedgerPanel: View {
                 .font(.system(size: 12, weight: .bold, design: .monospaced))
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .livingSignalPanel(tone: .neutral, padding: 8)
+        .livingSignalRow(tone: .neutral, padding: 8)
     }
 }
 
@@ -359,7 +333,7 @@ private struct DailySummaryCell: View {
                 .minimumScaleFactor(0.65)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .netBarCard(cornerRadius: 10, padding: 9)
+        .livingSignalRow(tone: livingTone, padding: 9)
         .overlay {
             if let milestone = card.milestone {
                 RoundedRectangle(cornerRadius: 10, style: .continuous)
@@ -377,6 +351,19 @@ private struct DailySummaryCell: View {
             x: 0,
             y: 0
         )
+    }
+
+    private var livingTone: LivingSignalTone {
+        switch tone {
+        case .upload:
+            return .uploadHeavy
+        case .warning:
+            return .attention
+        case .danger:
+            return .critical
+        default:
+            return .neutral
+        }
     }
 
     @ViewBuilder
@@ -470,11 +457,21 @@ private struct DailyApplicationUsageRow: View {
             Spacer(minLength: 8)
 
             HStack(spacing: 6) {
-                MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(application.downloadBytes), tint: .blue, fixedWidth: 92)
-                MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(application.uploadBytes), tint: .orange, fixedWidth: 92)
+                MetricPill(
+                    symbol: "arrow.down",
+                    value: ByteFormat.bytes(application.downloadBytes),
+                    tint: LivingSignalTone.active.color,
+                    fixedWidth: 92
+                )
+                MetricPill(
+                    symbol: "arrow.up",
+                    value: ByteFormat.bytes(application.uploadBytes),
+                    tint: LivingSignalTone.uploadHeavy.color,
+                    fixedWidth: 92
+                )
             }
         }
-        .netBarCard(cornerRadius: 10, padding: 6)
+        .livingSignalRow(tone: .neutral, padding: 7)
     }
 }
 
@@ -514,11 +511,11 @@ private struct SevenDaySummaryRow: View {
                 .foregroundStyle(.secondary)
                 .frame(width: 88, alignment: .leading)
 
-            MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(summary.downloadBytes), tint: .blue)
-            MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(summary.uploadBytes), tint: .orange)
+            MetricPill(symbol: "arrow.down", value: ByteFormat.bytes(summary.downloadBytes), tint: LivingSignalTone.active.color)
+            MetricPill(symbol: "arrow.up", value: ByteFormat.bytes(summary.uploadBytes), tint: LivingSignalTone.uploadHeavy.color)
             CompactMetric(symbol: "clock", value: NetworkDailySummaryPresentation.duration(summary.activeSeconds), tint: .secondary)
         }
-        .netBarCard(cornerRadius: 10, padding: 7)
+        .livingSignalRow(tone: .neutral, padding: 7)
     }
 }
 
@@ -617,6 +614,19 @@ private struct SummaryCell: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .netBarCard(cornerRadius: 11, padding: 10)
+        .livingSignalRow(tone: livingTone, padding: 10)
+    }
+
+    private var livingTone: LivingSignalTone {
+        switch tone {
+        case .upload:
+            return .uploadHeavy
+        case .warning:
+            return .attention
+        case .danger:
+            return .critical
+        default:
+            return .neutral
+        }
     }
 }
