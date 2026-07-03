@@ -5441,6 +5441,29 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(rootSource.contains("struct FooterView"))
     }
 
+    func testPopoverHeaderChartAndFooterUseNativeInstrumentPrimitives() throws {
+        let headerSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "PopoverHeaderView.swift"]
+        )
+        let chartSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "TrafficPulseChartView.swift"]
+        )
+        let footerSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "PopoverFooterView.swift"]
+        )
+
+        XCTAssertTrue(headerSource.contains("struct LivingSignalStatusDot"))
+        XCTAssertTrue(headerSource.contains("livingSignalRow"))
+        XCTAssertFalse(headerSource.contains("presentation.tone.gradient"))
+
+        XCTAssertTrue(chartSource.contains("chartWellBackground"))
+        XCTAssertTrue(chartSource.contains("LivingSignalTone.active.color"))
+        XCTAssertTrue(chartSource.contains("LivingSignalTone.uploadHeavy.color"))
+
+        XCTAssertTrue(footerSource.contains("livingSignalToolbarSurface"))
+        XCTAssertFalse(footerSource.contains(".livingSignalPanel(tone: monitor.isRunning ? .normal : .attention"))
+    }
+
     func testPreferencesComponentsUseLivingSignalPanelStyles() throws {
         let source = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesComponents.swift"]

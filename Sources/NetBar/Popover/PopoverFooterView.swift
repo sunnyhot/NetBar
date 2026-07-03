@@ -54,6 +54,6 @@ private struct FooterView: View {
                 .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
             }
         }
-        .livingSignalPanel(tone: monitor.isRunning ? .normal : .attention, padding: 8)
+        .livingSignalToolbarSurface(padding: 8)
     }
 }

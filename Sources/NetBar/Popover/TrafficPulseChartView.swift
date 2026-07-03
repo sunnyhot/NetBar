@@ -44,8 +44,7 @@ struct TrafficPulseChartView: View {
 
             GeometryReader { geometry in
                 ZStack {
-                    RoundedRectangle(cornerRadius: 14, style: .continuous)
-                        .fill(Color.primary.opacity(0.035))
+                    chartWellBackground
 
                     TrafficPulseGrid()
 
@@ -84,6 +83,15 @@ struct TrafficPulseChartView: View {
             .frame(height: LivingSignalLayout.chartHeight)
         }
         .livingSignalPanel(tone: isActive ? .active : .idle, isElevated: true, padding: 12)
+    }
+
+    private var chartWellBackground: some View {
+        RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .fill(Color(nsColor: .controlBackgroundColor).opacity(0.54))
+            .overlay(
+                RoundedRectangle(cornerRadius: 12, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(LivingSignalSurface.borderOpacity), lineWidth: 0.6)
+            )
     }
 }
 

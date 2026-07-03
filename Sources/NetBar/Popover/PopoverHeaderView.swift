@@ -8,21 +8,11 @@ struct PopoverHeaderView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 12) {
-                Image(systemName: presentation.symbolName)
-                    .font(.system(size: 18, weight: .bold))
-                    .foregroundStyle(.white)
-                    .frame(width: LivingSignalLayout.iconTileSize, height: LivingSignalLayout.iconTileSize)
-                    .background(presentation.tone.gradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .shadow(
-                        color: presentation.tone.color.opacity(0.18),
-                        radius: 6,
-                        x: 0,
-                        y: 0
-                    )
+                LivingSignalStatusDot(tone: presentation.tone)
 
                 VStack(alignment: .leading, spacing: 3) {
                     Text(presentation.title)
-                        .font(.system(size: 17, weight: .bold, design: .rounded))
+                        .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.primary)
                     Text(presentation.subtitle)
                         .font(.system(size: 11, weight: .medium))
@@ -75,6 +65,25 @@ struct LivingSignalStatusChip: View {
     }
 }
 
+private struct LivingSignalStatusDot: View {
+    let tone: LivingSignalTone
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .fill(tone.color.opacity(0.14))
+                .frame(width: 30, height: 30)
+            Circle()
+                .fill(tone.color)
+                .frame(width: 10, height: 10)
+            Circle()
+                .strokeBorder(tone.color.opacity(0.32), lineWidth: 1)
+                .frame(width: 18, height: 18)
+        }
+        .accessibilityHidden(true)
+    }
+}
+
 private struct LivingSignalSpeedMetric: View {
     let title: String
     let value: String
@@ -101,7 +110,6 @@ private struct LivingSignalSpeedMetric: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(8)
-        .livingSignalPanel(tone: tone)
+        .livingSignalRow(tone: tone, padding: 8)
     }
 }
