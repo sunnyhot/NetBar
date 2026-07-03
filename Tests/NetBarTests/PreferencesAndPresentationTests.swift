@@ -5292,6 +5292,28 @@ extension PreferencesAndPresentationTests {
         XCTAssertGreaterThan(LivingSignalLayout.chartHeight, 132)
     }
 
+    func testLivingSignalPaletteUsesRestrainedNativeInstrumentRoles() {
+        XCTAssertEqual(LivingSignalPalette.signal.red, 0.12, accuracy: 0.001)
+        XCTAssertEqual(LivingSignalPalette.signal.green, 0.62, accuracy: 0.001)
+        XCTAssertEqual(LivingSignalPalette.signal.blue, 0.57, accuracy: 0.001)
+
+        XCTAssertEqual(LivingSignalPalette.upload.red, 0.88, accuracy: 0.001)
+        XCTAssertEqual(LivingSignalPalette.upload.green, 0.41, accuracy: 0.001)
+        XCTAssertEqual(LivingSignalPalette.upload.blue, 0.34, accuracy: 0.001)
+
+        XCTAssertEqual(LivingSignalTone.active.role, .signal)
+        XCTAssertEqual(LivingSignalTone.normal.role, .signal)
+        XCTAssertEqual(LivingSignalTone.uploadHeavy.role, .upload)
+        XCTAssertEqual(LivingSignalTone.attention.role, .attention)
+        XCTAssertEqual(LivingSignalTone.critical.role, .critical)
+        XCTAssertEqual(LivingSignalTone.idle.role, .neutral)
+        XCTAssertEqual(LivingSignalTone.neutral.role, .neutral)
+
+        XCTAssertLessThanOrEqual(LivingSignalSurface.windowSignalTintOpacity, 0.025)
+        XCTAssertLessThanOrEqual(LivingSignalSurface.windowUploadTintOpacity, 0.018)
+        XCTAssertLessThanOrEqual(LivingSignalSurface.selectedFillOpacity, 0.12)
+    }
+
     func testLivingSignalMotionPolicyDisablesLoopingEffectsWhenReduceMotionIsOn() {
         let reduced = LivingSignalMotionPolicy.make(
             reduceMotion: true,

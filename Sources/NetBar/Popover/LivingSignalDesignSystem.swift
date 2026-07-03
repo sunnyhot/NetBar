@@ -1,5 +1,44 @@
 import SwiftUI
 
+enum LivingSignalColorRole: Equatable {
+    case signal
+    case upload
+    case attention
+    case critical
+    case neutral
+}
+
+struct LivingSignalColorSpec: Equatable {
+    let red: Double
+    let green: Double
+    let blue: Double
+
+    var color: Color {
+        Color(red: red, green: green, blue: blue)
+    }
+}
+
+enum LivingSignalPalette {
+    static let signal = LivingSignalColorSpec(red: 0.12, green: 0.62, blue: 0.57)
+    static let upload = LivingSignalColorSpec(red: 0.88, green: 0.41, blue: 0.34)
+    static let attention = LivingSignalColorSpec(red: 0.79, green: 0.53, blue: 0.13)
+    static let critical = LivingSignalColorSpec(red: 0.85, green: 0.29, blue: 0.29)
+    static let neutral = LivingSignalColorSpec(red: 0.42, green: 0.45, blue: 0.50)
+}
+
+enum LivingSignalSurface {
+    static let windowSignalTintOpacity = 0.022
+    static let windowUploadTintOpacity = 0.014
+    static let elevatedFillOpacity = 0.82
+    static let panelFillOpacity = 0.66
+    static let rowFillOpacity = 0.46
+    static let selectedFillOpacity = 0.10
+    static let toneFillOpacity = 0.055
+    static let rowToneFillOpacity = 0.035
+    static let borderOpacity = 0.075
+    static let selectedBorderOpacity = 0.22
+}
+
 enum LivingSignalTone: String, CaseIterable, Equatable {
     case idle
     case normal
@@ -9,62 +48,50 @@ enum LivingSignalTone: String, CaseIterable, Equatable {
     case critical
     case neutral
 
-    var color: Color {
+    var role: LivingSignalColorRole {
         switch self {
-        case .idle:
-            return .secondary
-        case .normal:
-            return .green
-        case .active:
-            return Color(red: 0.31, green: 0.86, blue: 0.77)
+        case .normal, .active:
+            return .signal
         case .uploadHeavy:
-            return Color(red: 1.0, green: 0.48, blue: 0.4)
+            return .upload
         case .attention:
-            return .orange
+            return .attention
         case .critical:
-            return .red
-        case .neutral:
-            return .secondary
+            return .critical
+        case .idle, .neutral:
+            return .neutral
         }
+    }
+
+    var spec: LivingSignalColorSpec {
+        switch role {
+        case .signal:
+            return LivingSignalPalette.signal
+        case .upload:
+            return LivingSignalPalette.upload
+        case .attention:
+            return LivingSignalPalette.attention
+        case .critical:
+            return LivingSignalPalette.critical
+        case .neutral:
+            return LivingSignalPalette.neutral
+        }
+    }
+
+    var color: Color {
+        spec.color
     }
 
     var softColor: Color {
-        color.opacity(0.14)
+        color.opacity(role == .neutral ? 0.10 : 0.12)
     }
 
     var gradient: LinearGradient {
-        switch self {
-        case .active:
-            return LinearGradient(
-                colors: [
-                    Color(red: 0.31, green: 0.86, blue: 0.77),
-                    Color(red: 0.95, green: 0.78, blue: 0.42)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .uploadHeavy:
-            return LinearGradient(
-                colors: [
-                    Color(red: 1.0, green: 0.48, blue: 0.4),
-                    Color(red: 0.95, green: 0.78, blue: 0.42)
-                ],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .critical:
-            return LinearGradient(colors: [.red, .pink], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .attention:
-            return LinearGradient(colors: [.orange, .yellow], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .normal:
-            return LinearGradient(colors: [.green, .mint], startPoint: .topLeading, endPoint: .bottomTrailing)
-        case .idle, .neutral:
-            return LinearGradient(
-                colors: [Color.secondary.opacity(0.38), Color.secondary.opacity(0.12)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        LinearGradient(
+            colors: [color, color.opacity(role == .neutral ? 0.42 : 0.76)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
@@ -186,7 +213,8 @@ struct LivingSignalPanelModifier: ViewModifier {
 
     func body(content: Content) -> some View {
         let radius = isElevated ? LivingSignalLayout.elevatedPanelCornerRadius : LivingSignalLayout.panelCornerRadius
-        let baseFill = Color(nsColor: .controlBackgroundColor).opacity(isElevated ? 0.86 : 0.72)
+        let baseFill = Color(nsColor: .controlBackgroundColor)
+            .opacity(isElevated ? LivingSignalSurface.elevatedFillOpacity : LivingSignalSurface.panelFillOpacity)
 
         content
             .padding(padding)
@@ -195,12 +223,70 @@ struct LivingSignalPanelModifier: ViewModifier {
                     .fill(baseFill)
                     .overlay(
                         RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .fill(tone.softColor.opacity(isElevated ? 0.85 : 0.45))
+                            .fill(tone.color.opacity(tone.role == .neutral ? 0 : LivingSignalSurface.toneFillOpacity))
                     )
             )
             .overlay(
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .strokeBorder(tone.color.opacity(isElevated ? 0.2 : 0.11), lineWidth: 0.7)
+                    .strokeBorder(
+                        tone.color.opacity(tone.role == .neutral ? LivingSignalSurface.borderOpacity : LivingSignalSurface.selectedBorderOpacity),
+                        lineWidth: 0.7
+                    )
+            )
+    }
+}
+
+struct LivingSignalRowModifier: ViewModifier {
+    var tone: LivingSignalTone = .neutral
+    var padding: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: LivingSignalLayout.rowCornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(LivingSignalSurface.rowFillOpacity))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: LivingSignalLayout.rowCornerRadius, style: .continuous)
+                            .fill(tone.color.opacity(tone.role == .neutral ? 0 : LivingSignalSurface.rowToneFillOpacity))
+                    )
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: LivingSignalLayout.rowCornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(LivingSignalSurface.borderOpacity), lineWidth: 0.6)
+            )
+    }
+}
+
+struct LivingSignalSelectedSurfaceModifier: ViewModifier {
+    var cornerRadius: CGFloat = 8
+
+    func body(content: Content) -> some View {
+        content
+            .background(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .fill(LivingSignalTone.active.color.opacity(LivingSignalSurface.selectedFillOpacity))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
+                    .strokeBorder(LivingSignalTone.active.color.opacity(LivingSignalSurface.selectedBorderOpacity), lineWidth: 0.6)
+            )
+    }
+}
+
+struct LivingSignalToolbarSurfaceModifier: ViewModifier {
+    var padding: CGFloat = 0
+
+    func body(content: Content) -> some View {
+        content
+            .padding(padding)
+            .background(
+                RoundedRectangle(cornerRadius: LivingSignalLayout.panelCornerRadius, style: .continuous)
+                    .fill(Color(nsColor: .controlBackgroundColor).opacity(0.58))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: LivingSignalLayout.panelCornerRadius, style: .continuous)
+                    .strokeBorder(Color.primary.opacity(LivingSignalSurface.borderOpacity), lineWidth: 0.6)
             )
     }
 }
@@ -214,14 +300,26 @@ extension View {
         modifier(LivingSignalPanelModifier(tone: tone, isElevated: isElevated, padding: padding))
     }
 
+    func livingSignalRow(tone: LivingSignalTone = .neutral, padding: CGFloat = 0) -> some View {
+        modifier(LivingSignalRowModifier(tone: tone, padding: padding))
+    }
+
+    func livingSignalSelectedSurface(cornerRadius: CGFloat = 8) -> some View {
+        modifier(LivingSignalSelectedSurfaceModifier(cornerRadius: cornerRadius))
+    }
+
+    func livingSignalToolbarSurface(padding: CGFloat = 0) -> some View {
+        modifier(LivingSignalToolbarSurfaceModifier(padding: padding))
+    }
+
     func livingSignalPanelBackground() -> some View {
         background(
             ZStack {
                 Color(nsColor: .windowBackgroundColor)
                 LinearGradient(
                     colors: [
-                        Color(red: 0.31, green: 0.86, blue: 0.77).opacity(0.07),
-                        Color(red: 1.0, green: 0.48, blue: 0.4).opacity(0.035),
+                        LivingSignalTone.active.color.opacity(LivingSignalSurface.windowSignalTintOpacity),
+                        LivingSignalTone.uploadHeavy.color.opacity(LivingSignalSurface.windowUploadTintOpacity),
                         Color(nsColor: .windowBackgroundColor).opacity(0)
                     ],
                     startPoint: .topLeading,

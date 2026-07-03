@@ -31,19 +31,19 @@ enum NetBarTone: Equatable {
     var color: Color {
         switch self {
         case .download:
-            return .blue
+            return LivingSignalTone.active.color
         case .upload:
-            return .orange
+            return LivingSignalTone.uploadHeavy.color
         case .neutral:
-            return .secondary
+            return LivingSignalTone.neutral.color
         case .success:
-            return .green
+            return LivingSignalTone.normal.color
         case .warning:
-            return .orange
+            return LivingSignalTone.attention.color
         case .purple:
-            return .purple
+            return LivingSignalTone.neutral.color
         case .danger:
-            return .red
+            return LivingSignalTone.critical.color
         }
     }
 
@@ -52,50 +52,11 @@ enum NetBarTone: Equatable {
     }
 
     var gradient: LinearGradient {
-        switch self {
-        case .download:
-            return LinearGradient(
-                colors: [Color(red: 0.17, green: 0.47, blue: 0.98), Color(red: 0.14, green: 0.74, blue: 0.95)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .upload:
-            return LinearGradient(
-                colors: [Color(red: 0.98, green: 0.46, blue: 0.16), Color(red: 0.98, green: 0.69, blue: 0.25)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .neutral:
-            return LinearGradient(
-                colors: [Color.secondary.opacity(0.42), Color.secondary.opacity(0.18)],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .success:
-            return LinearGradient(
-                colors: [Color.green, Color.mint],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .warning:
-            return LinearGradient(
-                colors: [Color.orange, Color.yellow],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .purple:
-            return LinearGradient(
-                colors: [Color.purple, Color.indigo],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        case .danger:
-            return LinearGradient(
-                colors: [Color.red, Color.pink],
-                startPoint: .topLeading,
-                endPoint: .bottomTrailing
-            )
-        }
+        LinearGradient(
+            colors: [color, color.opacity(0.72)],
+            startPoint: .topLeading,
+            endPoint: .bottomTrailing
+        )
     }
 }
 
