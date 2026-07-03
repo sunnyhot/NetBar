@@ -93,7 +93,7 @@ private struct PreferencesView: View {
 
     var body: some View {
         VStack(spacing: 16) {
-            PreferencesHeroHeader(appPreferences: appPreferences, updater: updater)
+            PreferencesHeader(appPreferences: appPreferences, updater: updater)
 
             PreferencesTabBar(selectedTab: $selectedTab, appPreferences: appPreferences)
 
@@ -191,21 +191,23 @@ private struct PreferencesTabBar: View {
                         .padding(.horizontal, 12)
                         .padding(.vertical, 7)
                         .frame(minWidth: 92)
-                        .background(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .fill(selectedTab == tab ? LivingSignalTone.active.softColor : Color.clear)
-                        )
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 9, style: .continuous)
-                                .strokeBorder(
-                                    selectedTab == tab ? LivingSignalTone.active.color.opacity(0.18) : Color.clear,
-                                    lineWidth: 0.6
-                                )
-                        )
+                        .modifier(SelectedTabSurface(isSelected: selectedTab == tab))
                 }
                 .buttonStyle(.plain)
             }
         }
-        .livingSignalPanel(tone: .neutral, padding: 4)
+        .livingSignalToolbarSurface(padding: 4)
+    }
+}
+
+private struct SelectedTabSurface: ViewModifier {
+    let isSelected: Bool
+
+    func body(content: Content) -> some View {
+        if isSelected {
+            content.livingSignalSelectedSurface(cornerRadius: 8)
+        } else {
+            content
+        }
     }
 }

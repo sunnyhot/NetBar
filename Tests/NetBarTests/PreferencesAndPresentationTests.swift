@@ -5483,22 +5483,28 @@ extension PreferencesAndPresentationTests {
         }
     }
 
-    func testPreferencesComponentsUseLivingSignalPanelStyles() throws {
+    func testPreferencesComponentsUseNativeInstrumentHeaderAndSections() throws {
         let source = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesComponents.swift"]
         )
 
-        XCTAssertTrue(source.contains("livingSignalPanel"))
-        XCTAssertTrue(source.contains("PreferencesHeroHeader"))
-        XCTAssertTrue(source.contains("LivingSignalTone.active"))
+        XCTAssertTrue(source.contains("struct PreferencesHeader"))
+        XCTAssertTrue(source.contains("livingSignalRow"))
+        XCTAssertTrue(source.contains("NetBar 偏好设置"))
+        XCTAssertFalse(source.contains("struct PreferencesHeroHeader"))
+        XCTAssertFalse(source.contains("NetBar 信号控制台"))
+        XCTAssertFalse(source.contains("LivingSignalTone.active.gradient"))
     }
 
-    func testPreferencesWindowUsesLivingSignalPanelBackground() throws {
+    func testPreferencesWindowUsesNativeInstrumentBackgroundAndTabs() throws {
         let source = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesWindowController.swift"]
         )
 
+        XCTAssertTrue(source.contains("PreferencesHeader(appPreferences: appPreferences, updater: updater)"))
         XCTAssertTrue(source.contains("livingSignalPanelBackground()"))
+        XCTAssertTrue(source.contains("livingSignalSelectedSurface"))
+        XCTAssertFalse(source.contains("PreferencesHeroHeader"))
     }
 
     func testPreferencesWindowUsesLightweightManualTabs() throws {

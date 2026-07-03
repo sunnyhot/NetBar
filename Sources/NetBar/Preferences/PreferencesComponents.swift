@@ -45,7 +45,7 @@ struct CollapsiblePreferenceSection<Content: View>: View {
                     content
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .livingSignalPanel(tone: .neutral, padding: 12)
+                .livingSignalRow(tone: .neutral, padding: 12)
                 .transition(.opacity.combined(with: .move(edge: .top)).animation(NetBarMotion.settle))
             }
         }
@@ -74,7 +74,7 @@ struct PreferenceSection<Content: View>: View {
                 content
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-            .livingSignalPanel(tone: .neutral, padding: 12)
+            .livingSignalRow(tone: .neutral, padding: 12)
         }
     }
 }
@@ -123,30 +123,36 @@ struct PresetColorButton: View {
     }
 }
 
-// MARK: - Preferences Hero Header
+// MARK: - Preferences Header
 
-struct PreferencesHeroHeader: View {
+struct PreferencesHeader: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var updater: AppUpdater
 
     var body: some View {
         HStack(spacing: 12) {
-            Image(systemName: "waveform.path.ecg.rectangle")
-                .font(.system(size: 17, weight: .bold))
-                .foregroundStyle(.white)
-                .frame(width: 40, height: 40)
-                .background(LivingSignalTone.active.gradient, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .shadow(color: LivingSignalTone.active.color.opacity(0.22), radius: 12, x: 0, y: 4)
+            Image(systemName: "waveform.path.ecg")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundStyle(LivingSignalTone.active.color)
+                .frame(width: 34, height: 34)
+                .background(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .fill(LivingSignalTone.active.color.opacity(0.10))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
+                        .strokeBorder(LivingSignalTone.active.color.opacity(0.20), lineWidth: 0.6)
+                )
 
             VStack(alignment: .leading, spacing: 3) {
-                Text(appPreferences.text("NetBar 信号控制台", "NetBar Signal Console"))
-                    .font(.system(size: 17, weight: .bold, design: .rounded))
+                Text(appPreferences.text("NetBar 偏好设置", "NetBar Preferences"))
+                    .font(.system(size: 16, weight: .semibold))
                 Text(appPreferences.text(
-                    "调整菜单栏指标、信号面板、应用流量和更新策略。",
-                    "Tune menu bar metrics, signal panels, app traffic, and update behavior."
+                    "调整菜单栏显示、详情面板、应用流量和更新策略。",
+                    "Tune menu bar display, detail panels, app traffic, and update behavior."
                 ))
                 .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(.tertiary)
+                .foregroundStyle(.secondary)
                 .lineLimit(2)
             }
 
@@ -154,6 +160,6 @@ struct PreferencesHeroHeader: View {
 
             LivingSignalStatusChip(text: updater.currentVersionText, tone: .neutral)
         }
-        .livingSignalPanel(tone: LivingSignalTone.active, isElevated: true, padding: 14)
+        .livingSignalToolbarSurface(padding: 12)
     }
 }
