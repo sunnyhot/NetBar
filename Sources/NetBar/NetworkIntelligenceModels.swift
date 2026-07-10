@@ -36,6 +36,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var showsSmartTopApplication: Bool
     var historyRetentionDays: Int
     var isApplicationHistoryRankingEnabled: Bool
+    var isActiveNetworkDiagnosticsEnabled: Bool
 
     init(
         hasSeenNotificationOnboarding: Bool,
@@ -54,7 +55,8 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         showsSmartAnomalyMarker: Bool = true,
         showsSmartTopApplication: Bool = true,
         historyRetentionDays: Int = 30,
-        isApplicationHistoryRankingEnabled: Bool = true
+        isApplicationHistoryRankingEnabled: Bool = true,
+        isActiveNetworkDiagnosticsEnabled: Bool = false
     ) {
         self.hasSeenNotificationOnboarding = hasSeenNotificationOnboarding
         self.isAnomalyDetectionEnabled = isAnomalyDetectionEnabled
@@ -73,6 +75,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         self.showsSmartTopApplication = showsSmartTopApplication
         self.historyRetentionDays = historyRetentionDays
         self.isApplicationHistoryRankingEnabled = isApplicationHistoryRankingEnabled
+        self.isActiveNetworkDiagnosticsEnabled = isActiveNetworkDiagnosticsEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -147,6 +150,10 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             Bool.self,
             forKey: .isApplicationHistoryRankingEnabled
         ) ?? defaultSettings.isApplicationHistoryRankingEnabled
+        isActiveNetworkDiagnosticsEnabled = try container.decodeIfPresent(
+            Bool.self,
+            forKey: .isActiveNetworkDiagnosticsEnabled
+        ) ?? defaultSettings.isActiveNetworkDiagnosticsEnabled
     }
 
     func encode(to encoder: Encoder) throws {
@@ -169,6 +176,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(showsSmartTopApplication, forKey: .showsSmartTopApplication)
         try container.encode(historyRetentionDays, forKey: .historyRetentionDays)
         try container.encode(isApplicationHistoryRankingEnabled, forKey: .isApplicationHistoryRankingEnabled)
+        try container.encode(isActiveNetworkDiagnosticsEnabled, forKey: .isActiveNetworkDiagnosticsEnabled)
     }
 
     static let `default` = NetworkIntelligenceSettings(
@@ -188,7 +196,8 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         showsSmartAnomalyMarker: true,
         showsSmartTopApplication: true,
         historyRetentionDays: 30,
-        isApplicationHistoryRankingEnabled: true
+        isApplicationHistoryRankingEnabled: true,
+        isActiveNetworkDiagnosticsEnabled: false
     )
 
     private enum CodingKeys: String, CodingKey {
@@ -209,6 +218,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case showsSmartTopApplication
         case historyRetentionDays
         case isApplicationHistoryRankingEnabled
+        case isActiveNetworkDiagnosticsEnabled
     }
 }
 

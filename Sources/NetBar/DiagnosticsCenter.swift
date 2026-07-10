@@ -16,6 +16,7 @@ struct DiagnosticsSnapshot: Equatable {
     let notificationAuthorization: String
     let historyStatus: String
     let historyPath: String
+    let healthDiagnostics: String
 }
 
 enum DiagnosticsCenter {
@@ -27,7 +28,8 @@ enum DiagnosticsCenter {
         sampling: NetworkSamplingDiagnostics,
         notificationAuthorization: String,
         historyStatus: String,
-        historyPath: String
+        historyPath: String,
+        healthDiagnostics: String = ""
     ) -> DiagnosticsSnapshot {
         DiagnosticsSnapshot(
             appVersion: appVersion,
@@ -37,7 +39,8 @@ enum DiagnosticsCenter {
             sampling: sampling,
             notificationAuthorization: notificationAuthorization,
             historyStatus: historyStatus,
-            historyPath: historyPath
+            historyPath: historyPath,
+            healthDiagnostics: healthDiagnostics
         )
     }
 
@@ -62,6 +65,7 @@ enum DiagnosticsCenter {
         notificationAuthorization=\(sanitizeFreeform(snapshot.notificationAuthorization))
         historyStatus=\(sanitizeFreeform(snapshot.historyStatus))
         historyPath=\(sanitizeURL(snapshot.historyPath))
+        health=\(sanitizeFreeform(snapshot.healthDiagnostics))
         \(privacyLine)
         """
     }

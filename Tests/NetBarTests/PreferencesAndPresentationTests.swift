@@ -473,7 +473,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let context = SmartStatusBarContext(
             emphasis: .topApplication("VeryLongA..."),
             trafficDisplayModeOverride: nil,
-            overrideLine: "VeryLongA..."
+            overrideLine: "VeryLongA...",
+            tone: .normal
         )
 
         let presentation = StatusBarDisplayRenderer.presentation(
@@ -497,7 +498,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             smartContext: SmartStatusBarContext(
                 emphasis: .topApplication("Arc"),
                 trafficDisplayModeOverride: nil,
-                overrideLine: "Arc"
+                overrideLine: "Arc",
+                tone: .normal
             )
         )
 
@@ -651,7 +653,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             ),
             notificationAuthorization: "authorized",
             historyStatus: "available",
-            historyPath: "/Users/example/Library/Application Support/NetBar/NetworkHistory.json"
+            historyPath: "/Users/example/Library/Application Support/NetBar/NetworkHistory.json",
+            healthDiagnostics: "Active"
         )
 
         let text = DiagnosticsCenter.copyText(for: snapshot, language: .english)

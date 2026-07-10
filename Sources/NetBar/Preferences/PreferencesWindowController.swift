@@ -12,6 +12,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let petController: PetController
     private let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     private let clearNetworkHistory: () -> Void
+    private let requestHealthRetest: () -> Void
     private var window: NSWindow?
 
     init(
@@ -23,7 +24,8 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         notificationController: NetworkNotificationController,
         petController: PetController,
         diagnosticsSnapshot: @escaping () -> DiagnosticsSnapshot,
-        clearNetworkHistory: @escaping () -> Void
+        clearNetworkHistory: @escaping () -> Void,
+        requestHealthRetest: @escaping () -> Void = {}
     ) {
         self.settings = settings
         self.appPreferences = appPreferences
@@ -34,6 +36,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         self.petController = petController
         self.diagnosticsSnapshot = diagnosticsSnapshot
         self.clearNetworkHistory = clearNetworkHistory
+        self.requestHealthRetest = requestHealthRetest
     }
 
     func show() {
@@ -69,7 +72,8 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
                 notificationController: notificationController,
                 petController: petController,
                 diagnosticsSnapshot: diagnosticsSnapshot,
-                clearNetworkHistory: clearNetworkHistory
+                clearNetworkHistory: clearNetworkHistory,
+                requestHealthRetest: requestHealthRetest
             )
         )
         preferencesWindow.collectionBehavior = [.moveToActiveSpace]
@@ -89,6 +93,7 @@ private struct PreferencesView: View {
     @ObservedObject var petController: PetController
     let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     let clearNetworkHistory: () -> Void
+    let requestHealthRetest: () -> Void
     @State private var selectedTab: PreferencesTab = .general
 
     var body: some View {
@@ -126,7 +131,8 @@ private struct PreferencesView: View {
                 appPreferences: appPreferences,
                 notificationController: notificationController,
                 petController: petController,
-                clearHistory: clearNetworkHistory
+                clearHistory: clearNetworkHistory,
+                requestHealthRetest: requestHealthRetest
             )
         case .about:
             AboutPreferencesView(

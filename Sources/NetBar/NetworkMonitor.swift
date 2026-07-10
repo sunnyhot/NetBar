@@ -7,6 +7,7 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var systemResources = SystemResourceSnapshot.empty
     @Published private(set) var intelligenceSummary = NetworkIntelligenceSummary.empty
+    @Published private(set) var healthSnapshot = NetworkHealthSnapshot.localOnlyHealthy(now: Date())
     @Published private(set) var isRunning = false
 
     /// Controls whether the nettop process is active. Set to true when the
@@ -28,6 +29,7 @@ final class NetworkMonitor: ObservableObject {
     private let systemResourceReader: SystemResourceReading
     private let resourceReader: ApplicationResourceReading
     private let historyStore: NetworkHistoryStore
+    private let healthCoordinator: NetworkHealthCoordinator
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
@@ -74,6 +76,48 @@ final class NetworkMonitor: ObservableObject {
         )
     }
 
+    /// Whether active diagnostics are opt-in enabled. Driven by preferences.
+    private var isActiveNetworkDiagnosticsEnabled = false
+
+    /// Human-readable health diagnostics status for the diagnostics center.
+    var healthDiagnostics: String {
+        healthCoordinator.diagnosticsStatusText(language: .english)
+    }
+
+    /// Whether active diagnostics is currently enabled (opt-in).
+    var isHealthDiagnosticsEnabled: Bool {
+        isActiveNetworkDiagnosticsEnabled
+    }
+
+    /// Current health evidence mode for diagnostics.
+    var healthEvidenceMode: NetworkHealthEvidenceMode {
+        healthSnapshot.evidenceMode
+    }
+
+    /// Update active-diagnostics scheduling inputs. Called by the status bar
+    /// controller when visibility, power, lock, or the enabled setting changes.
+    func updateHealthScheduling(
+        isEnabled: Bool,
+        isDetailWindowVisible: Bool,
+        isLowPowerMode: Bool,
+        isScreenLocked: Bool
+    ) {
+        isActiveNetworkDiagnosticsEnabled = isEnabled
+        healthCoordinator.update(
+            isEnabled: isEnabled,
+            isDetailWindowVisible: isDetailWindowVisible,
+            isLowPowerMode: isLowPowerMode,
+            isScreenLocked: isScreenLocked
+        )
+    }
+
+    /// User-initiated retest from the popover or preferences.
+    func requestHealthRetest() {
+        Task { @MainActor in
+            await healthCoordinator.retestNow()
+        }
+    }
+
     var currentSamplingPolicy: PerformanceSamplingPolicy {
         PerformanceSamplingCoordinator.policy(for: PerformanceSamplingState(
             isRunning: isRunning,
@@ -92,6 +136,7 @@ final class NetworkMonitor: ObservableObject {
         systemResourceReader: SystemResourceReading = LiveSystemResourceReader(),
         resourceReader: ApplicationResourceReading? = nil,
         historyStore: NetworkHistoryStore? = nil,
+        healthProbe: NetworkHealthProbing? = nil,
         now: @escaping () -> Date = Date.init
     ) {
         self.reader = reader
@@ -108,11 +153,28 @@ final class NetworkMonitor: ObservableObject {
             self.streamingReader = streaming
         }
         self.resourceReader = resourceReader ?? PSApplicationResourceReader()
+        healthCoordinator = NetworkHealthCoordinator(
+            probe: healthProbe ?? LiveNetworkHealthProbe(),
+            now: now
+        )
+    }
+
+    /// Wire the health coordinator's change callback after init completes.
+    /// Called once from `start()` to avoid capturing `self` mid-initialization.
+    private var healthCoordinatorWired = false
+    private func configureHealthCoordinatorIfNeeded() {
+        guard !healthCoordinatorWired else { return }
+        healthCoordinatorWired = true
+        healthCoordinator.onSnapshotChange = { [weak self] snapshot in
+            self?.healthSnapshot = snapshot
+        }
+        healthSnapshot = healthCoordinator.currentSnapshot
     }
 
     func start() {
         guard !isRunning else { return }
         isRunning = true
+        configureHealthCoordinatorIfNeeded()
         refresh()
         // Only start app-traffic sampling if the detail popover is visible.
         // When the popover opens later, resumeApplicationTrafficSampling()
@@ -163,6 +225,7 @@ final class NetworkMonitor: ObservableObject {
     func setPowerSaveMode(_ enabled: Bool) {
         powerSaveMode = enabled
         rescheduleTimers()
+        syncHealthScheduling()
     }
 
     func setScreenLockedForSampling(_ locked: Bool) {
@@ -175,6 +238,17 @@ final class NetworkMonitor: ObservableObject {
         } else {
             rescheduleTimers()
         }
+        syncHealthScheduling()
+    }
+
+    /// Re-push the current scheduling inputs to the health coordinator.
+    private func syncHealthScheduling() {
+        healthCoordinator.update(
+            isEnabled: isActiveNetworkDiagnosticsEnabled,
+            isDetailWindowVisible: isApplicationTrafficVisible,
+            isLowPowerMode: powerSaveMode,
+            isScreenLocked: isScreenLockedForSampling
+        )
     }
 
     private func rescheduleTimers() {
@@ -517,6 +591,49 @@ final class NetworkMonitor: ObservableObject {
     private func recordSnapshotForIntelligence() {
         historyStore.record(snapshot: snapshot)
         syncIntelligenceSummaryFromHistory()
+        // Feed passive evidence to the health coordinator. Use the snapshot's own
+        // timestamp rather than calling now() again, so we don't consume an extra
+        // tick from the injected clock (which would desample timed tests).
+        pushHealthPassiveEvidence(at: snapshot.timestamp)
+    }
+
+    /// Feed the latest passive evidence (interface/path availability + anomaly
+    /// notices) to the health coordinator so it can re-evaluate without a probe.
+    private func pushHealthPassiveEvidence(at sampledAt: Date) {
+        let externalInterfaces = snapshot.interfaces.filter {
+            NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name)
+        }
+        let hasExternalInterface = !externalInterfaces.isEmpty
+        let notices = healthNoticesFromLatestEvent()
+        let metrics = NetworkHealthMetrics(
+            dnsDurationMS: healthSnapshot.metrics.dnsDurationMS,
+            responseLatencyMS: healthSnapshot.metrics.responseLatencyMS,
+            recentAttemptCount: healthSnapshot.metrics.recentAttemptCount,
+            recentFailureCount: healthSnapshot.metrics.recentFailureCount,
+            hasEligibleExternalInterface: hasExternalInterface,
+            isLocalPathAvailable: hasExternalInterface
+        )
+        healthCoordinator.pushPassiveEvidence(metrics: metrics, notices: notices, now: sampledAt)
+    }
+
+    /// Map the latest anomaly event (if fresh) to a health notice cause.
+    private func healthNoticesFromLatestEvent() -> [NetworkHealthNotice] {
+        guard let event = intelligenceSummary.latestEvent else { return [] }
+        let cause: NetworkHealthCause?
+        switch event.kind {
+        case .highTraffic:
+            cause = .highTraffic
+        case .applicationSpike:
+            cause = .applicationSpike
+        case .networkDrop:
+            cause = .connectivity
+        case .networkRecovered:
+            cause = .recovery
+        case .proxyAttributionGap:
+            cause = .proxyAttributionGap
+        }
+        guard let cause else { return [] }
+        return [NetworkHealthNotice(cause: cause, timestamp: event.timestamp)]
     }
 
     private func recordApplicationTrafficForIntelligence(sampledAt: Date) {

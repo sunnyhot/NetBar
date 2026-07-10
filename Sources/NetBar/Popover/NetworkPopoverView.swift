@@ -51,6 +51,13 @@ struct NetworkPopoverView: View {
                             selectedWindow: $historyWindow,
                             appPreferences: appPreferences
                         )
+
+                        // Health summary directly below the chart — the chart is
+                        // the visual anchor, the health panel explains what it means.
+                        NetworkHealthPanel(
+                            monitor: monitor,
+                            appPreferences: appPreferences
+                        )
                     }
 
                     TodayNetworkSummaryPanel(

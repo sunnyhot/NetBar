@@ -20,7 +20,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Package.swift` | 30 | SPM 配置：macOS .v13、Swift 5 语言模式、`NetBar` executable target + `NetBarTests` test target |
-| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.39.9` |
+| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.39.17` |
 | `Resources/NetBar.entitlements` | 10 | App 沙盒与自动化相关 entitlements |
 | `.github/workflows/release.yml` | 141 | tag 触发的 GitHub Release 构建、测试、打包与发布流程 |
 | `Scripts/build-app.sh` | 117 | `swift build --disable-sandbox -c release` 后组装 `build/NetBar.app`，可选 codesign |
@@ -30,9 +30,10 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Sources/NetBar
 
-当前 `Sources/NetBar` 共 54 个 Swift 文件，约 16,742 行：
+当前 `Sources/NetBar` 共 63 个 Swift 文件，约 18,000 行：
 
 - 顶层核心文件 40 个
+- `Sources/NetBar/Popover/` 详情弹窗子视图 10 个
 - `Sources/NetBar/Preferences/` 偏好设置子视图 14 个
 - 最大文件：`StatusBarStyle.swift` 2054 行、`NetworkPopoverView.swift` 2004 行、`AppUpdater.swift` 1008 行、`StatusBarController.swift` 816 行、`NetworkMonitor.swift` 748 行
 
@@ -40,8 +41,12 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 |---|---:|---|
 | `Main.swift` | 16 | `@main` 入口，创建 `AppDelegate` 并启动 `NSApplication.run()` |
 | `AppDelegate.swift` | 235 | 初始化偏好、状态栏、历史、通知、宠物、更新器；配置主菜单、Dock/外观/语言 |
-| `NetworkMonitor.swift` | 748 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录和网络智能摘要 |
-| `StatusBarController.swift` | 816 | `NSStatusItem` 控制器：状态栏渲染调度、详情窗口、右键菜单、RunCat 动画、通知/宠物联动 |
+| `NetworkMonitor.swift` | 748 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录、网络智能摘要和健康诊断 |
+| `NetworkHealthModels.swift` | 230 | 网络健康状态/证据模式/阈值/cause/notice/snapshot 值类型 |
+| `NetworkHealthProbe.swift` | 180 | 主动诊断协议 `NetworkHealthProbing` + `LiveNetworkHealthProbe`（GitHub 参考目标） |
+| `NetworkHealthEvaluator.swift` | 230 | 纯规则评估 + 滞回（降级 2 次、恢复 3 次），阈值集中可注入 |
+| `NetworkHealthCoordinator.swift` | 300 | 自适应调度、取消、最近样本窗口、复测冷却、生命周期反应 |
+| `StatusBarController.swift` | 816 | `NSStatusItem` 控制器：状态栏渲染调度、详情窗口、右键菜单、RunCat 动画、通知/宠物联动、健康调度 |
 | `StatusBarStyle.swift` | 2054 | CoreGraphics 状态栏渲染引擎：设置模型、布局、签名 diff、文字/角色/特效绘制 |
 | `StatusBarRenderCache.swift` | 70 | 状态栏图片和文字布局 LRU cache |
 | `NetworkPopoverView.swift` | 2004 | SwiftUI 详情窗口：总览、趋势、接口、应用列表、系统资源、智能与历史展示；滚动内容懒构建、应用图标延迟解析 |
@@ -70,12 +75,13 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Tests
 
-当前测试共 2 个 Swift 文件、约 6,444 行、284 个测试：
+当前测试共 3 个 Swift 文件、约 7,500 行、352 个测试：
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 4984 | 偏好、状态栏渲染、窗口布局、智能提醒、历史统计、自定义角色、内置角色资源、更新 manifest、宠物、应用列表展示 |
 | `Tests/NetBarTests/SystemResourceTests.swift` | 1460 | 系统资源模型、采样策略、NetworkMonitor 集成、应用资源读取、streaming nettop 行为 |
+| `Tests/NetBarTests/NetworkHealthTests.swift` | 600 | 健康阈值边界、滞回、证据模式、probe outcome 分类、coordinator 调度/冷却/取消、智能菜单栏与角色映射、设置向后兼容 |
 
 ## 常用命令
 

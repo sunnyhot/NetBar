@@ -402,7 +402,44 @@ final class StatusBarController {
             }
             .store(in: &cancellables)
 
+        // Health snapshot changes should refresh the status bar (smart tone/character).
+        monitor.$healthSnapshot
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.requestRender()
+            }
+            .store(in: &cancellables)
+
+        // Drive health diagnostics scheduling from the opt-in preference.
+        appPreferences.$networkIntelligenceSettings
+            .removeDuplicates()
+            .sink { [weak self] _ in
+                self?.syncHealthScheduling()
+            }
+            .store(in: &cancellables)
+
         setupCatAnimationIfNeeded(force: true)
+    }
+
+    /// Push the current visibility / power / lock / opt-in state into the
+    /// monitor's health coordinator so active diagnostics adapt their schedule.
+    private func syncHealthScheduling() {
+        monitor.updateHealthScheduling(
+            isEnabled: appPreferences.networkIntelligenceSettings.isActiveNetworkDiagnosticsEnabled,
+            isDetailWindowVisible: detailsWindowController.isVisible,
+            isLowPowerMode: powerObserver.isLowPowerMode,
+            isScreenLocked: powerObserver.isScreenLocked
+        )
+    }
+
+    /// Forward a manual health retest request to the monitor (from preferences).
+    func requestHealthRetest() {
+        monitor.requestHealthRetest()
+    }
+
+    /// Health diagnostics status text for the diagnostics snapshot.
+    var healthDiagnostics: String {
+        monitor.healthDiagnostics
     }
 
     private func handleNetworkIntelligenceUpdate() {
@@ -603,13 +640,15 @@ final class StatusBarController {
             appTraffic: monitor.appTraffic,
             intelligenceSummary: monitor.intelligenceSummary,
             settings: intelligenceSettings,
-            language: appPreferences.resolvedLanguage
+            language: appPreferences.resolvedLanguage,
+            health: monitor.healthSnapshot
         )
         let characterOverrideID = settings.showsCat ? SmartCharacterSuggestionEvaluator.suggestedCharacterID(
             snapshot: monitor.snapshot,
             appTraffic: monitor.appTraffic,
             intelligenceSummary: monitor.intelligenceSummary,
-            settings: intelligenceSettings
+            settings: intelligenceSettings,
+            health: monitor.healthSnapshot
         ) : nil
         let renderTime = Date().timeIntervalSince1970
 
@@ -676,6 +715,7 @@ final class StatusBarController {
     private func configureDetailsWindowObserver() {
         detailsWindowController.onWindowClosed = { [weak self] in
             self?.applicationTrafficVisibilityScheduler?.schedulePause()
+            self?.syncHealthScheduling()
         }
     }
 
@@ -689,6 +729,9 @@ final class StatusBarController {
         } else {
             detailsWindowController.toggle(anchor: statusItem.button)
             applicationTrafficVisibilityScheduler?.scheduleResume()
+            // Popover is now visible: tell the health coordinator to use the
+            // faster visible interval.
+            syncHealthScheduling()
         }
     }
 
