@@ -3,24 +3,8 @@ import XCTest
 
 @MainActor
 final class NetworkHealthTests: XCTestCase {
-    private func metrics(
-        hasInterface: Bool = true,
-        hasLocalPath: Bool = true
-    ) -> NetworkHealthMetrics {
-        NetworkHealthMetrics(
-            hasEligibleExternalInterface: hasInterface,
-            isLocalPathAvailable: hasLocalPath
-        )
-    }
-
     private func healthSnapshot(_ state: NetworkHealthState) -> NetworkHealthSnapshot {
-        NetworkHealthSnapshot(
-            state: state,
-            primaryCause: nil,
-            metrics: metrics(),
-            notices: [],
-            sampledAt: Date()
-        )
+        NetworkHealthSnapshot(state: state)
     }
 
     private func smartSettings(
@@ -34,55 +18,15 @@ final class NetworkHealthTests: XCTestCase {
     }
 
     func testLocalInterfaceAvailabilityProducesGoodState() {
-        let snapshot = NetworkHealthSnapshot.localOnly(
-            metrics: metrics(),
-            notices: [],
-            now: Date()
-        )
+        let snapshot = NetworkHealthSnapshot.localInterface(isAvailable: true)
 
         XCTAssertEqual(snapshot.state, .good)
-        XCTAssertNil(snapshot.primaryCause)
     }
 
     func testMissingExternalInterfaceProducesOfflineState() {
-        let snapshot = NetworkHealthSnapshot.localOnly(
-            metrics: metrics(hasInterface: false, hasLocalPath: false),
-            notices: [],
-            now: Date()
-        )
+        let snapshot = NetworkHealthSnapshot.localInterface(isAvailable: false)
 
         XCTAssertEqual(snapshot.state, .offline)
-        XCTAssertEqual(snapshot.primaryCause, .localPathUnavailable)
-    }
-
-    func testUnavailableLocalPathProducesOfflineState() {
-        let snapshot = NetworkHealthSnapshot.localOnly(
-            metrics: metrics(hasInterface: true, hasLocalPath: false),
-            notices: [],
-            now: Date()
-        )
-
-        XCTAssertEqual(snapshot.state, .offline)
-        XCTAssertEqual(snapshot.primaryCause, .localPathUnavailable)
-    }
-
-    func testNoticeDoesNotDegradeAvailableLocalState() {
-        let notice = NetworkHealthNotice(cause: .highTraffic, timestamp: Date())
-        let snapshot = NetworkHealthSnapshot.localOnly(
-            metrics: metrics(),
-            notices: [notice],
-            now: Date()
-        )
-
-        XCTAssertEqual(snapshot.state, .good)
-        XCTAssertEqual(snapshot.primaryCause, .highTraffic)
-        XCTAssertEqual(snapshot.notices, [notice])
-    }
-
-    func testHealthStateTitlesAreBilingual() {
-        XCTAssertEqual(NetworkHealthState.good.title(language: .simplifiedChinese), "网络可用")
-        XCTAssertEqual(NetworkHealthState.good.title(language: .english), "Network available")
-        XCTAssertEqual(NetworkHealthState.offline.title(language: .english), "Offline")
     }
 
     func testSmartStatusBarOfflineEmphasis() {

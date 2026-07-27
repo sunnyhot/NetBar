@@ -30,23 +30,23 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Sources/NetBar
 
-当前 `Sources/NetBar` 共 60 个 Swift 文件，约 16,600 行：
+当前 `Sources/NetBar` 共 58 个 Swift 文件，约 16,200 行：
 
 - 顶层核心文件 36 个
-- `Sources/NetBar/Popover/` 详情弹窗子视图 10 个
+- `Sources/NetBar/Popover/` 详情弹窗子视图 8 个
 - `Sources/NetBar/Preferences/` 偏好设置子视图 14 个
-- 最大文件：`StatusBarStyle.swift` 2107 行、`AppUpdater.swift` 1008 行、`StatusBarController.swift` 854 行、`NetworkMonitor.swift` 781 行
+- 最大文件：`StatusBarStyle.swift` 2107 行、`AppUpdater.swift` 1008 行、`StatusBarController.swift` 854 行、`NetworkMonitor.swift` 752 行
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Main.swift` | 16 | `@main` 入口，创建 `AppDelegate` 并启动 `NSApplication.run()` |
-| `AppDelegate.swift` | 232 | 初始化偏好、状态栏、历史、通知、宠物、更新器；配置主菜单、Dock/外观/语言 |
-| `NetworkMonitor.swift` | 781 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录、网络智能摘要和本地接口健康状态 |
-| `NetworkHealthModels.swift` | 163 | 本地接口健康状态、cause、notice、metrics 和 snapshot 值类型 |
+| `AppDelegate.swift` | 232 | 初始化偏好、状态栏、历史、通知和更新器；配置主菜单、Dock/外观/语言 |
+| `NetworkMonitor.swift` | 752 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录、网络智能摘要和本地接口健康状态 |
+| `NetworkHealthModels.swift` | 17 | 本地接口可用/离线状态和 snapshot 值类型 |
 | `StatusBarController.swift` | 854 | `NSStatusItem` 控制器：状态栏渲染调度、详情窗口、右键菜单、RunCat 动画和通知联动 |
 | `StatusBarStyle.swift` | 2107 | CoreGraphics 状态栏渲染引擎：设置模型、布局、签名 diff、文字/角色/特效绘制 |
 | `StatusBarRenderCache.swift` | 70 | 状态栏图片和文字布局 LRU cache |
-| `Popover/NetworkPopoverView.swift` | 180 | SwiftUI 详情窗口容器：组合总览、趋势、接口、应用列表、系统资源、智能与历史子视图 |
+| `Popover/NetworkPopoverView.swift` | 164 | SwiftUI 详情窗口容器：组合总览、趋势、接口、应用列表、系统资源、智能与历史子视图 |
 | `DetailsWindowController.swift` | 476 | 详情窗口创建、定位、外部点击关闭策略；打开后延迟刷新以避开首帧动画 |
 | `AppUpdater.swift` | 1008 | 自动更新：`latest.json`/GitHub API、下载、SHA256、解压、架构/签名校验、自替换安装 |
 | `AppPreferences.swift` | 398 | 全局偏好：Dock、语言、外观、排序、popover 位置、网络智能设置、开机启动 |
@@ -71,13 +71,13 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Tests
 
-当前测试共 3 个 Swift 文件、约 6,700 行、291 个测试：
+当前测试共 3 个 Swift 文件、约 6,600 行、287 个测试：
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 5070 | 偏好、状态栏渲染、窗口布局、智能提醒、历史统计、自定义角色、内置角色资源、更新 manifest、应用列表展示 |
+| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 5043 | 偏好、状态栏渲染、窗口布局、智能提醒、历史统计、自定义角色、内置角色资源、更新 manifest、应用列表展示 |
 | `Tests/NetBarTests/SystemResourceTests.swift` | 1447 | 系统资源模型、采样策略、NetworkMonitor 集成、应用资源读取、streaming nettop 行为 |
-| `Tests/NetBarTests/NetworkHealthTests.swift` | 162 | 本地接口健康状态、异常提示、智能菜单栏与角色映射 |
+| `Tests/NetBarTests/NetworkHealthTests.swift` | 106 | 本地接口状态、智能菜单栏与角色映射 |
 
 ## 常用命令
 

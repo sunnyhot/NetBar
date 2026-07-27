@@ -7,7 +7,7 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var systemResources = SystemResourceSnapshot.empty
     @Published private(set) var intelligenceSummary = NetworkIntelligenceSummary.empty
-    @Published private(set) var healthSnapshot = NetworkHealthSnapshot.localOnlyHealthy(now: Date())
+    @Published private(set) var healthSnapshot = NetworkHealthSnapshot.localInterface(isAvailable: true)
     @Published private(set) var isRunning = false
 
     /// Controls whether the nettop process is active. Set to true when the
@@ -354,7 +354,6 @@ final class NetworkMonitor: ObservableObject {
         )
         if let latest = events.last {
             intelligenceSummary.latestEvent = latest
-            pushHealthPassiveEvidence(at: latest.timestamp)
         }
         return events
     }
@@ -513,44 +512,16 @@ final class NetworkMonitor: ObservableObject {
     private func recordSnapshotForIntelligence() {
         historyStore.record(snapshot: snapshot)
         syncIntelligenceSummaryFromHistory()
-        // Keep health local-only: interface availability plus anomaly notices.
-        pushHealthPassiveEvidence(at: snapshot.timestamp)
+        publishLocalInterfaceHealth()
     }
 
-    /// Publish local interface/path availability and non-quality notices.
-    private func pushHealthPassiveEvidence(at sampledAt: Date) {
-        let externalInterfaces = snapshot.interfaces.filter {
+    private func publishLocalInterfaceHealth() {
+        let hasExternalInterface = snapshot.interfaces.contains {
             NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name)
         }
-        let hasExternalInterface = !externalInterfaces.isEmpty
-        let notices = healthNoticesFromLatestEvent()
-        let metrics = NetworkHealthMetrics(
-            hasEligibleExternalInterface: hasExternalInterface,
-            isLocalPathAvailable: hasExternalInterface
+        healthSnapshot = NetworkHealthSnapshot.localInterface(
+            isAvailable: hasExternalInterface
         )
-        healthSnapshot = NetworkHealthSnapshot.localOnly(
-            metrics: metrics,
-            notices: notices,
-            now: sampledAt
-        )
-    }
-
-    /// Map the latest anomaly event (if fresh) to a health notice cause.
-    private func healthNoticesFromLatestEvent() -> [NetworkHealthNotice] {
-        guard let event = intelligenceSummary.latestEvent else { return [] }
-        let cause: NetworkHealthCause?
-        switch event.kind {
-        case .highTraffic:
-            cause = .highTraffic
-        case .applicationSpike:
-            cause = .applicationSpike
-        case .networkDrop:
-            cause = .connectivity
-        case .networkRecovered:
-            cause = .recovery
-        }
-        guard let cause else { return [] }
-        return [NetworkHealthNotice(cause: cause, timestamp: event.timestamp)]
     }
 
     private func recordApplicationTrafficForIntelligence(sampledAt: Date) {

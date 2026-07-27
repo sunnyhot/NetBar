@@ -1585,27 +1585,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(NetworkNotificationAuthorizationStatus.notDetermined.title(language: .simplifiedChinese), "未设置")
     }
 
-    func testNetworkIntelligenceStatusPresentationMapsSeverity() {
-        let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "网络断流",
-            message: "网络活动下降。",
-            timestamp: Date(timeIntervalSince1970: 10),
-            cooldownKey: "networkDrop"
-        )
-
-        let presentation = NetworkIntelligenceStatusPresentation(
-            event: event,
-            language: .simplifiedChinese
-        )
-
-        XCTAssertEqual(presentation.title, "网络断流")
-        XCTAssertEqual(presentation.message, "网络活动下降。")
-        XCTAssertEqual(presentation.tone, .critical)
-        XCTAssertEqual(presentation.symbolName, "exclamationmark.triangle.fill")
-    }
-
     func testNetworkDailySummaryPresentationFormatsTodayEstimate() {
         let today = NetworkDailySummary(
             dateKey: "2026-06-08",
@@ -4865,10 +4844,7 @@ extension PreferencesAndPresentationTests {
 // MARK: - Popover Decomposition Tests
 
 extension PreferencesAndPresentationTests {
-    func testLivingSignalPopoverOwnsStatusAndSummaryFiles() throws {
-        let statusSource = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Popover", "NetworkIntelligenceStatusView.swift"]
-        )
+    func testLivingSignalPopoverOwnsSummaryFiles() throws {
         let summarySource = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"]
         )
@@ -4876,8 +4852,6 @@ extension PreferencesAndPresentationTests {
             pathComponents: ["Sources", "NetBar", "Popover", "NetworkPopoverView.swift"]
         )
 
-        XCTAssertTrue(statusSource.contains("struct NetworkIntelligenceStatusCard"))
-        XCTAssertFalse(statusSource.contains("struct InsightStreamView"))
         XCTAssertTrue(summarySource.contains("struct TodayNetworkSummaryPanel"))
         XCTAssertTrue(summarySource.contains("struct HistoryLedgerPanel"))
         XCTAssertFalse(rootSource.contains("struct TodayNetworkSummary: View"))
@@ -4933,7 +4907,6 @@ extension PreferencesAndPresentationTests {
 
     func testPopoverPanelsAvoidBroadSystemTrafficColorLiterals() throws {
         let panelFiles = [
-            ["Sources", "NetBar", "Popover", "NetworkIntelligenceStatusView.swift"],
             ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"],
             ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"],
             ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]

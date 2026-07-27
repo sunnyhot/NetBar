@@ -214,7 +214,7 @@ NetworkIntelligenceCoordinator
 
 - `NetworkIntelligenceModels.swift`: 设置、异常事件、日汇总
 - `NetworkAnomalyDetector.swift`: 持续高流量、应用突增、断流/恢复
-- `Popover/NetworkIntelligenceStatusView.swift`: 展示最新异常状态，不保留事件流或建议卡片
+- `Popover/PopoverHeaderView.swift`: 顶部状态区展示实时流量状态和最新异常
 - `NetworkHistoryStore.swift`: 日维度统计、Top 应用、动画播放计数、本地 JSON 持久化
 - `NetworkNotificationController.swift`: 通知授权、发送和 cooldown
 
@@ -228,29 +228,26 @@ NetworkIntelligenceCoordinator
 ## 8.5. 网络健康层（Network Health）
 
 ```text
-NetworkSnapshot / ApplicationTrafficState / NetworkIntelligenceSummary
-macOS 本地外部接口状态 + anomaly notices
-                       ▼
-              NetworkHealthSnapshot
-                       │
-       ┌───────────────┴───────────────┐
-       ▼                               ▼
-NetworkPopoverView          StatusBarContextEvaluator
-(NetworkHealthPanel)         → text / tone / character / motion
+NetworkSnapshot
+macOS 本地外部接口状态
+          ▼
+NetworkHealthSnapshot
+          │
+          ▼
+StatusBarContextEvaluator
+→ text / tone / character / motion
 ```
 
 关键文件：
 
-- `NetworkHealthModels.swift`: 健康状态、cause、notice、接口指标和 snapshot
-- `NetworkMonitor.swift`: 发布 `@Published healthSnapshot`，仅使用接口可用性和 anomaly notices
-- `Popover/NetworkHealthPanel.swift`: 展示本地接口、路径状态和异常提示
+- `NetworkHealthModels.swift`: 本地接口可用/离线状态和 snapshot
+- `NetworkMonitor.swift`: 根据外部接口是否存在发布 `@Published healthSnapshot`
 - `StatusBarContextEvaluator.swift`: 消费 health 产出 tone + 短文案 + 角色建议（smart override，不写回偏好）
 
 原则：
 
 - 不进行 DNS、HTTPS 或其他公网主动探测
 - 健康状态只依据 macOS 本地外部接口，不声称测量公网质量
-- 高流量与应用突增只成 notice，不降低健康状态
 - smart override 全为 render-time 值，不写回 StatusBarSettings 或用户角色选择
 
 ## 9. 自动更新

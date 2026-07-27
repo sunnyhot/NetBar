@@ -28,16 +28,6 @@ struct NetworkPopoverView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    NetworkIntelligenceStatusCard(
-                        presentation: NetworkIntelligenceStatusPresentation(
-                            event: monitor.intelligenceSummary.latestEvent,
-                            language: appPreferences.resolvedLanguage
-                        ),
-                        appPreferences: appPreferences,
-                        openPreferences: openPreferences
-                    )
-                    .padding(.top, 16)
-
                     if !appPreferences.hasCompletedOnboarding {
                         FirstLaunchGuide(
                             appPreferences: appPreferences,
@@ -52,13 +42,6 @@ struct NetworkPopoverView: View {
                         TrafficPulseChartView(
                             presentation: chartPresentation,
                             selectedWindow: $historyWindow,
-                            appPreferences: appPreferences
-                        )
-
-                        // Health summary directly below the chart — the chart is
-                        // the visual anchor, the health panel explains what it means.
-                        NetworkHealthPanel(
-                            monitor: monitor,
                             appPreferences: appPreferences
                         )
                     }
@@ -108,6 +91,7 @@ struct NetworkPopoverView: View {
                     )
                 }
                 .padding(.horizontal, LivingSignalLayout.horizontalPadding)
+                .padding(.top, 16)
                 .padding(.bottom, 16)
             }
             .frame(minHeight: 0)
