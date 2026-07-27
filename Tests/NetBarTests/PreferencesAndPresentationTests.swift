@@ -313,327 +313,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
-    func testStatusBarContextEvaluatorFallsBackToManualWhenDisabled() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartStatusBarModeEnabled = false
-        let context = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 20_000_000, upload: 1_000_000),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings,
-            language: .english
-        )
-
-        XCTAssertEqual(context.emphasis, .manual)
-        XCTAssertNil(context.trafficDisplayModeOverride)
-    }
-
-    func testStatusBarContextEvaluatorPrioritizesAnomaly() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartStatusBarModeEnabled = true
-        let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            timestamp: Date(),
-            cooldownKey: "networkDrop"
-        )
-        let summary = NetworkIntelligenceSummary(
-            latestEvent: event,
-            today: .empty(dateKey: "2026-06-12"),
-            recentDays: [],
-            realtimeTopApplications: [],
-            todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:]
-        )
-
-        let context = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty,
-            intelligenceSummary: summary,
-            settings: settings,
-            language: .english
-        )
-
-        XCTAssertEqual(context.emphasis, .anomaly(.networkDrop))
-        XCTAssertEqual(context.overrideLine, "! Network drop")
-    }
-
-    func testStatusBarContextEvaluatorIgnoresStaleAnomaly() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartStatusBarModeEnabled = true
-        let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            timestamp: Date().addingTimeInterval(-61),
-            cooldownKey: "networkDrop"
-        )
-        let summary = NetworkIntelligenceSummary(
-            latestEvent: event,
-            today: .empty(dateKey: "2026-06-12"),
-            recentDays: [],
-            realtimeTopApplications: [],
-            todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:]
-        )
-
-        let context = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty,
-            intelligenceSummary: summary,
-            settings: settings,
-            language: .english
-        )
-
-        XCTAssertEqual(context.emphasis, .manual)
-        XCTAssertNil(context.overrideLine)
-    }
-
-    func testStatusBarContextEvaluatorShortensTopApplicationName() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartStatusBarModeEnabled = true
-        let appTraffic = ApplicationTrafficState(
-            timestamp: Date(),
-            applications: [appRate("VeryLongApplicationNameThatWouldOverflow", download: 8_000_000, upload: 500_000)],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let context = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
-            appTraffic: appTraffic,
-            intelligenceSummary: .empty,
-            settings: settings,
-            language: .english
-        )
-
-        XCTAssertEqual(context.emphasis, .topApplication("VeryLongA..."))
-        XCTAssertEqual(context.overrideLine, "VeryLongA...")
-    }
-
-    func testStatusBarContextEvaluatorIgnoresStaleTopApplicationSample() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartStatusBarModeEnabled = true
-        let appTraffic = ApplicationTrafficState(
-            timestamp: Date().addingTimeInterval(-11),
-            applications: [appRate("Safari", download: 8_000_000, upload: 500_000)],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let context = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
-            appTraffic: appTraffic,
-            intelligenceSummary: .empty,
-            settings: settings,
-            language: .english
-        )
-
-        XCTAssertEqual(context.emphasis, .manual)
-        XCTAssertNil(context.overrideLine)
-    }
-
-    func testStatusBarContextEvaluatorUsesConfiguredHighTrafficThreshold() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartStatusBarModeEnabled = true
-        settings.highTrafficThreshold = .mbps25
-
-        let belowThreshold = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 12_000_000, upload: 500_000),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings,
-            language: .english
-        )
-        let aboveThreshold = StatusBarContextEvaluator.evaluate(
-            snapshot: sampleSnapshot(download: 27_000_000, upload: 500_000),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings,
-            language: .english
-        )
-
-        XCTAssertEqual(belowThreshold.emphasis, .manual)
-        XCTAssertEqual(aboveThreshold.emphasis, .totalTraffic)
-        XCTAssertEqual(aboveThreshold.trafficDisplayModeOverride, .total)
-    }
-
-    func testStatusBarPresentationUsesSmartOverrideLineAndKeepsTrafficSpeedVisible() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsArrows = true
-        let context = SmartStatusBarContext(
-            emphasis: .topApplication("VeryLongA..."),
-            trafficDisplayModeOverride: nil,
-            overrideLine: "VeryLongA...",
-            tone: .normal
-        )
-
-        let presentation = StatusBarDisplayRenderer.presentation(
-            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
-            settings: settings,
-            smartContext: context
-        )
-
-        XCTAssertEqual(presentation.lines, ["VeryLongA...", "↕ 8.11 MB/s"])
-    }
-
-    func testSmartOverrideLineKeepsAutomaticWidthAtLeastManualWidth() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.usesAutomaticWidth = true
-        settings.showsArrows = true
-        let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
-        let manual = StatusBarDisplayRenderer.presentation(snapshot: snapshot, settings: settings)
-        let smart = StatusBarDisplayRenderer.presentation(
-            snapshot: snapshot,
-            settings: settings,
-            smartContext: SmartStatusBarContext(
-                emphasis: .topApplication("Arc"),
-                trafficDisplayModeOverride: nil,
-                overrideLine: "Arc",
-                tone: .normal
-            )
-        )
-
-        XCTAssertGreaterThanOrEqual(smart.width, manual.width)
-    }
-
-    func testSmartCharacterSuggestionReturnsNilWhenDisabled() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartCharacterSuggestionEnabled = false
-
-        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 40_000_000, upload: 2_000_000),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings
-        )
-
-        XCTAssertNil(suggestion)
-    }
-
-    func testSmartCharacterSuggestionHighlightsFreshNetworkDrop() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartCharacterSuggestionEnabled = true
-        let now = Date(timeIntervalSince1970: 100)
-        let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            timestamp: now.addingTimeInterval(-5),
-            cooldownKey: "networkDrop"
-        )
-        let summary = NetworkIntelligenceSummary(
-            latestEvent: event,
-            today: .empty(dateKey: "2026-06-12"),
-            recentDays: [],
-            realtimeTopApplications: [],
-            todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:]
-        )
-
-        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty,
-            intelligenceSummary: summary,
-            settings: settings,
-            now: now
-        )
-
-        XCTAssertEqual(suggestion, "little_cloud")
-    }
-
-    func testSmartCharacterSuggestionIgnoresStaleNetworkDrop() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartCharacterSuggestionEnabled = true
-        let now = Date(timeIntervalSince1970: 100)
-        let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            timestamp: now.addingTimeInterval(-61),
-            cooldownKey: "networkDrop"
-        )
-        let summary = NetworkIntelligenceSummary(
-            latestEvent: event,
-            today: .empty(dateKey: "2026-06-12"),
-            recentDays: [],
-            realtimeTopApplications: [],
-            todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:]
-        )
-
-        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty,
-            intelligenceSummary: summary,
-            settings: settings,
-            now: now
-        )
-
-        XCTAssertEqual(suggestion, "tiny_plant")
-    }
-
-    func testSmartCharacterSuggestionUsesTrafficShape() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartCharacterSuggestionEnabled = true
-        settings.highTrafficThreshold = .mbps25
-
-        let uploadDominant = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 400_000, upload: 3_000_000),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings
-        )
-        let highTotal = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 30_000_000, upload: 500_000),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings
-        )
-        let idle = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 20, upload: 10),
-            appTraffic: .empty,
-            intelligenceSummary: .empty,
-            settings: settings
-        )
-
-        XCTAssertEqual(uploadDominant, "little_cloud")
-        XCTAssertEqual(highTotal, "penguin")
-        XCTAssertEqual(idle, "tiny_plant")
-    }
-
-    func testSmartCharacterSuggestionUsesFreshTopApplicationBurst() {
-        var settings = NetworkIntelligenceSettings.default
-        settings.isSmartCharacterSuggestionEnabled = true
-        let now = Date(timeIntervalSince1970: 100)
-        let appTraffic = ApplicationTrafficState(
-            timestamp: now.addingTimeInterval(-2),
-            applications: [appRate("Safari", download: 8_000_000, upload: 500_000)],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: sampleSnapshot(download: 8_000_000, upload: 500_000),
-            appTraffic: appTraffic,
-            intelligenceSummary: .empty,
-            settings: settings,
-            now: now
-        )
-
-        XCTAssertEqual(suggestion, "shiba_inu")
-    }
 
     func testDiagnosticsCenterBuildsPrivacySafeSummaryText() {
         let snapshot = DiagnosticsSnapshot(
@@ -661,11 +340,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(text.contains("example.com"))
     }
 
-    func testNetworkHistoryPresentationEstimateNoticeIsLocalized() {
-        let presentation = NetworkHistoryPresentation.make(summary: .empty, language: .simplifiedChinese)
-
-        XCTAssertTrue(presentation.estimateNotice.contains("本地估算值"))
-    }
 
     func testStatusBarTrafficDisplayModePersistsAndResets() {
         let defaults = isolatedDefaults()
@@ -692,15 +366,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(presentation.kind, .retinaImage)
-    }
-
-    func testMenuBarPreferenceGroupsFollowPreviewToLayoutWorkflow() {
-        XCTAssertEqual(
-            MenuBarPreferenceGroup.allCases,
-            [.preview, .display, .character, .animation, .layout]
-        )
-        XCTAssertEqual(MenuBarPreferenceGroup.display.title(language: .simplifiedChinese), "显示内容")
-        XCTAssertEqual(MenuBarPreferenceGroup.animation.title(language: .english), "Animation & Rotation")
     }
 
     func testAnimatedCharacterCatalogDoesNotRunItsOwnTimer() throws {
@@ -1148,20 +813,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(settings.isAnomalyDetectionEnabled)
         XCTAssertFalse(settings.isSystemNotificationEnabled)
         XCTAssertEqual(settings.highTrafficThreshold, .mbps10)
-        XCTAssertTrue(settings.isApplicationSpikeAlertEnabled)
-        XCTAssertTrue(settings.isNetworkDropAlertEnabled)
         XCTAssertTrue(settings.isHistoryTrackingEnabled)
-    }
-
-    func testNetworkIntelligenceSettingsV039Defaults() {
-        let settings = NetworkIntelligenceSettings.default
-
-        XCTAssertFalse(settings.isSmartStatusBarModeEnabled)
-        XCTAssertFalse(settings.isSmartCharacterSuggestionEnabled)
-        XCTAssertTrue(settings.showsSmartAnomalyMarker)
-        XCTAssertTrue(settings.showsSmartTopApplication)
         XCTAssertEqual(settings.historyRetentionDays, 30)
-        XCTAssertTrue(settings.isApplicationHistoryRankingEnabled)
     }
 
     func testNetworkIntelligenceSettingsDecodeMissingFieldsFromDefaults() throws {
@@ -1178,8 +831,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(settings.highTrafficThreshold, .mbps25)
         XCTAssertEqual(settings.hasSeenNotificationOnboarding, NetworkIntelligenceSettings.default.hasSeenNotificationOnboarding)
         XCTAssertEqual(settings.isSystemNotificationEnabled, NetworkIntelligenceSettings.default.isSystemNotificationEnabled)
-        XCTAssertEqual(settings.isApplicationSpikeAlertEnabled, NetworkIntelligenceSettings.default.isApplicationSpikeAlertEnabled)
-        XCTAssertEqual(settings.isNetworkDropAlertEnabled, NetworkIntelligenceSettings.default.isNetworkDropAlertEnabled)
         XCTAssertEqual(settings.isHistoryTrackingEnabled, NetworkIntelligenceSettings.default.isHistoryTrackingEnabled)
     }
 
@@ -1204,15 +855,14 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(decoded.hasSeenNotificationOnboarding)
         XCTAssertFalse(decoded.isAnomalyDetectionEnabled)
         XCTAssertEqual(decoded.highTrafficThreshold, .mbps25)
-        XCTAssertFalse(decoded.isSmartStatusBarModeEnabled)
-        XCTAssertFalse(decoded.isSmartCharacterSuggestionEnabled)
         XCTAssertEqual(decoded.historyRetentionDays, 30)
-        XCTAssertTrue(decoded.isApplicationHistoryRankingEnabled)
 
         let encoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
         XCTAssertFalse(encoded.contains("isInsightStreamEnabled"))
         XCTAssertFalse(encoded.contains("insightRetentionLimit"))
         XCTAssertFalse(encoded.contains("isInsightSuggestionEnabled"))
+        XCTAssertFalse(encoded.contains("isApplicationSpikeAlertEnabled"))
+        XCTAssertFalse(encoded.contains("isNetworkDropAlertEnabled"))
     }
 
     func testAppPreferencesPersistNetworkIntelligenceSettings() {
@@ -1224,10 +874,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             isAnomalyDetectionEnabled: false,
             isSystemNotificationEnabled: true,
             highTrafficThreshold: .mbps25,
-            isApplicationSpikeAlertEnabled: false,
-            isNetworkDropAlertEnabled: true,
-            isHistoryTrackingEnabled: true,
-            isSmartCharacterSuggestionEnabled: true
+            isHistoryTrackingEnabled: true
         )
 
         let reloaded = AppPreferences(defaults: defaults, loginItemManager: FakeLoginItemManager())
@@ -1236,17 +883,11 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(reloaded.networkIntelligenceSettings.hasSeenNotificationOnboarding)
         XCTAssertFalse(reloaded.networkIntelligenceSettings.isAnomalyDetectionEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isSystemNotificationEnabled)
-        XCTAssertFalse(reloaded.networkIntelligenceSettings.isApplicationSpikeAlertEnabled)
-        XCTAssertTrue(reloaded.networkIntelligenceSettings.isNetworkDropAlertEnabled)
-        XCTAssertTrue(reloaded.networkIntelligenceSettings.isSmartCharacterSuggestionEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isHistoryTrackingEnabled)
     }
 
     func testNetworkAnomalyEventLocalizedTitles() {
         XCTAssertEqual(NetworkAnomalyKind.highTraffic.title(language: .simplifiedChinese), "高流量")
-        XCTAssertEqual(NetworkAnomalyKind.applicationSpike.title(language: .english), "Application spike")
-        XCTAssertEqual(NetworkAnomalyKind.networkDrop.title(language: .simplifiedChinese), "网络断流")
-        XCTAssertEqual(NetworkAnomalyKind.networkRecovered.title(language: .english), "Network recovered")
     }
 
     func testNetworkAnomalyDetectorEmitsHighTrafficAfterSustainedThreshold() {
@@ -1254,11 +895,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let settings = NetworkIntelligenceSettings.default
         let start = Date(timeIntervalSince1970: 100)
 
-        XCTAssertTrue(detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start), appTraffic: .empty, settings: settings, now: start).isEmpty)
+        XCTAssertTrue(detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start), settings: settings, now: start).isEmpty)
 
         let events = detector.detect(
             snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
-            appTraffic: .empty,
             settings: settings,
             now: start.addingTimeInterval(11)
         )
@@ -1273,12 +913,11 @@ final class PreferencesAndPresentationTests: XCTestCase {
         disabledSettings.isAnomalyDetectionEnabled = false
         let start = Date(timeIntervalSince1970: 100)
 
-        _ = detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start), appTraffic: .empty, settings: settings, now: start)
-        _ = detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(5)), appTraffic: .empty, settings: disabledSettings, now: start.addingTimeInterval(5))
+        _ = detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start), settings: settings, now: start)
+        _ = detector.detect(snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(5)), settings: disabledSettings, now: start.addingTimeInterval(5))
 
         let staleWindow = detector.detect(
             snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
-            appTraffic: .empty,
             settings: settings,
             now: start.addingTimeInterval(11)
         )
@@ -1287,7 +926,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         let restartedWindow = detector.detect(
             snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(21)),
-            appTraffic: .empty,
             settings: settings,
             now: start.addingTimeInterval(21)
         )
@@ -1302,14 +940,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         _ = detector.detect(
             snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start),
-            appTraffic: .empty,
             settings: settings,
             now: start,
             language: .english
         )
         let events = detector.detect(
             snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
-            appTraffic: .empty,
             settings: settings,
             now: start.addingTimeInterval(11),
             language: .english
@@ -1319,187 +955,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(events.first?.message, "Current total speed is about 11.0 MB/s.")
     }
 
-    func testNetworkAnomalyDetectorEmitsApplicationSpikeForDominantApp() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        let start = Date(timeIntervalSince1970: 100)
-        let state = ApplicationTrafficState(
-            timestamp: start,
-            applications: [
-                appRate("VideoSync", download: 6_000_000, upload: 500_000),
-                appRate("Mail", download: 300_000, upload: 20_000)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start), appTraffic: state, settings: settings, now: start)
-        let events = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(6)), appTraffic: state, settings: settings, now: start.addingTimeInterval(6))
-
-        XCTAssertEqual(events.first?.kind, .applicationSpike)
-        XCTAssertEqual(events.first?.applicationName, "VideoSync")
-    }
-
-    func testNetworkAnomalyDetectorClearsApplicationSpikeTimerWhenAlertDisabled() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        var disabledSettings = settings
-        disabledSettings.isApplicationSpikeAlertEnabled = false
-        let start = Date(timeIntervalSince1970: 100)
-        let state = ApplicationTrafficState(
-            timestamp: start,
-            applications: [
-                appRate("VideoSync", download: 6_000_000, upload: 500_000),
-                appRate("Mail", download: 300_000, upload: 20_000)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start), appTraffic: state, settings: settings, now: start)
-        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(1)), appTraffic: state, settings: disabledSettings, now: start.addingTimeInterval(1))
-
-        let staleWindow = detector.detect(
-            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(6)),
-            appTraffic: state,
-            settings: settings,
-            now: start.addingTimeInterval(6)
-        )
-
-        XCTAssertTrue(staleWindow.isEmpty)
-
-        let restartedWindow = detector.detect(
-            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(12)),
-            appTraffic: state,
-            settings: settings,
-            now: start.addingTimeInterval(12)
-        )
-
-        XCTAssertEqual(restartedWindow.map(\.kind), [.applicationSpike])
-    }
-
-    func testNetworkAnomalyDetectorRequiresContinuousApplicationSpikeForSameDominantApp() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        let start = Date(timeIntervalSince1970: 100)
-        let spikingState = ApplicationTrafficState(
-            timestamp: start,
-            applications: [
-                appRate("VideoSync", download: 6_000_000, upload: 500_000),
-                appRate("Mail", download: 300_000, upload: 20_000)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start), appTraffic: spikingState, settings: settings, now: start)
-        _ = detector.detect(snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(1))
-
-        let interrupted = detector.detect(
-            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(10)),
-            appTraffic: spikingState,
-            settings: settings,
-            now: start.addingTimeInterval(10)
-        )
-
-        XCTAssertTrue(interrupted.isEmpty)
-
-        let sustained = detector.detect(
-            snapshot: sampleSnapshot(download: 7_000_000, upload: 500_000, timestamp: start.addingTimeInterval(16)),
-            appTraffic: spikingState,
-            settings: settings,
-            now: start.addingTimeInterval(16)
-        )
-
-        XCTAssertEqual(sustained.map(\.kind), [.applicationSpike])
-    }
-
-    func testNetworkAnomalyDetectorEmitsDropAndRecoveredEvents() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        let start = Date(timeIntervalSince1970: 100)
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start), appTraffic: .empty, settings: settings, now: start)
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(1))
-        let drop = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(10)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(10))
-
-        XCTAssertEqual(drop.map(\.kind), [.networkDrop])
-
-        XCTAssertTrue(detector.detect(snapshot: sampleSnapshot(download: 50_000, upload: 10_000, timestamp: start.addingTimeInterval(11)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(11)).isEmpty)
-        let recovered = detector.detect(snapshot: sampleSnapshot(download: 50_000, upload: 10_000, timestamp: start.addingTimeInterval(14)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(14))
-
-        XCTAssertEqual(recovered.map(\.kind), [.networkRecovered])
-    }
-
-    func testNetworkAnomalyDetectorClearsDropTimerWhenAlertDisabled() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        var disabledSettings = settings
-        disabledSettings.isNetworkDropAlertEnabled = false
-        let start = Date(timeIntervalSince1970: 100)
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start), appTraffic: .empty, settings: settings, now: start)
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(1))
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(5)), appTraffic: .empty, settings: disabledSettings, now: start.addingTimeInterval(5))
-
-        let staleWindow = detector.detect(
-            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(10)),
-            appTraffic: .empty,
-            settings: settings,
-            now: start.addingTimeInterval(10)
-        )
-
-        XCTAssertTrue(staleWindow.isEmpty)
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start.addingTimeInterval(12)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(12))
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(13)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(13))
-        let restartedWindow = detector.detect(
-            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(22)),
-            appTraffic: .empty,
-            settings: settings,
-            now: start.addingTimeInterval(22)
-        )
-
-        XCTAssertEqual(restartedWindow.map(\.kind), [.networkDrop])
-    }
-
-    func testNetworkAnomalyDetectorIgnoresDropBaselineCollectedWhileAlertDisabled() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        var disabledSettings = settings
-        disabledSettings.isNetworkDropAlertEnabled = false
-        let start = Date(timeIntervalSince1970: 100)
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start), appTraffic: .empty, settings: disabledSettings, now: start)
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(1)), appTraffic: .empty, settings: disabledSettings, now: start.addingTimeInterval(1))
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(10)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(10))
-
-        let staleBaseline = detector.detect(
-            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(18)),
-            appTraffic: .empty,
-            settings: settings,
-            now: start.addingTimeInterval(18)
-        )
-
-        XCTAssertTrue(staleBaseline.isEmpty)
-
-        _ = detector.detect(snapshot: sampleSnapshot(download: 200_000, upload: 20_000, timestamp: start.addingTimeInterval(20)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(20))
-        _ = detector.detect(snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(21)), appTraffic: .empty, settings: settings, now: start.addingTimeInterval(21))
-        let freshBaseline = detector.detect(
-            snapshot: sampleSnapshot(download: 0, upload: 0, timestamp: start.addingTimeInterval(30)),
-            appTraffic: .empty,
-            settings: settings,
-            now: start.addingTimeInterval(30)
-        )
-
-        XCTAssertEqual(freshBaseline.map(\.kind), [.networkDrop])
-    }
 
     func testNetworkNotificationControllerRefreshesAuthorizationStatus() async {
         let center = FakeNetworkNotificationCenter(authorizationStatus: .authorized)
@@ -1517,12 +972,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
         let event = NetworkAnomalyEvent(
             kind: .highTraffic,
-            severity: .warning,
             title: "High",
             message: "Traffic",
-            timestamp: Date(timeIntervalSince1970: 100),
-            bytesPerSecond: 1_000,
-            cooldownKey: "highTraffic"
+            timestamp: Date(timeIntervalSince1970: 100)
         )
 
         await controller.refreshAuthorizationStatus()
@@ -1539,20 +991,18 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let controller = NetworkNotificationController(center: center, now: { currentDate })
         let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
         let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Drop",
-            message: "Quiet",
-            timestamp: currentDate,
-            cooldownKey: "networkDrop"
+            kind: .highTraffic,
+            title: "High",
+            message: "Traffic",
+            timestamp: currentDate
         )
 
         await controller.refreshAuthorizationStatus()
         await controller.handle(event, settings: settings)
-        currentDate = currentDate.addingTimeInterval(180)
+        currentDate = currentDate.addingTimeInterval(600)
         await controller.handle(event, settings: settings)
 
-        XCTAssertEqual(center.deliveredTitles, ["Drop", "Drop"])
+        XCTAssertEqual(center.deliveredTitles, ["High", "High"])
     }
 
     func testNetworkNotificationControllerDoesNotSendWhenAuthorizationDenied() async {
@@ -1560,12 +1010,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let controller = NetworkNotificationController(center: center, now: { Date(timeIntervalSince1970: 100) })
         let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
         let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Drop",
-            message: "Quiet",
-            timestamp: Date(timeIntervalSince1970: 100),
-            cooldownKey: "networkDrop"
+            kind: .highTraffic,
+            title: "High",
+            message: "Traffic",
+            timestamp: Date(timeIntervalSince1970: 100)
         )
 
         await controller.refreshAuthorizationStatus()
@@ -1594,15 +1042,12 @@ final class PreferencesAndPresentationTests: XCTestCase {
             peakUploadBytesPerSecond: 1_000_000,
             sampleCount: 20,
             activeSeconds: 80,
-            animationPlaybackCount: 42,
-            topApplications: []
+            animationPlaybackCount: 42
         )
         let summary = NetworkIntelligenceSummary(
             latestEvent: nil,
             today: today,
             recentDays: [],
-            realtimeTopApplications: [],
-            todayTopApplications: [],
             animationPlaybackCountsByCharacter: [
                 "cat": 11,
                 "cat_b": 31
@@ -1636,8 +1081,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             latestEvent: nil,
             today: today,
             recentDays: [],
-            realtimeTopApplications: [],
-            todayTopApplications: [],
             animationPlaybackCountsByCharacter: [
                 "cat": 100_000,
                 "dog": 500_000
@@ -1650,23 +1093,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertNil(cards.first { $0.id == "animation" }?.milestone)
     }
 
-    func testApplicationDailyUsageCodablePreservesRole() throws {
-        let usage = ApplicationDailyUsage(
-            applicationID: "com.example.proxy",
-            displayName: "Example Proxy",
-            processNames: ["Example Proxy", "proxy-helper"],
-            downloadBytes: 4_096,
-            uploadBytes: 2_048,
-            lastSeenAt: Date(timeIntervalSince1970: 1_717_200_000),
-            role: .proxyOrVPN
-        )
-
-        let data = try JSONEncoder().encode(usage)
-        let decoded = try JSONDecoder().decode(ApplicationDailyUsage.self, from: data)
-
-        XCTAssertEqual(decoded, usage)
-        XCTAssertEqual(decoded.role, .proxyOrVPN)
-    }
 
     func testNetworkHistoryStoreAccumulatesInterfaceDeltasForToday() throws {
         let root = try temporaryDirectory()
@@ -1799,18 +1225,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
         store.configure(isTrackingEnabled: false, retentionDays: 30)
 
         store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000))
-        store.record(appTraffic: ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [appRate("Safari", download: 2_000, upload: 500)],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        ), interval: 1)
 
         XCTAssertEqual(store.summary.today.downloadBytes, 0)
         XCTAssertEqual(store.summary.today.uploadBytes, 0)
-        XCTAssertTrue(store.summary.todayTopApplications.isEmpty)
     }
 
     func testNetworkHistoryStoreBacksUpUnreadableStorage() throws {
@@ -1828,42 +1245,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.dateKey, "1970-01-01")
     }
 
-    func testNetworkHistoryPresentationBuildsSevenAndThirtyDaySummaries() {
-        let days: [NetworkDailySummary] = (1...30).map { day -> NetworkDailySummary in
-            let paddedDay = String(format: "%02d", day)
-            let dateKey = "2026-06-\(paddedDay)"
-            let downloadBytes = UInt64(day) * 1_000
-            let uploadBytes = UInt64(day) * 100
-            let peakDownloadBytesPerSecond = Double(day) * 10
-            let peakUploadBytesPerSecond = Double(day) * 5
-            let activeSeconds = TimeInterval(day * 60)
-
-            return NetworkDailySummary(
-                dateKey: dateKey,
-                downloadBytes: downloadBytes,
-                uploadBytes: uploadBytes,
-                peakDownloadBytesPerSecond: peakDownloadBytesPerSecond,
-                peakUploadBytesPerSecond: peakUploadBytesPerSecond,
-                sampleCount: day,
-                activeSeconds: activeSeconds,
-                topApplications: []
-            )
-        }
-        let summary = NetworkIntelligenceSummary(
-            latestEvent: nil,
-            today: .empty(dateKey: "2026-07-01"),
-            recentDays: days,
-            realtimeTopApplications: [],
-            todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:]
-        )
-
-        let presentation = NetworkHistoryPresentation.make(summary: summary, language: .english)
-
-        XCTAssertEqual(presentation.sevenDay.totalBytes, UInt64((24...30).reduce(0) { $0 + $1 * 1_100 }))
-        XCTAssertEqual(presentation.thirtyDay.totalBytes, UInt64((1...30).reduce(0) { $0 + $1 * 1_100 }))
-        XCTAssertEqual(presentation.peakDownload?.dateKey, "2026-06-30")
-    }
 
     func testTrafficHistoryWindowPresentationFiltersPointsAndSummarizesTotals() {
         let latest = Date(timeIntervalSince1970: 1_000)
@@ -1880,172 +1261,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(model.peakUploadBytesPerSecond, 3)
     }
 
-    func testNetworkHistoryStoreAccumulatesTodayTopApplications() throws {
-        let root = try temporaryDirectory()
-        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
-        let apps = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appRate("Safari", download: 1_000, upload: 200),
-                appRate("Chrome", download: 3_000, upload: 500)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        store.record(appTraffic: apps, interval: 2.0)
-
-        XCTAssertEqual(store.summary.todayTopApplications.map(\.displayName), ["Chrome", "Safari"])
-        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 6_000)
-        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 1_000)
-    }
-
-    func testNetworkHistoryStoreUsesApplicationCounterDeltasBeforeIntervalFallback() throws {
-        let root = try temporaryDirectory()
-        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
-        let first = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appRate("Safari", download: 0, upload: 0, received: 1_000, sent: 500)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-        let second = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 11),
-            applications: [
-                appRate("Safari", download: 10_000, upload: 8_000, received: 2_500, sent: 900)
-            ],
-            sampleCount: 2,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        store.record(appTraffic: first, interval: 999)
-        store.record(appTraffic: second, interval: 99)
-
-        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 1_500)
-        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 400)
-    }
-
-    func testNetworkHistoryStoreTreatsZeroApplicationCountersAsValidBaseline() throws {
-        let root = try temporaryDirectory()
-        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
-        let first = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appRate("Safari", download: 0, upload: 0, received: 0, sent: 0)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-        let second = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 11),
-            applications: [
-                appRate("Safari", download: 10_000, upload: 8_000, received: 1_500, sent: 400)
-            ],
-            sampleCount: 2,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        store.record(appTraffic: first, interval: 999)
-        store.record(appTraffic: second, interval: 99)
-
-        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 1_500)
-        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 400)
-    }
-
-    func testNetworkHistoryStoreDropsMissingApplicationCounterBaselines() throws {
-        let root = try temporaryDirectory()
-        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 10) })
-        let first = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appRate("Safari", download: 0, upload: 0, received: 5_000, sent: 1_000)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-        let missing = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 11),
-            applications: [],
-            sampleCount: 2,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-        let reappeared = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 12),
-            applications: [
-                appRate("Safari", download: 10, upload: 5, received: 100, sent: 50)
-            ],
-            sampleCount: 3,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-        let next = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 13),
-            applications: [
-                appRate("Safari", download: 10_000, upload: 8_000, received: 400, sent: 170)
-            ],
-            sampleCount: 4,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        store.record(appTraffic: first, interval: 1)
-        store.record(appTraffic: missing, interval: 1)
-        store.record(appTraffic: reappeared, interval: 1)
-        store.record(appTraffic: next, interval: 99)
-
-        XCTAssertEqual(store.summary.todayTopApplications.first?.downloadBytes, 310)
-        XCTAssertEqual(store.summary.todayTopApplications.first?.uploadBytes, 125)
-    }
-
-    func testNetworkHistoryStorePersistsAndReloadsNormalizedSummary() throws {
-        let root = try temporaryDirectory()
-        let start = isoDate("2026-06-01T12:00:00Z")
-        let secondTimestamp = isoDate("2026-06-01T12:00:01Z")
-        let reloadTimestamp = isoDate("2026-06-01T13:00:00Z")
-        let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { start })
-        let first = sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000, timestamp: start)
-        let second = sampleSnapshot(download: 300, upload: 200, received: 1_500, sent: 2_700, timestamp: secondTimestamp)
-        let apps = ApplicationTrafficState(
-            timestamp: secondTimestamp,
-            applications: (1...25).map { index in
-                appRate("App\(String(format: "%02d", index))", download: Double(index), upload: 0)
-            },
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        store.record(snapshot: first)
-        store.record(snapshot: second)
-        store.record(appTraffic: apps, interval: 1)
-        store.flushNow()
-        let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { reloadTimestamp })
-
-        XCTAssertEqual(reloaded.summary.today.downloadBytes, 500)
-        XCTAssertEqual(reloaded.summary.today.uploadBytes, 700)
-        XCTAssertEqual(reloaded.summary.today.topApplications.count, 20)
-        XCTAssertEqual(reloaded.summary.todayTopApplications.count, 5)
-        XCTAssertEqual(reloaded.summary.todayTopApplications.map(\.displayName), ["App25", "App24", "App23", "App22", "App21"])
-    }
 
     func testNetworkHistoryStoreRollsPersistedYesterdayIntoRecentDaysOnInit() throws {
         let root = try temporaryDirectory()
@@ -2885,30 +2100,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertGreaterThan(enlargedWidth - defaultWidth, 10)
     }
 
-    func testCharacterOverrideChangesRenderSignatureWithoutPersistingSelection() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsCat = true
-        settings.catCharacter = "cat"
-
-        let selectedSignature = StatusBarDisplayRenderer.signature(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            appearanceName: "NSAppearanceNameAqua",
-            catFrameIndex: 0
-        )
-        let overrideSignature = StatusBarDisplayRenderer.signature(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            appearanceName: "NSAppearanceNameAqua",
-            catFrameIndex: 0,
-            characterOverrideID: "tiny_plant"
-        )
-
-        XCTAssertEqual(selectedSignature.catCharacter, "cat")
-        XCTAssertEqual(overrideSignature.catCharacter, "tiny_plant")
-        XCTAssertNotEqual(selectedSignature.presentation.width, overrideSignature.presentation.width)
-        XCTAssertEqual(settings.catCharacter, "cat")
-    }
 
     func testGooglyEyesCharacterCanRenderOnEitherSideOfText() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
@@ -3375,8 +2566,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         XCTAssertEqual(monitor.snapshot.downloadBytesPerSecond, 1_200)
         XCTAssertEqual(monitor.snapshot.uploadBytesPerSecond, 700)
-        XCTAssertEqual(monitor.snapshot.totalReceivedBytes, 2_200)
-        XCTAssertEqual(monitor.snapshot.totalSentBytes, 1_700)
     }
 
     func testApplicationTrafficReaderUsesExternalInterfaceScope() {
@@ -3625,8 +2814,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             interfaces: [],
             downloadBytesPerSecond: download,
             uploadBytesPerSecond: upload,
-            totalReceivedBytes: UInt64(download),
-            totalSentBytes: UInt64(upload),
             sampleCount: 2
         )
     }
@@ -3656,8 +2843,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             ],
             downloadBytesPerSecond: download,
             uploadBytesPerSecond: upload,
-            totalReceivedBytes: received,
-            totalSentBytes: sent,
             sampleCount: 1
         )
     }
@@ -3668,8 +2853,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             interfaces: interfaces,
             downloadBytesPerSecond: interfaces.reduce(0) { $0 + $1.downloadBytesPerSecond },
             uploadBytesPerSecond: interfaces.reduce(0) { $0 + $1.uploadBytesPerSecond },
-            totalReceivedBytes: interfaces.reduce(UInt64(0)) { $0 + $1.totalReceivedBytes },
-            totalSentBytes: interfaces.reduce(UInt64(0)) { $0 + $1.totalSentBytes },
             sampleCount: 1
         )
     }
@@ -4809,18 +3992,16 @@ extension PreferencesAndPresentationTests {
 
         let event = NetworkAnomalyEvent(
             kind: .highTraffic,
-            severity: .critical,
             title: "Traffic surge",
             message: "Traffic stayed high.",
-            timestamp: Date(timeIntervalSince1970: 20),
-            cooldownKey: "surge"
+            timestamp: Date(timeIntervalSince1970: 20)
         )
         let anomaly = LivingSignalStatusPresentation.make(
             snapshot: sampleSnapshot(download: 0, upload: 0),
             latestEvent: event,
             language: .english
         )
-        XCTAssertEqual(anomaly.tone, .critical)
+        XCTAssertEqual(anomaly.tone, .attention)
         XCTAssertEqual(anomaly.title, "Traffic surge")
     }
 }
@@ -4853,7 +4034,9 @@ extension PreferencesAndPresentationTests {
         )
 
         XCTAssertTrue(summarySource.contains("struct TodayNetworkSummaryPanel"))
-        XCTAssertTrue(summarySource.contains("struct HistoryLedgerPanel"))
+        XCTAssertFalse(summarySource.contains("struct HistoryLedgerPanel"))
+        XCTAssertFalse(summarySource.contains("struct ApplicationTopPanel"))
+        XCTAssertFalse(summarySource.contains("struct SummaryGrid"))
         XCTAssertFalse(rootSource.contains("struct TodayNetworkSummary: View"))
         XCTAssertFalse(rootSource.contains("private var insightStreamSection"))
     }

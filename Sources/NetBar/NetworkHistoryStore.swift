@@ -17,7 +17,6 @@ final class NetworkHistoryStore: ObservableObject {
     private let now: () -> Date
     private var state: PersistedNetworkHistory
     private var lastSnapshot: NetworkSnapshot?
-    private var lastApplicationTotals: [String: TrafficCounterTotals] = [:]
     private var encoder = JSONEncoder()
     private var decoder = JSONDecoder()
     private var isTrackingEnabled = true
@@ -81,8 +80,6 @@ final class NetworkHistoryStore: ObservableObject {
             latestEvent: nil,
             today: state.today,
             recentDays: state.recentDays,
-            realtimeTopApplications: [],
-            todayTopApplications: Array(state.today.topApplications.prefix(5)),
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         if shouldSaveLoadedState {
@@ -109,7 +106,7 @@ final class NetworkHistoryStore: ObservableObject {
         self.isTrackingEnabled = isTrackingEnabled
         self.retentionDays = max(retentionDays, 1)
         state.recentDays = Array(state.recentDays.suffix(self.retentionDays))
-        publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
+        publishAndScheduleSave()
     }
 
     func record(snapshot: NetworkSnapshot) {
@@ -121,7 +118,7 @@ final class NetworkHistoryStore: ObservableObject {
             state.today.peakDownloadBytesPerSecond = max(state.today.peakDownloadBytesPerSecond, snapshot.downloadBytesPerSecond)
             state.today.peakUploadBytesPerSecond = max(state.today.peakUploadBytesPerSecond, snapshot.uploadBytesPerSecond)
             state.today.sampleCount += 1
-            publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
+            publishAndScheduleSave()
             return
         }
 
@@ -137,58 +134,7 @@ final class NetworkHistoryStore: ObservableObject {
             state.today.activeSeconds += interval
         }
 
-        publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
-    }
-
-    func record(appTraffic: ApplicationTrafficState, interval: TimeInterval) {
-        guard isTrackingEnabled else { return }
-        guard let timestamp = appTraffic.timestamp else { return }
-        rolloverIfNeeded(for: timestamp)
-        var usageByID: [String: ApplicationDailyUsage] = [:]
-        for usage in state.today.topApplications {
-            usageByID[usage.applicationID] = usage
-        }
-        var updatedApplicationTotals: [String: TrafficCounterTotals] = [:]
-
-        for application in appTraffic.applications {
-            let role = ApplicationTrafficPresentation.attributionRole(for: application)
-            let currentTotals = TrafficCounterTotals(
-                receivedBytes: application.totalReceivedBytes,
-                sentBytes: application.totalSentBytes
-            )
-            let usageDeltas = Self.applicationDeltas(
-                current: currentTotals,
-                previous: lastApplicationTotals[application.id],
-                application: application,
-                interval: interval
-            )
-            var usage = usageByID[application.id] ?? ApplicationDailyUsage(
-                applicationID: application.id,
-                displayName: application.displayName,
-                processNames: application.processNames,
-                downloadBytes: 0,
-                uploadBytes: 0,
-                lastSeenAt: timestamp,
-                role: role
-            )
-            usage.displayName = application.displayName
-            usage.processNames = application.processNames
-            usage.downloadBytes += usageDeltas.receivedBytes
-            usage.uploadBytes += usageDeltas.sentBytes
-            usage.lastSeenAt = timestamp
-            usage.role = role
-            usageByID[application.id] = usage
-            updatedApplicationTotals[application.id] = currentTotals
-        }
-        lastApplicationTotals = updatedApplicationTotals
-
-        state.today.topApplications = Self.sortedTopApplications(Array(usageByID.values), limit: 20)
-
-        let realtimeTop = ApplicationTrafficPresentation.sorted(
-            ApplicationTrafficPresentation.displayApplications(appTraffic.applications, mode: .activity),
-            by: .activity
-        )
-        publishAndScheduleSave(realtimeTopApplications: Array(realtimeTop.prefix(5)))
+        publishAndScheduleSave()
     }
 
     func recordAnimationPlayback(count: UInt64, characterID: String, at date: Date) {
@@ -198,7 +144,7 @@ final class NetworkHistoryStore: ObservableObject {
         state.today.animationPlaybackCount += count
         state.today.animationPlaybackCountsByCharacter[characterID, default: 0] += count
         state.animationPlaybackCountsByCharacter[characterID, default: 0] += count
-        publishAndScheduleSave(realtimeTopApplications: summary.realtimeTopApplications)
+        publishAndScheduleSave()
     }
 
     func clear() {
@@ -208,8 +154,7 @@ final class NetworkHistoryStore: ObservableObject {
             animationPlaybackCountsByCharacter: [:]
         )
         lastSnapshot = nil
-        lastApplicationTotals = [:]
-        publishAndScheduleSave(realtimeTopApplications: [])
+        publishAndScheduleSave()
         flushNow()
     }
 
@@ -220,16 +165,13 @@ final class NetworkHistoryStore: ObservableObject {
         state.recentDays = Array(state.recentDays.suffix(retentionDays))
         state.today = .empty(dateKey: key)
         lastSnapshot = nil
-        lastApplicationTotals = [:]
     }
 
-    private func publishAndScheduleSave(realtimeTopApplications: [ApplicationTrafficRate]) {
+    private func publishAndScheduleSave() {
         summary = NetworkIntelligenceSummary(
             latestEvent: summary.latestEvent,
             today: state.today,
             recentDays: state.recentDays,
-            realtimeTopApplications: realtimeTopApplications,
-            todayTopApplications: Array(state.today.topApplications.prefix(5)),
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         scheduleSave()
@@ -289,29 +231,6 @@ final class NetworkHistoryStore: ObservableObject {
         }
     }
 
-    private static func applicationDeltas(
-        current: TrafficCounterTotals,
-        previous: TrafficCounterTotals?,
-        application: ApplicationTrafficRate,
-        interval: TimeInterval
-    ) -> TrafficCounterTotals {
-        guard let previous else {
-            return TrafficCounterTotals(
-                receivedBytes: estimatedBytes(rate: application.downloadBytesPerSecond, interval: interval),
-                sentBytes: estimatedBytes(rate: application.uploadBytesPerSecond, interval: interval)
-            )
-        }
-
-        return TrafficCounterTotals(
-            receivedBytes: positiveDelta(current.receivedBytes, previous.receivedBytes),
-            sentBytes: positiveDelta(current.sentBytes, previous.sentBytes)
-        )
-    }
-
-    private static func estimatedBytes(rate: Double, interval: TimeInterval) -> UInt64 {
-        UInt64(max(rate * interval, 0).rounded())
-    }
-
     private static func interfaceKey(for interface: InterfaceRate) -> String {
         interface.id.isEmpty ? interface.name : interface.id
     }
@@ -321,8 +240,8 @@ final class NetworkHistoryStore: ObservableObject {
         todayKey: String,
         retentionDays: Int
     ) -> PersistedNetworkHistory {
-        var today = normalizedDay(state.today)
-        var recentDays = state.recentDays.map(normalizedDay)
+        var today = state.today
+        var recentDays = state.recentDays
 
         if today.dateKey != todayKey {
             recentDays.append(today)
@@ -341,24 +260,6 @@ final class NetworkHistoryStore: ObservableObject {
             )
         }
         return normalizedState
-    }
-
-    private static func normalizedDay(_ day: NetworkDailySummary) -> NetworkDailySummary {
-        var day = day
-        day.topApplications = sortedTopApplications(day.topApplications, limit: 20)
-        return day
-    }
-
-    private static func sortedTopApplications(
-        _ applications: [ApplicationDailyUsage],
-        limit: Int
-    ) -> [ApplicationDailyUsage] {
-        Array(applications
-            .sorted { lhs, rhs in
-                if lhs.totalBytes != rhs.totalBytes { return lhs.totalBytes > rhs.totalBytes }
-                return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
-            }
-            .prefix(limit))
     }
 
     private static func dateKey(for date: Date, calendar: Calendar) -> String {

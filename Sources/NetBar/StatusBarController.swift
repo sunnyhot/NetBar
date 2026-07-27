@@ -393,14 +393,6 @@ final class StatusBarController {
             }
             .store(in: &cancellables)
 
-        // Health snapshot changes should refresh the status bar (smart tone/character).
-        monitor.$healthSnapshot
-            .removeDuplicates()
-            .sink { [weak self] _ in
-                self?.requestRender()
-            }
-            .store(in: &cancellables)
-
         setupCatAnimationIfNeeded(force: true)
     }
 
@@ -595,22 +587,6 @@ final class StatusBarController {
 
         // Color pipeline: compute time bucket independently from position tracking
         let currentColorBucket = StatusBarDisplayRenderer.colorTimeBucket(forMode: settings.catColorMode)
-        let intelligenceSettings = appPreferences.networkIntelligenceSettings
-        let smartContext = StatusBarContextEvaluator.evaluate(
-            snapshot: monitor.snapshot,
-            appTraffic: monitor.appTraffic,
-            intelligenceSummary: monitor.intelligenceSummary,
-            settings: intelligenceSettings,
-            language: appPreferences.resolvedLanguage,
-            health: monitor.healthSnapshot
-        )
-        let characterOverrideID = settings.showsCat ? SmartCharacterSuggestionEvaluator.suggestedCharacterID(
-            snapshot: monitor.snapshot,
-            appTraffic: monitor.appTraffic,
-            intelligenceSummary: monitor.intelligenceSummary,
-            settings: intelligenceSettings,
-            health: monitor.healthSnapshot
-        ) : nil
         let renderTime = Date().timeIntervalSince1970
 
         let signature = StatusBarDisplayRenderer.signature(
@@ -619,9 +595,7 @@ final class StatusBarController {
             appearanceName: appearanceName,
             customCharacterStore: customCharacterStore,
             catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
-            characterOverrideID: characterOverrideID,
             googlyEyesState: activeGooglyEyesState,
-            smartContext: smartContext,
             renderTime: renderTime
         )
         guard signature != lastRenderSignature else {
@@ -643,9 +617,7 @@ final class StatusBarController {
                 scale: scale,
                 customCharacterStore: customCharacterStore,
                 catFrameIndex: settings.showsCat ? currentCatFrameIndex : nil,
-                characterOverrideID: characterOverrideID,
                 googlyEyesState: activeGooglyEyesState,
-                smartContext: smartContext,
                 renderTime: renderTime
             )
             renderedImageCache.store(image, for: signature)

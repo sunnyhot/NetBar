@@ -50,14 +50,3 @@ struct MenuBarLayoutSectionContent: View {
         .pickerStyle(.segmented)
     }
 }
-
-struct MenuBarLayoutSection: View {
-    @ObservedObject var settings: StatusBarSettings
-    @ObservedObject var appPreferences: AppPreferences
-
-    var body: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.layout.title(language: appPreferences.resolvedLanguage)) {
-            MenuBarLayoutSectionContent(settings: settings, appPreferences: appPreferences)
-        }
-    }
-}

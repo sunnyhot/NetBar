@@ -7,10 +7,10 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 核心能力：
 
 - 菜单栏实时显示下载/上传/总流量
-- 点击打开详情窗口，展示趋势、接口、应用级流量、系统资源、网络智能洞察
+- 点击打开详情窗口，展示趋势、今日/近 7 日统计、接口、应用级流量和系统资源
 - 通过 `getifaddrs` 读取接口计数器，通过 `/usr/bin/nettop` 读取应用级流量
 - 通过 `ps`、Mach API、SystemConfiguration 补充进程资源、系统资源和主接口信息
-- 内置 RunCat 动画、自定义角色、智能角色推荐、宠物系统、历史统计、系统通知、自动更新
+- 内置 RunCat 动画、自定义角色、历史统计、高流量通知、自动更新
 
 技术边界：
 
@@ -39,10 +39,10 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 
 当前规模：
 
-- `Sources/NetBar`: 58 个 Swift 文件，约 18,000 行
-- `Tests/NetBarTests`: 3 个 Swift 文件，约 7,500 行，352 个测试
+- `Sources/NetBar`: 53 个 Swift 文件，约 14,360 行
+- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,600 行，244 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.40.3`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.40.4`
 
 ## 3. 启动与对象装配
 
@@ -123,7 +123,6 @@ StatusBarController
 - `StatusBarController.swift`: 状态栏交互、渲染调度、右键菜单、详情窗口、RunCat 动画、Googly Eyes 鼠标追踪
 - `StatusBarStyle.swift`: 状态栏布局、文字、背景、角色、颜色模式、特效绘制
 - `StatusBarRenderCache.swift`: 图片和文字布局 cache
-- `StatusBarContextEvaluator.swift`: 智能状态栏内容选择、智能角色推荐
 - `RunCatAnimation.swift`: 内置角色元数据、动画帧推进、速度和轮换
 - `CustomCharacter.swift`
 - `CustomCharacterStore.swift`
@@ -134,7 +133,6 @@ StatusBarController
 - `StatusBarRenderSignature` 避免相同输入重复绘制
 - `StatusBarRenderedImageCache` 缓存最近渲染图
 - 文本 layout cache 降低重复排版成本
-- 智能角色推荐通过 render override 生效，不写回用户选择的角色
 - render coalescing 根据实时流量动态从 1fps 到 15fps
 - 动态颜色时间桶以 4Hz 量化，避免过密刷新
 
@@ -150,7 +148,7 @@ StatusBarController.showDetailsWindow()
 关键文件：
 
 - `DetailsWindowController.swift`: 详情窗口创建、定位、关闭和外部点击监控
-- `NetworkPopoverView.swift`: SwiftUI 详情页主体，展示总览、趋势、接口、应用、历史、智能、系统资源；滚动内容懒构建，应用图标延迟解析并复用缓存
+- `NetworkPopoverView.swift`: SwiftUI 详情页主体，展示趋势、今日/近 7 日统计、接口、实时应用列表和系统资源；滚动内容懒构建，应用图标延迟解析并复用缓存
 - `ApplicationTrafficPresentation.swift`: 应用列表过滤、搜索、排序、归因摘要和展示模型
 - `NetworkHistoryPresentation.swift`: 最近历史窗口和流量估算展示
 - `NetBarDesignSystem.swift`: 详情页和偏好页复用的视觉组件
@@ -188,7 +186,7 @@ PreferencesWindowController
 - `MenuBarLayoutPreferencesView.swift`: 宽度、对齐、行距、排序等布局
 - `MenuBarAnimationPreferencesView.swift`: 动画速度、头部摆动、速度来源
 - `MenuBarCharacterPreferencesView.swift`: 内置/自定义角色选择
-- `IntelligencePreferencesView.swift`: 网络智能、通知、历史、宠物设置
+- `IntelligencePreferencesView.swift`: 高流量检测、通知和历史设置
 - `AboutPreferencesView.swift`: 关于、更新和诊断入口
 - `PreferencesComponents.swift`: 通用设置组件
 
@@ -213,9 +211,9 @@ NetworkIntelligenceCoordinator
 关键文件：
 
 - `NetworkIntelligenceModels.swift`: 设置、异常事件、日汇总
-- `NetworkAnomalyDetector.swift`: 持续高流量、应用突增、断流/恢复
+- `NetworkAnomalyDetector.swift`: 持续高流量检测
 - `Popover/PopoverHeaderView.swift`: 顶部状态区展示实时流量状态和最新异常
-- `NetworkHistoryStore.swift`: 日维度统计、Top 应用、动画播放计数、本地 JSON 持久化
+- `NetworkHistoryStore.swift`: 日维度流量统计、动画播放计数、本地 JSON 持久化
 - `NetworkNotificationController.swift`: 通知授权、发送和 cooldown
 
 注意点：
@@ -223,32 +221,6 @@ NetworkIntelligenceCoordinator
 - 历史文件默认在用户 Application Support 下的 `NetBar/NetworkHistory.json`
 - 读取到损坏历史文件时会备份成 `NetworkHistory.corrupt-<timestamp>.json`
 - 通知发送受系统授权、设置开关和事件 cooldown 三重限制
-- 智能角色推荐默认关闭；开启后按异常、Top 应用突增、上传占优、高总流量、低速空闲即时推荐内置角色
-
-## 8.5. 网络健康层（Network Health）
-
-```text
-NetworkSnapshot
-macOS 本地外部接口状态
-          ▼
-NetworkHealthSnapshot
-          │
-          ▼
-StatusBarContextEvaluator
-→ text / tone / character / motion
-```
-
-关键文件：
-
-- `NetworkHealthModels.swift`: 本地接口可用/离线状态和 snapshot
-- `NetworkMonitor.swift`: 根据外部接口是否存在发布 `@Published healthSnapshot`
-- `StatusBarContextEvaluator.swift`: 消费 health 产出 tone + 短文案 + 角色建议（smart override，不写回偏好）
-
-原则：
-
-- 不进行 DNS、HTTPS 或其他公网主动探测
-- 健康状态只依据 macOS 本地外部接口，不声称测量公网质量
-- smart override 全为 render-time 值，不写回 StatusBarSettings 或用户角色选择
 
 ## 9. 自动更新
 
@@ -336,16 +308,15 @@ swift test
 
 测试文件：
 
-- `PreferencesAndPresentationTests.swift`: 偏好、状态栏、窗口、智能、历史、自定义角色、内置角色资源、更新、宠物、应用展示
+- `PreferencesAndPresentationTests.swift`: 偏好、状态栏、窗口、高流量提醒、历史、自定义角色、内置角色资源、更新和应用展示
 - `SystemResourceTests.swift`: 系统资源、采样策略、NetworkMonitor 集成、应用资源、streaming nettop
-- `NetworkHealthTests.swift`: 本地接口健康状态、异常提示、智能菜单栏与角色映射
 
 重点测试方向：
 
 - 修改 `StatusBarStyle.swift`：补状态栏 presentation/signature/image/layout 测试
 - 修改采样或资源读取：补 `NetworkMonitor`、mock reader、采样策略测试
 - 修改应用列表：补 `ApplicationTrafficPresentation` 测试
-- 修改历史/智能：补 `NetworkHistoryStore`、`NetworkAnomalyDetector`、通知 cooldown、智能状态栏/角色推荐测试
+- 修改历史/提醒：补 `NetworkHistoryStore`、`NetworkAnomalyDetector` 和通知 cooldown 测试
 - 修改自动更新：补 manifest、version compare、archive integrity、fetch fallback 测试
 - 修改发布脚本：本地跑 build、verify、package
 
@@ -357,7 +328,7 @@ swift test
 | 详情窗口展示 | `NetworkPopoverView.swift`, `ApplicationTrafficPresentation.swift`, `NetworkHistoryPresentation.swift` |
 | 应用级流量 | `ApplicationTrafficReader.swift`, `NetworkMonitor.swift` |
 | 接口总流量 | `NetworkStatsReader.swift`, `NetworkInterfaceClassifier.swift`, `NetworkMonitor.swift` |
-| 系统资源 | `SystemResourceReader.swift`, `ApplicationResourceReader.swift`, `SystemMetricsReader.swift` |
+| 系统资源 | `SystemResourceReader.swift`, `ApplicationResourceReader.swift` |
 | 采样性能 | `PerformanceSamplingPolicy.swift`, `NetworkMonitor.swift`, `StatusBarController.swift` |
 | 网络智能提醒 | `NetworkAnomalyDetector.swift`, `NetworkNotificationController.swift` |
 | 历史统计 | `NetworkHistoryStore.swift`, `NetworkHistoryPresentation.swift`, `NetworkIntelligenceModels.swift` |

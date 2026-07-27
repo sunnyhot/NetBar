@@ -28,8 +28,8 @@ struct IntelligencePreferencesView: View {
                     systemImage: "bell.badge"
                 ) {
                     Text(appPreferences.text(
-                        "NetBar 可以在高流量、应用突增、断流/恢复时提醒你。开启后会请求 macOS 通知权限。",
-                        "NetBar can notify you about high traffic, application spikes, and network drops or recovery. macOS notification permission is requested only after you enable it."
+                        "NetBar 可以在流量持续超过阈值时提醒你。开启后会请求 macOS 通知权限。",
+                        "NetBar can notify you when traffic stays above your threshold. macOS notification permission is requested only after you enable it."
                     ))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
@@ -75,14 +75,6 @@ struct IntelligencePreferencesView: View {
             }
             .pickerStyle(.segmented)
 
-            Toggle(
-                appPreferences.text("应用突增提醒", "Application spike alerts"),
-                isOn: settingsBinding(\.isApplicationSpikeAlertEnabled)
-            )
-            Toggle(
-                appPreferences.text("断流/恢复提醒", "Drop/recovery alerts"),
-                isOn: settingsBinding(\.isNetworkDropAlertEnabled)
-            )
         }
     }
 
@@ -133,11 +125,6 @@ struct IntelligencePreferencesView: View {
                     "Keep \(appPreferences.networkIntelligenceSettings.historyRetentionDays) days"
                 ))
             }
-
-            Toggle(
-                appPreferences.text("应用累计排行", "Application ranking"),
-                isOn: settingsBinding(\.isApplicationHistoryRankingEnabled)
-            )
 
             Button(appPreferences.text("清空历史数据", "Clear History"), role: .destructive) {
                 clearHistory()

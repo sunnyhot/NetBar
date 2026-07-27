@@ -52,24 +52,6 @@ struct NetworkPopoverView: View {
                         customCharacterStore: customCharacterStore
                     )
 
-                    if appPreferences.networkIntelligenceSettings.isHistoryTrackingEnabled {
-                        HistoryLedgerPanel(
-                            presentation: NetworkHistoryPresentation.make(
-                                summary: monitor.intelligenceSummary,
-                                language: appPreferences.resolvedLanguage
-                            ),
-                            appPreferences: appPreferences
-                        )
-                    }
-
-                    SummaryGrid(snapshot: monitor.snapshot, appPreferences: appPreferences)
-
-                    ApplicationTopPanel(
-                        realtimeApplications: monitor.intelligenceSummary.realtimeTopApplications,
-                        todayApplications: monitor.intelligenceSummary.todayTopApplications,
-                        appPreferences: appPreferences
-                    )
-
                     ApplicationTrafficPanel(
                         snapshot: monitor.snapshot,
                         appTraffic: monitor.appTraffic,

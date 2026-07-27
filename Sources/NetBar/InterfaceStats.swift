@@ -52,8 +52,6 @@ struct NetworkSnapshot: Equatable {
     var interfaces: [InterfaceRate]
     var downloadBytesPerSecond: Double
     var uploadBytesPerSecond: Double
-    var totalReceivedBytes: UInt64
-    var totalSentBytes: UInt64
     var sampleCount: Int
 
     static let empty = NetworkSnapshot(
@@ -61,8 +59,6 @@ struct NetworkSnapshot: Equatable {
         interfaces: [],
         downloadBytesPerSecond: 0,
         uploadBytesPerSecond: 0,
-        totalReceivedBytes: 0,
-        totalSentBytes: 0,
         sampleCount: 0
     )
 }

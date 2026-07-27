@@ -134,42 +134,6 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(highNetwork, .low)
     }
 
-    // MARK: - SystemResourceFormat Tests
-
-    func testMemoryPercentageFormatting() {
-        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
-        let result = SystemResourceFormat.memoryPercentage(usage)
-        XCTAssertEqual(result, "50.0%")
-    }
-
-    func testCPUPercentageFormatting() {
-        let cpu = CPUUsage(totalTicks: 1000, userTicks: 250, systemTicks: 100, idleTicks: 650)
-        let result = SystemResourceFormat.cpuPercentage(cpu)
-        XCTAssertEqual(result, "35.0%")
-    }
-
-    func testThermalShortFormatting() {
-        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .nominal)), "✅ Nominal")
-        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .fair)), "⚠️ Fair")
-        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .serious)), "🌡️ Serious")
-        XCTAssertEqual(SystemResourceFormat.thermalShort(ThermalInfo(state: .critical)), "🔥 Critical")
-    }
-
-    func testMemoryUsedFormatting() {
-        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_500_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
-        let result = SystemResourceFormat.memoryUsed(usage)
-        // 8.5 GB
-        XCTAssertTrue(result.contains("GB"))
-    }
-
-    func testMemorySummaryFormatting() {
-        let usage = MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0)
-        let result = SystemResourceFormat.memorySummary(usage)
-        XCTAssertTrue(result.contains("50.0%"))
-        XCTAssertTrue(result.contains("GB"))
-    }
-
-    // MARK: - Mock SystemResourceReader Tests
 
     func testMockReaderReturnsConfiguredValues() {
         let mock = MockSystemResourceReader(
@@ -516,57 +480,6 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: historyURL.path))
     }
 
-    func testNetworkMonitorRecordsApplicationTrafficInIntelligenceSummary() async throws {
-        var currentDate = Date(timeIntervalSince1970: 100)
-        let trafficReader = SequenceApplicationTrafficReader(samples: [
-            ApplicationTrafficReadResult(stats: [
-                ApplicationTrafficStats(
-                    id: "Safari.100",
-                    processName: "Safari",
-                    displayName: "Safari",
-                    pid: 100,
-                    receivedBytes: 1_000,
-                    sentBytes: 500
-                )
-            ], errorMessage: nil),
-            ApplicationTrafficReadResult(stats: [
-                ApplicationTrafficStats(
-                    id: "Safari.100",
-                    processName: "Safari",
-                    displayName: "Safari",
-                    pid: 100,
-                    receivedBytes: 4_000,
-                    sentBytes: 2_000
-                )
-            ], errorMessage: nil)
-        ])
-        let root = try temporaryDirectoryForSystemTests()
-        let monitor = NetworkMonitor(
-            reader: SequenceNetworkStatsReader(samples: [
-                [InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]
-            ]),
-            appTrafficReader: trafficReader,
-            systemResourceReader: MockSystemResourceReader(
-                memory: MemoryUsage(totalBytes: 0, usedBytes: 0, swapTotalBytes: 0, swapUsedBytes: 0),
-                cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
-                thermal: ThermalInfo(state: .nominal)
-            ),
-            resourceReader: MockApplicationResourceReader(processes: []),
-            historyStore: NetworkHistoryStore(rootDirectory: root, now: { currentDate }),
-            now: { currentDate }
-        )
-
-        monitor.isApplicationTrafficVisible = true
-        await waitForApplicationTrafficSamples(1, monitor: monitor)
-        currentDate = currentDate.addingTimeInterval(5)
-        monitor.refreshApplicationTraffic()
-        await waitForApplicationTrafficSamples(2, monitor: monitor)
-
-        let topApplication = monitor.intelligenceSummary.todayTopApplications.first
-        XCTAssertEqual(topApplication?.displayName, "Safari")
-        XCTAssertEqual(topApplication?.downloadBytes, 3_000)
-        XCTAssertEqual(topApplication?.uploadBytes, 1_500)
-    }
 
     func testNetworkMonitorRefreshIntelligenceStoresLatestEvent() async throws {
         var currentDate = Date(timeIntervalSince1970: 100)
@@ -615,11 +528,9 @@ final class SystemResourceTests: XCTestCase {
         )
         let event = NetworkAnomalyEvent(
             kind: .highTraffic,
-            severity: .warning,
             title: "High",
             message: "Traffic",
-            timestamp: Date(timeIntervalSince1970: 1_717_200_000),
-            cooldownKey: "high"
+            timestamp: Date(timeIntervalSince1970: 1_717_200_000)
         )
         coordinator.handle(events: [event], settings: .default)
 

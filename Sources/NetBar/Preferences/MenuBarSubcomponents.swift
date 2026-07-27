@@ -2,37 +2,19 @@ import AppKit
 import Combine
 import SwiftUI
 
-// MARK: - Menu Bar Group Enum
-
-enum MenuBarPreferenceGroup: String, CaseIterable {
+enum MenuBarPreferenceGroup {
     case preview
-    case display
     case character
     case animation
-    case layout
 
     func title(language: AppLanguage) -> String {
         switch self {
         case .preview:
             return language.text("实时预览", "Live Preview")
-        case .display:
-            return language.text("显示内容", "Display")
         case .character:
             return language.text("角色", "Character")
         case .animation:
             return language.text("动画与轮换", "Animation & Rotation")
-        case .layout:
-            return language.text("宽度与布局", "Width & Layout")
-        }
-    }
-
-    var systemImage: String {
-        switch self {
-        case .preview: return "eye"
-        case .display: return "textformat.size"
-        case .character: return "pawprint"
-        case .animation: return "waveform.path"
-        case .layout: return "rectangle.split.3x1"
         }
     }
 }
@@ -178,8 +160,6 @@ struct StatusBarPreview: View {
         interfaces: [],
         downloadBytesPerSecond: 1_280_000,
         uploadBytesPerSecond: 84_000,
-        totalReceivedBytes: 0,
-        totalSentBytes: 0,
         sampleCount: 1
     )
 
@@ -285,25 +265,6 @@ struct MenuBarSettingsSummary: View {
             Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-    }
-}
-
-// MARK: - Color Swatch (circular preset color)
-
-struct ColorSwatch: View {
-    let color: Color
-    let isSelected: Bool
-    let onTap: () -> Void
-
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 22, height: 22)
-            .overlay(
-                Circle()
-                    .strokeBorder(isSelected ? Color.accentColor : Color.primary.opacity(0.15), lineWidth: isSelected ? 2.5 : 0.5)
-            )
-            .onTapGesture { onTap() }
     }
 }
 

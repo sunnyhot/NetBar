@@ -132,23 +132,13 @@ final class NetworkNotificationController: ObservableObject {
         guard authorizationStatus == .authorized else { return false }
 
         let currentDate = now()
-        let cooldown = cooldownSeconds(for: event.kind)
-        if let lastDeliveredAt = lastDeliveredAtByKey[event.cooldownKey],
-           currentDate.timeIntervalSince(lastDeliveredAt) < cooldown {
+        if let lastDeliveredAt = lastDeliveredAtByKey[event.kind.rawValue],
+           currentDate.timeIntervalSince(lastDeliveredAt) < 10 * 60 {
             return false
         }
 
-        lastDeliveredAtByKey[event.cooldownKey] = currentDate
+        lastDeliveredAtByKey[event.kind.rawValue] = currentDate
         return true
-    }
-
-    private func cooldownSeconds(for kind: NetworkAnomalyKind) -> TimeInterval {
-        switch kind {
-        case .highTraffic, .applicationSpike:
-            return 10 * 60
-        case .networkDrop, .networkRecovered:
-            return 3 * 60
-        }
     }
 }
 
@@ -156,13 +146,6 @@ extension NetworkIntelligenceSettings {
     func isEnabled(for kind: NetworkAnomalyKind) -> Bool {
         guard isAnomalyDetectionEnabled else { return false }
 
-        switch kind {
-        case .highTraffic:
-            return true
-        case .applicationSpike:
-            return isApplicationSpikeAlertEnabled
-        case .networkDrop, .networkRecovered:
-            return isNetworkDropAlertEnabled
-        }
+        return kind == .highTraffic
     }
 }

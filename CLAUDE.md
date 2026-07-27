@@ -38,18 +38,14 @@ macOS 菜单栏网络流量监控 App。纯 Swift 编写，无外部依赖。
 | `RunCatAnimation.swift` | 314 | RunCat 动画系统：20+ 角色，FPS 随网速变化 2-24fps |
 | `ApplicationResourceReader.swift` | 208 | 每应用资源读取：ProcessResourceUsage 模型 + ApplicationResourceReading 协议 + PSApplicationResourceReader (`ps aux`) + SystemResourceReader + SystemResourceSummary |
 | `NetworkMonitor.swift` | 497 | **核心监控引擎**：1s 接口采样 + 5s 应用流量采样（含每应用内存/CPU）+ 系统资源汇总，维护 90s 历史 |
-| `PetController.swift` | 292 | 宠物控制器（虚拟宠物功能） |
-| `PetState.swift` | 266 | 宠物状态模型 |
 | `AppPreferences.swift` | 339 | 全局偏好（ObservableObject）：Dock/语言/外观/排序/开机启动/onboarding |
 | `CustomCharacter.swift` | 214 | 自定义角色定义 |
 | `NetBarDesignSystem.swift` | 230 | 设计系统常量 |
-| `StatusBarPopoverContentView.swift` | 193 | 状态栏弹出内容视图 |
 | `ApplicationTrafficReader.swift` | 118 | 应用流量读取（`/usr/bin/nettop -P -L 1 -x`），解析 CSV |
 | `InterfaceStats.swift` | 115 | 数据模型：InterfaceStats/InterfaceRate/NetworkSnapshot/ApplicationTrafficRate（含 residentMemory/cpuPercentage）等 |
 | `ApplicationTrafficPresentation.swift` | 129 | 应用列表展示逻辑：过滤/搜索/5 种排序 |
 | `NetworkStatsReader.swift` | 89 | 网络接口读取（getifaddrs + if_data），识别主接口（SCDynamicStore） |
-| `PetSkill.swift` | 70 | 宠物技能定义 |
-| `Formatters.swift` | 76 | ByteFormat 工具 + SystemResourceFormat（内存/CPU/热状态格式化） |
+| `Formatters.swift` | 39 | ByteFormat 工具 |
 | `NetworkInterfaceClassifier.swift` | 24 | 网络接口分类器 |
 
 ### Scripts（327 行）
@@ -93,7 +89,6 @@ Main.swift (@main)
        ├─ StatusBarController (NSStatusItem + CoreGraphics 渲染)
        │    ├─ StatusBarSettings + StatusBarDisplayRenderer
        │    └─ RunCatAnimation (角色动画)
-       ├─ PetController (虚拟宠物系统)
        ├─ DetailsWindowController → NetworkPopoverView (SwiftUI)
        ├─ PreferencesWindowController (设置 UI)
        └─ AppUpdater (GitHub Releases 自更新)

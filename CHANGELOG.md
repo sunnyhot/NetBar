@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.41.0 (2026-07-27)
+
+### Cleanup — 收敛智能告警与详情弹窗展示层
+
+- 移除应用流量突增告警（应用维度的高流量提醒），异常检测只保留基于总流量的持续高流量提醒
+- 移除网络掉线告警及掉线/恢复检测与冷却分支，避免在线状态抖动造成的误报与通知噪音
+- 移除“智能状态栏模式 / 智能角色建议 / 异常标记 / Top 应用 / 应用历史排名”等智能设置项，状态栏不再随智能上下文自动变化
+- 移除详情弹窗的 `NetworkSummaryPanel` 摘要面板和独立 `StatusBarPopoverContentView`、`StatusBarContextEvaluator` 等仅供智能模式使用的展示与评估层
+- 移除已废弃的应用级 CPU/内存资源读取（`ApplicationResourceReader` 中的系统资源读取分支）、相关偏好与历史展示
+- 移除独立的更新偏好视图，更新入口改由全局偏好统一管理；旧智能设置字段升级后会被安全忽略
+- 精简 `NetworkIntelligenceModels`、`NetworkAnomalyDetector`、`NetworkHistoryStore`、`StatusBarStyle` 等模型与渲染分支，删除已废弃的 `NetworkHealthTests`
+- 净删减约 3000 行代码及对应测试，保留基础网络监控、持续高流量提醒、历史统计、角色动画和自动更新
+
 ## v0.40.4 (2026-07-27)
 
 ### Cleanup — 精简详情弹窗状态卡片

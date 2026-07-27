@@ -23,44 +23,23 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var isAnomalyDetectionEnabled: Bool
     var isSystemNotificationEnabled: Bool
     var highTrafficThreshold: HighTrafficThreshold
-    var isApplicationSpikeAlertEnabled: Bool
-    var isNetworkDropAlertEnabled: Bool
     var isHistoryTrackingEnabled: Bool
-    var isSmartStatusBarModeEnabled: Bool
-    var isSmartCharacterSuggestionEnabled: Bool
-    var showsSmartAnomalyMarker: Bool
-    var showsSmartTopApplication: Bool
     var historyRetentionDays: Int
-    var isApplicationHistoryRankingEnabled: Bool
 
     init(
         hasSeenNotificationOnboarding: Bool,
         isAnomalyDetectionEnabled: Bool,
         isSystemNotificationEnabled: Bool,
         highTrafficThreshold: HighTrafficThreshold,
-        isApplicationSpikeAlertEnabled: Bool,
-        isNetworkDropAlertEnabled: Bool,
         isHistoryTrackingEnabled: Bool,
-        isSmartStatusBarModeEnabled: Bool = false,
-        isSmartCharacterSuggestionEnabled: Bool = false,
-        showsSmartAnomalyMarker: Bool = true,
-        showsSmartTopApplication: Bool = true,
-        historyRetentionDays: Int = 30,
-        isApplicationHistoryRankingEnabled: Bool = true
+        historyRetentionDays: Int = 30
     ) {
         self.hasSeenNotificationOnboarding = hasSeenNotificationOnboarding
         self.isAnomalyDetectionEnabled = isAnomalyDetectionEnabled
         self.isSystemNotificationEnabled = isSystemNotificationEnabled
         self.highTrafficThreshold = highTrafficThreshold
-        self.isApplicationSpikeAlertEnabled = isApplicationSpikeAlertEnabled
-        self.isNetworkDropAlertEnabled = isNetworkDropAlertEnabled
         self.isHistoryTrackingEnabled = isHistoryTrackingEnabled
-        self.isSmartStatusBarModeEnabled = isSmartStatusBarModeEnabled
-        self.isSmartCharacterSuggestionEnabled = isSmartCharacterSuggestionEnabled
-        self.showsSmartAnomalyMarker = showsSmartAnomalyMarker
-        self.showsSmartTopApplication = showsSmartTopApplication
         self.historyRetentionDays = historyRetentionDays
-        self.isApplicationHistoryRankingEnabled = isApplicationHistoryRankingEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -83,42 +62,14 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             HighTrafficThreshold.self,
             forKey: .highTrafficThreshold
         ) ?? defaultSettings.highTrafficThreshold
-        isApplicationSpikeAlertEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isApplicationSpikeAlertEnabled
-        ) ?? defaultSettings.isApplicationSpikeAlertEnabled
-        isNetworkDropAlertEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isNetworkDropAlertEnabled
-        ) ?? defaultSettings.isNetworkDropAlertEnabled
         isHistoryTrackingEnabled = try container.decodeIfPresent(
             Bool.self,
             forKey: .isHistoryTrackingEnabled
         ) ?? defaultSettings.isHistoryTrackingEnabled
-        isSmartStatusBarModeEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isSmartStatusBarModeEnabled
-        ) ?? defaultSettings.isSmartStatusBarModeEnabled
-        isSmartCharacterSuggestionEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isSmartCharacterSuggestionEnabled
-        ) ?? defaultSettings.isSmartCharacterSuggestionEnabled
-        showsSmartAnomalyMarker = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .showsSmartAnomalyMarker
-        ) ?? defaultSettings.showsSmartAnomalyMarker
-        showsSmartTopApplication = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .showsSmartTopApplication
-        ) ?? defaultSettings.showsSmartTopApplication
         historyRetentionDays = try container.decodeIfPresent(
             Int.self,
             forKey: .historyRetentionDays
         ) ?? defaultSettings.historyRetentionDays
-        isApplicationHistoryRankingEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isApplicationHistoryRankingEnabled
-        ) ?? defaultSettings.isApplicationHistoryRankingEnabled
     }
 
     func encode(to encoder: Encoder) throws {
@@ -128,15 +79,8 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(isAnomalyDetectionEnabled, forKey: .isAnomalyDetectionEnabled)
         try container.encode(isSystemNotificationEnabled, forKey: .isSystemNotificationEnabled)
         try container.encode(highTrafficThreshold, forKey: .highTrafficThreshold)
-        try container.encode(isApplicationSpikeAlertEnabled, forKey: .isApplicationSpikeAlertEnabled)
-        try container.encode(isNetworkDropAlertEnabled, forKey: .isNetworkDropAlertEnabled)
         try container.encode(isHistoryTrackingEnabled, forKey: .isHistoryTrackingEnabled)
-        try container.encode(isSmartStatusBarModeEnabled, forKey: .isSmartStatusBarModeEnabled)
-        try container.encode(isSmartCharacterSuggestionEnabled, forKey: .isSmartCharacterSuggestionEnabled)
-        try container.encode(showsSmartAnomalyMarker, forKey: .showsSmartAnomalyMarker)
-        try container.encode(showsSmartTopApplication, forKey: .showsSmartTopApplication)
         try container.encode(historyRetentionDays, forKey: .historyRetentionDays)
-        try container.encode(isApplicationHistoryRankingEnabled, forKey: .isApplicationHistoryRankingEnabled)
     }
 
     static let `default` = NetworkIntelligenceSettings(
@@ -144,15 +88,8 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         isAnomalyDetectionEnabled: true,
         isSystemNotificationEnabled: false,
         highTrafficThreshold: .mbps10,
-        isApplicationSpikeAlertEnabled: true,
-        isNetworkDropAlertEnabled: true,
         isHistoryTrackingEnabled: true,
-        isSmartStatusBarModeEnabled: false,
-        isSmartCharacterSuggestionEnabled: false,
-        showsSmartAnomalyMarker: true,
-        showsSmartTopApplication: true,
-        historyRetentionDays: 30,
-        isApplicationHistoryRankingEnabled: true
+        historyRetentionDays: 30
     )
 
     private enum CodingKeys: String, CodingKey {
@@ -160,29 +97,13 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case isAnomalyDetectionEnabled
         case isSystemNotificationEnabled
         case highTrafficThreshold
-        case isApplicationSpikeAlertEnabled
-        case isNetworkDropAlertEnabled
         case isHistoryTrackingEnabled
-        case isSmartStatusBarModeEnabled
-        case isSmartCharacterSuggestionEnabled
-        case showsSmartAnomalyMarker
-        case showsSmartTopApplication
         case historyRetentionDays
-        case isApplicationHistoryRankingEnabled
     }
-}
-
-enum NetworkAnomalySeverity: String, Codable, Equatable {
-    case info
-    case warning
-    case critical
 }
 
 enum NetworkAnomalyKind: String, Codable, CaseIterable, Identifiable {
     case highTraffic
-    case applicationSpike
-    case networkDrop
-    case networkRecovered
 
     var id: String { rawValue }
 
@@ -190,12 +111,6 @@ enum NetworkAnomalyKind: String, Codable, CaseIterable, Identifiable {
         switch self {
         case .highTraffic:
             return language.text("高流量", "High traffic")
-        case .applicationSpike:
-            return language.text("应用突增", "Application spike")
-        case .networkDrop:
-            return language.text("网络断流", "Network drop")
-        case .networkRecovered:
-            return language.text("网络恢复", "Network recovered")
         }
     }
 }
@@ -203,48 +118,23 @@ enum NetworkAnomalyKind: String, Codable, CaseIterable, Identifiable {
 struct NetworkAnomalyEvent: Codable, Equatable, Identifiable {
     let id: UUID
     let kind: NetworkAnomalyKind
-    let severity: NetworkAnomalySeverity
     let title: String
     let message: String
     let timestamp: Date
-    let applicationName: String?
-    let bytesPerSecond: Double?
-    let cooldownKey: String
 
     init(
         id: UUID = UUID(),
         kind: NetworkAnomalyKind,
-        severity: NetworkAnomalySeverity,
         title: String,
         message: String,
-        timestamp: Date,
-        applicationName: String? = nil,
-        bytesPerSecond: Double? = nil,
-        cooldownKey: String
+        timestamp: Date
     ) {
         self.id = id
         self.kind = kind
-        self.severity = severity
         self.title = title
         self.message = message
         self.timestamp = timestamp
-        self.applicationName = applicationName
-        self.bytesPerSecond = bytesPerSecond
-        self.cooldownKey = cooldownKey
     }
-}
-
-struct ApplicationDailyUsage: Codable, Equatable, Identifiable {
-    let applicationID: String
-    var displayName: String
-    var processNames: [String]
-    var downloadBytes: UInt64
-    var uploadBytes: UInt64
-    var lastSeenAt: Date
-    var role: ApplicationAttributionRole
-
-    var id: String { applicationID }
-    var totalBytes: UInt64 { downloadBytes + uploadBytes }
 }
 
 struct NetworkDailySummary: Codable, Equatable, Identifiable {
@@ -257,7 +147,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
     var activeSeconds: TimeInterval
     var animationPlaybackCount: UInt64
     var animationPlaybackCountsByCharacter: [String: UInt64]
-    var topApplications: [ApplicationDailyUsage]
 
     var id: String { dateKey }
     var totalBytes: UInt64 { downloadBytes + uploadBytes }
@@ -271,8 +160,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         sampleCount: Int,
         activeSeconds: TimeInterval,
         animationPlaybackCount: UInt64 = 0,
-        animationPlaybackCountsByCharacter: [String: UInt64] = [:],
-        topApplications: [ApplicationDailyUsage]
+        animationPlaybackCountsByCharacter: [String: UInt64] = [:]
     ) {
         self.dateKey = dateKey
         self.downloadBytes = downloadBytes
@@ -283,7 +171,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         self.activeSeconds = activeSeconds
         self.animationPlaybackCount = animationPlaybackCount
         self.animationPlaybackCountsByCharacter = animationPlaybackCountsByCharacter
-        self.topApplications = topApplications
     }
 
     init(from decoder: Decoder) throws {
@@ -301,7 +188,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
             [String: UInt64].self,
             forKey: .animationPlaybackCountsByCharacter
         ) ?? [:]
-        topApplications = try container.decode([ApplicationDailyUsage].self, forKey: .topApplications)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -316,7 +202,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         try container.encode(activeSeconds, forKey: .activeSeconds)
         try container.encode(animationPlaybackCount, forKey: .animationPlaybackCount)
         try container.encode(animationPlaybackCountsByCharacter, forKey: .animationPlaybackCountsByCharacter)
-        try container.encode(topApplications, forKey: .topApplications)
     }
 
     static func empty(dateKey: String) -> NetworkDailySummary {
@@ -329,8 +214,7 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
             sampleCount: 0,
             activeSeconds: 0,
             animationPlaybackCount: 0,
-            animationPlaybackCountsByCharacter: [:],
-            topApplications: []
+            animationPlaybackCountsByCharacter: [:]
         )
     }
 
@@ -344,7 +228,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
         case activeSeconds
         case animationPlaybackCount
         case animationPlaybackCountsByCharacter
-        case topApplications
     }
 }
 
@@ -352,8 +235,6 @@ struct NetworkIntelligenceSummary: Equatable {
     var latestEvent: NetworkAnomalyEvent?
     var today: NetworkDailySummary
     var recentDays: [NetworkDailySummary]
-    var realtimeTopApplications: [ApplicationTrafficRate]
-    var todayTopApplications: [ApplicationDailyUsage]
     var animationPlaybackCountsByCharacter: [String: UInt64]
 
     var favoriteAnimationCharacterID: String? {
@@ -370,8 +251,6 @@ struct NetworkIntelligenceSummary: Equatable {
         latestEvent: nil,
         today: .empty(dateKey: "1970-01-01"),
         recentDays: [],
-        realtimeTopApplications: [],
-        todayTopApplications: [],
         animationPlaybackCountsByCharacter: [:]
     )
 }

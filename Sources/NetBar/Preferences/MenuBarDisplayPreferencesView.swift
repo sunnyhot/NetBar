@@ -86,14 +86,3 @@ struct MenuBarDisplaySectionContent: View {
         }
     }
 }
-
-struct MenuBarDisplaySection: View {
-    @ObservedObject var settings: StatusBarSettings
-    @ObservedObject var appPreferences: AppPreferences
-
-    var body: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.display.title(language: appPreferences.resolvedLanguage)) {
-            MenuBarDisplaySectionContent(settings: settings, appPreferences: appPreferences)
-        }
-    }
-}

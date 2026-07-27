@@ -7,7 +7,6 @@ final class NetworkMonitor: ObservableObject {
     @Published private(set) var appTraffic = ApplicationTrafficState.empty
     @Published private(set) var systemResources = SystemResourceSnapshot.empty
     @Published private(set) var intelligenceSummary = NetworkIntelligenceSummary.empty
-    @Published private(set) var healthSnapshot = NetworkHealthSnapshot.localInterface(isAvailable: true)
     @Published private(set) var isRunning = false
 
     /// Controls whether the nettop process is active. Set to true when the
@@ -34,7 +33,6 @@ final class NetworkMonitor: ObservableObject {
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
     private var previousApplicationSampleDate: Date?
-    private var lastApplicationTrafficDate: Date?
     private var anomalyDetector = NetworkAnomalyDetector()
     private var previousCPUTickSample: CPUTickSample?
     private var isReadingApplicationTraffic = false
@@ -250,7 +248,6 @@ final class NetworkMonitor: ObservableObject {
         guard let previousDate = capturedPreviousSampleDate else {
             previousStats = currentByName
             previousSampleDate = now
-            let externalStats = Self.externalTrafficStats(from: stats)
             snapshot = NetworkSnapshot(
                 timestamp: now,
                 interfaces: stats.map {
@@ -269,8 +266,6 @@ final class NetworkMonitor: ObservableObject {
                 },
                 downloadBytesPerSecond: 0,
                 uploadBytesPerSecond: 0,
-                totalReceivedBytes: externalStats.reduce(0) { $0 + $1.receivedBytes },
-                totalSentBytes: externalStats.reduce(0) { $0 + $1.sentBytes },
                 sampleCount: 1
             )
             recordSnapshotForIntelligence()
@@ -298,7 +293,6 @@ final class NetworkMonitor: ObservableObject {
         }
 
         let externalRates = Self.externalTrafficRates(from: rates)
-        let externalStats = Self.externalTrafficStats(from: stats)
         let totalDownload = externalRates.reduce(0) { $0 + $1.downloadBytesPerSecond }
         let totalUpload = externalRates.reduce(0) { $0 + $1.uploadBytesPerSecond }
 
@@ -317,8 +311,6 @@ final class NetworkMonitor: ObservableObject {
             },
             downloadBytesPerSecond: totalDownload,
             uploadBytesPerSecond: totalUpload,
-            totalReceivedBytes: externalStats.reduce(0) { $0 + $1.receivedBytes },
-            totalSentBytes: externalStats.reduce(0) { $0 + $1.sentBytes },
             sampleCount: snapshot.sampleCount + 1
         )
 
@@ -347,7 +339,6 @@ final class NetworkMonitor: ObservableObject {
     ) -> [NetworkAnomalyEvent] {
         let events = anomalyDetector.detect(
             snapshot: snapshot,
-            appTraffic: appTraffic,
             settings: settings,
             now: now(),
             language: language
@@ -361,7 +352,6 @@ final class NetworkMonitor: ObservableObject {
     func clearNetworkHistory() {
         historyStore.clear()
         intelligenceSummary = historyStore.summary
-        lastApplicationTrafficDate = nil
     }
 
     func flushNetworkHistory() {
@@ -466,7 +456,6 @@ final class NetworkMonitor: ObservableObject {
                 errorMessage: nil,
                 systemResources: systemSummary
             )
-            recordApplicationTrafficForIntelligence(sampledAt: sampledAt)
             return
         }
 
@@ -506,28 +495,10 @@ final class NetworkMonitor: ObservableObject {
             errorMessage: nil,
             systemResources: systemSummary
         )
-        recordApplicationTrafficForIntelligence(sampledAt: sampledAt)
     }
 
     private func recordSnapshotForIntelligence() {
         historyStore.record(snapshot: snapshot)
-        syncIntelligenceSummaryFromHistory()
-        publishLocalInterfaceHealth()
-    }
-
-    private func publishLocalInterfaceHealth() {
-        let hasExternalInterface = snapshot.interfaces.contains {
-            NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name)
-        }
-        healthSnapshot = NetworkHealthSnapshot.localInterface(
-            isAvailable: hasExternalInterface
-        )
-    }
-
-    private func recordApplicationTrafficForIntelligence(sampledAt: Date) {
-        let interval = lastApplicationTrafficDate.map { sampledAt.timeIntervalSince($0) } ?? applicationSampleInterval
-        historyStore.record(appTraffic: appTraffic, interval: max(interval, 0.2))
-        lastApplicationTrafficDate = sampledAt
         syncIntelligenceSummaryFromHistory()
     }
 
@@ -718,10 +689,6 @@ final class NetworkMonitor: ObservableObject {
             }
         }
         activityLevel = newLevel
-    }
-
-    private static func externalTrafficStats(from stats: [InterfaceStats]) -> [InterfaceStats] {
-        stats.filter { NetworkInterfaceClassifier.countsTowardExternalTrafficTotals($0.name) }
     }
 
     private static func externalTrafficRates(from rates: [InterfaceRate]) -> [InterfaceRate] {

@@ -161,12 +161,11 @@ struct LivingSignalStatusPresentation: Equatable {
         let totalSpeed = ByteFormat.speed(snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond)
 
         if let latestEvent {
-            let tone: LivingSignalTone = latestEvent.severity == .critical ? .critical : .attention
             return LivingSignalStatusPresentation(
                 title: latestEvent.title,
                 subtitle: latestEvent.message,
-                tone: tone,
-                symbolName: latestEvent.severity == .critical ? "exclamationmark.triangle.fill" : "exclamationmark.circle.fill",
+                tone: .attention,
+                symbolName: "exclamationmark.circle.fill",
                 totalSpeed: totalSpeed,
                 interfaceName: primaryInterface
             )

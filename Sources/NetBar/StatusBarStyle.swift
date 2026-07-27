@@ -940,7 +940,6 @@ struct StatusBarPresentation: Equatable {
 
 struct StatusBarRenderSignature: Equatable {
     let presentation: StatusBarPresentation
-    let smartContext: SmartStatusBarContext
     let fontSize: Double
     let itemWidth: Double
     let usesAutomaticWidth: Bool
@@ -1111,17 +1110,13 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore? = nil,
-        catFrameIndex: Int? = nil,
-        characterOverrideID: String? = nil,
-        smartContext: SmartStatusBarContext = .manual
+        catFrameIndex: Int? = nil
     ) -> StatusBarPresentation {
         let layout = layout(
             snapshot: snapshot,
             settings: settings,
             customCharacterStore: customCharacterStore,
-            catFrameIndex: catFrameIndex,
-            characterOverrideID: characterOverrideID,
-            smartContext: smartContext
+            catFrameIndex: catFrameIndex
         )
         return StatusBarPresentation(
             kind: .retinaImage,
@@ -1136,27 +1131,21 @@ enum StatusBarDisplayRenderer {
         appearanceName: String,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        characterOverrideID: String? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil,
-        smartContext: SmartStatusBarContext = .manual,
         renderTime: TimeInterval = Date().timeIntervalSince1970,
         reduceMotion: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     ) -> StatusBarRenderSignature {
         let effectiveCharacter = characterAsset(
             settings: settings,
-            customCharacterStore: customCharacterStore,
-            characterOverrideID: characterOverrideID
+            customCharacterStore: customCharacterStore
         )
         return StatusBarRenderSignature(
             presentation: presentation(
                 snapshot: snapshot,
                 settings: settings,
                 customCharacterStore: customCharacterStore,
-                catFrameIndex: catFrameIndex,
-                characterOverrideID: characterOverrideID,
-                smartContext: smartContext
+                catFrameIndex: catFrameIndex
             ),
-            smartContext: smartContext,
             fontSize: settings.fontSize,
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
@@ -1205,9 +1194,7 @@ enum StatusBarDisplayRenderer {
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        characterOverrideID: String? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil,
-        smartContext: SmartStatusBarContext = .manual,
         renderTime: TimeInterval = Date().timeIntervalSince1970
     ) -> NSImage {
         image(
@@ -1216,9 +1203,7 @@ enum StatusBarDisplayRenderer {
             scale: NSScreen.main?.backingScaleFactor ?? 2,
             customCharacterStore: customCharacterStore,
             catFrameIndex: catFrameIndex,
-            characterOverrideID: characterOverrideID,
             googlyEyesState: googlyEyesState,
-            smartContext: smartContext,
             renderTime: renderTime
         )
     }
@@ -1229,18 +1214,14 @@ enum StatusBarDisplayRenderer {
         scale: CGFloat,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        characterOverrideID: String? = nil,
         googlyEyesState: GooglyEyesRenderState? = nil,
-        smartContext: SmartStatusBarContext = .manual,
         renderTime: TimeInterval = Date().timeIntervalSince1970
     ) -> NSImage {
         let layout = layout(
             snapshot: snapshot,
             settings: settings,
             customCharacterStore: customCharacterStore,
-            catFrameIndex: catFrameIndex,
-            characterOverrideID: characterOverrideID,
-            smartContext: smartContext
+            catFrameIndex: catFrameIndex
         )
         let width = layout.width
         let height = max(NSStatusBar.system.thickness, 24)
@@ -1298,8 +1279,7 @@ enum StatusBarDisplayRenderer {
         if settings.showsCat, catFrameIndex != nil {
             let character = characterAsset(
                 settings: settings,
-                customCharacterStore: customCharacterStore,
-                characterOverrideID: characterOverrideID
+                customCharacterStore: customCharacterStore
             )
             if character.isCustom {
                 catHasCustomColor = true
@@ -1332,8 +1312,7 @@ enum StatusBarDisplayRenderer {
             // Load the cat character image from the pre-cached animation frames
             let character = characterAsset(
                 settings: settings,
-                customCharacterStore: customCharacterStore,
-                characterOverrideID: characterOverrideID
+                customCharacterStore: customCharacterStore
             )
             let frameIdx = catIndex % character.frameCount
 
@@ -1613,11 +1592,10 @@ enum StatusBarDisplayRenderer {
 
     private static func characterAsset(
         settings: StatusBarSettings,
-        customCharacterStore: CustomCharacterStore?,
-        characterOverrideID: String? = nil
+        customCharacterStore: CustomCharacterStore?
     ) -> CharacterAsset {
         CharacterAsset.resolve(
-            id: characterOverrideID ?? settings.catCharacter,
+            id: settings.catCharacter,
             customCharacters: customCharacterStore?.characters ?? []
         )
     }
@@ -1674,14 +1652,12 @@ enum StatusBarDisplayRenderer {
     private static func characterExtraWidth(
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore?,
-        catFrameIndex: Int?,
-        characterOverrideID: String? = nil
+        catFrameIndex: Int?
     ) -> CGFloat {
         guard catFrameIndex != nil, settings.showsCat else { return 0 }
         let character = characterAsset(
             settings: settings,
-            customCharacterStore: customCharacterStore,
-            characterOverrideID: characterOverrideID
+            customCharacterStore: customCharacterStore
         )
         return characterSize(for: character, settings: settings).width + characterSpacing(settings: settings)
     }
@@ -1719,16 +1695,12 @@ enum StatusBarDisplayRenderer {
     static func width(
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
-        customCharacterStore: CustomCharacterStore? = nil,
-        characterOverrideID: String? = nil,
-        smartContext: SmartStatusBarContext = .manual
+        customCharacterStore: CustomCharacterStore? = nil
     ) -> CGFloat {
         layout(
             snapshot: snapshot,
             settings: settings,
-            customCharacterStore: customCharacterStore,
-            characterOverrideID: characterOverrideID,
-            smartContext: smartContext
+            customCharacterStore: customCharacterStore
         ).width
     }
 
@@ -1752,9 +1724,7 @@ enum StatusBarDisplayRenderer {
         snapshot: NetworkSnapshot,
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore?,
-        catFrameIndex: Int? = nil,
-        characterOverrideID: String? = nil,
-        smartContext: SmartStatusBarContext = .manual
+        catFrameIndex: Int? = nil
     ) -> Layout {
         let font = NSFont.monospacedDigitSystemFont(
             ofSize: settings.clampedFontSize,
@@ -1767,11 +1737,8 @@ enum StatusBarDisplayRenderer {
             value: ByteFormat.speed(snapshot.uploadBytesPerSecond + snapshot.downloadBytesPerSecond),
             settings: settings
         )
-        let displayMode = smartContext.trafficDisplayModeOverride ?? settings.trafficDisplayMode
+        let displayMode = settings.trafficDisplayMode
         let lines: [String] = {
-            if let overrideLine = smartContext.overrideLine {
-                return [overrideLine, total]
-            }
             switch displayMode {
             case .upDown:
                 return settings.order == .uploadFirst ? [upload, download] : [download, upload]
@@ -1796,8 +1763,7 @@ enum StatusBarDisplayRenderer {
             let catExtraWidth = characterExtraWidth(
                 settings: settings,
                 customCharacterStore: customCharacterStore,
-                catFrameIndex: catFrameIndex,
-                characterOverrideID: characterOverrideID
+                catFrameIndex: catFrameIndex
             )
             return Layout(
                 width: ceil(cached.width + catExtraWidth),
@@ -1817,8 +1783,7 @@ enum StatusBarDisplayRenderer {
         let catExtraWidth = characterExtraWidth(
             settings: settings,
             customCharacterStore: customCharacterStore,
-            catFrameIndex: catFrameIndex,
-            characterOverrideID: characterOverrideID
+            catFrameIndex: catFrameIndex
         )
         let automaticTextWidth = max(measuredWidth, stableWidth)
         let automaticWidth = ceil(automaticTextWidth + horizontalPadding * 2 + catExtraWidth)
