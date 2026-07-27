@@ -28,8 +28,11 @@ struct NetworkPopoverView: View {
 
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 16) {
-                    InsightStreamView(
-                        summary: monitor.intelligenceSummary,
+                    NetworkIntelligenceStatusCard(
+                        presentation: NetworkIntelligenceStatusPresentation(
+                            event: monitor.intelligenceSummary.latestEvent,
+                            language: appPreferences.resolvedLanguage
+                        ),
                         appPreferences: appPreferences,
                         openPreferences: openPreferences
                     )

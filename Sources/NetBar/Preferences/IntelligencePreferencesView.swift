@@ -3,7 +3,6 @@ import SwiftUI
 struct IntelligencePreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var notificationController: NetworkNotificationController
-    @ObservedObject var petController: PetController
     let clearHistory: () -> Void
     let requestHealthRetest: () -> Void
 
@@ -15,7 +14,6 @@ struct IntelligencePreferencesView: View {
                 networkDiagnosticsSection
                 notificationSection
                 historySection
-                petFeedbackSection
             }
             .padding(.trailing, 2)
         }
@@ -178,16 +176,6 @@ struct IntelligencePreferencesView: View {
             }
 
             Toggle(
-                appPreferences.text("洞察事件流", "Insight stream"),
-                isOn: settingsBinding(\.isInsightStreamEnabled)
-            )
-
-            Toggle(
-                appPreferences.text("洞察建议", "Insight suggestions"),
-                isOn: settingsBinding(\.isInsightSuggestionEnabled)
-            )
-
-            Toggle(
                 appPreferences.text("应用累计排行", "Application ranking"),
                 isOn: settingsBinding(\.isApplicationHistoryRankingEnabled)
             )
@@ -206,22 +194,6 @@ struct IntelligencePreferencesView: View {
         }
     }
 
-    private var petFeedbackSection: some View {
-        PreferenceSection(
-            title: appPreferences.text("宠物反馈", "Pet Feedback"),
-            systemImage: "face.smiling"
-        ) {
-            Toggle(
-                appPreferences.text("心情反馈", "Mood feedback"),
-                isOn: petSettingBinding(\.isPetMoodFeedbackEnabled)
-            )
-            Toggle(
-                appPreferences.text("活跃等级", "Activity level"),
-                isOn: petSettingBinding(\.isPetActivityLevelEnabled)
-            )
-        }
-    }
-
     private func settingsBinding<Value>(
         _ keyPath: WritableKeyPath<NetworkIntelligenceSettings, Value>
     ) -> Binding<Value> {
@@ -231,19 +203,6 @@ struct IntelligencePreferencesView: View {
             },
             set: { newValue in
                 updateSettings { settings in
-                    settings[keyPath: keyPath] = newValue
-                }
-            }
-        )
-    }
-
-    private func petSettingBinding<Value>(
-        _ keyPath: WritableKeyPath<PetSettings, Value>
-    ) -> Binding<Value> {
-        Binding(
-            get: { petController.settings[keyPath: keyPath] },
-            set: { newValue in
-                petController.updateSettings { settings in
                     settings[keyPath: keyPath] = newValue
                 }
             }

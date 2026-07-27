@@ -193,7 +193,6 @@ final class StatusBarController {
     private let settings: StatusBarSettings
     private let appPreferences: AppPreferences
     private let notificationController: NetworkNotificationController
-    private let petController: PetController
     private let customCharacterStore: CustomCharacterStore
     private let powerObserver: SystemPowerObserver
     private let openPreferences: () -> Void
@@ -225,12 +224,6 @@ final class StatusBarController {
                 guard let self else { return }
                 await self.notificationController.handle(event, settings: settings)
             }
-        },
-        petCue: { [weak self] event in
-            self?.petController.observe(anomaly: event)
-        },
-        petDailySummary: { [weak self] summary in
-            self?.petController.observe(todaySummary: summary)
         }
     )
 
@@ -245,7 +238,6 @@ final class StatusBarController {
         customCharacterStore: CustomCharacterStore,
         powerObserver: SystemPowerObserver,
         notificationController: NetworkNotificationController,
-        petController: PetController,
         openPreferences: @escaping () -> Void,
         showAbout: @escaping () -> Void
     ) {
@@ -253,7 +245,6 @@ final class StatusBarController {
         self.settings = settings
         self.appPreferences = appPreferences
         self.notificationController = notificationController
-        self.petController = petController
         self.customCharacterStore = customCharacterStore
         self.powerObserver = powerObserver
         self.openPreferences = openPreferences
@@ -451,7 +442,6 @@ final class StatusBarController {
         )
         networkIntelligenceCoordinator.handle(
             events: events,
-            todaySummary: monitor.intelligenceSummary.today,
             settings: settings
         )
     }

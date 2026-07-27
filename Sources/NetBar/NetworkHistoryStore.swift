@@ -83,8 +83,7 @@ final class NetworkHistoryStore: ObservableObject {
             recentDays: state.recentDays,
             realtimeTopApplications: [],
             todayTopApplications: Array(state.today.topApplications.prefix(5)),
-            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter,
-            insightCards: []
+            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         if shouldSaveLoadedState {
             save()
@@ -231,8 +230,7 @@ final class NetworkHistoryStore: ObservableObject {
             recentDays: state.recentDays,
             realtimeTopApplications: realtimeTopApplications,
             todayTopApplications: Array(state.today.topApplications.prefix(5)),
-            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter,
-            insightCards: summary.insightCards
+            animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         scheduleSave()
     }

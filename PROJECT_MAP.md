@@ -42,7 +42,7 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 - `Sources/NetBar`: 58 个 Swift 文件，约 18,000 行
 - `Tests/NetBarTests`: 3 个 Swift 文件，约 7,500 行，352 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.39.17`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.40.1`
 
 ## 3. 启动与对象装配
 
@@ -55,7 +55,6 @@ Main.swift
        ├─ SystemPowerObserver
        ├─ NetworkHistoryStore
        ├─ NetworkNotificationController
-       ├─ PetController
        ├─ AppUpdater
        ├─ PreferencesWindowController
        └─ StatusBarController
@@ -87,7 +86,7 @@ NetworkMonitor
         └─ recentHistory
         │
         ▼
-StatusBarController / NetworkPopoverView / NetworkNotificationController / PetController
+StatusBarController / NetworkPopoverView / NetworkNotificationController
 ```
 
 关键文件：
@@ -199,30 +198,25 @@ PreferencesWindowController
 - 用户可见字符串使用中英文双参数
 - 偏好 UI 已拆分，避免重新堆回 `PreferencesWindowController`
 
-## 8. 网络智能、历史、通知、宠物
+## 8. 网络智能、历史、通知
 
 ```text
 NetworkMonitor
   ├─ NetworkHistoryStore
-  ├─ NetworkAnomalyDetector
-  └─ NetworkInsightCenter
+  └─ NetworkAnomalyDetector
         │
         ▼
 NetworkIntelligenceCoordinator
-  ├─ NetworkNotificationController
-  └─ PetController
+  └─ NetworkNotificationController
 ```
 
 关键文件：
 
-- `NetworkIntelligenceModels.swift`: 设置、异常事件、洞察卡片、日汇总
+- `NetworkIntelligenceModels.swift`: 设置、异常事件、日汇总
 - `NetworkAnomalyDetector.swift`: 持续高流量、应用突增、断流/恢复、代理归因差异
-- `NetworkInsightCenter.swift`: 将异常事件聚合成可展示洞察卡片
+- `Popover/NetworkIntelligenceStatusView.swift`: 展示最新异常状态，不保留事件流或建议卡片
 - `NetworkHistoryStore.swift`: 日维度统计、Top 应用、动画播放计数、本地 JSON 持久化
 - `NetworkNotificationController.swift`: 通知授权、发送和 cooldown
-- `PetState.swift`
-- `PetController.swift`
-- `PetSkill.swift`
 
 注意点：
 
@@ -230,7 +224,6 @@ NetworkIntelligenceCoordinator
 - 读取到损坏历史文件时会备份成 `NetworkHistory.corrupt-<timestamp>.json`
 - 通知发送受系统授权、设置开关和事件 cooldown 三重限制
 - 智能角色推荐默认关闭；开启后按异常、Top 应用突增、上传占优、高总流量、低速空闲即时推荐内置角色
-- 宠物系统会观察异常事件和每日摘要，生成 mood/cue/reminder
 
 ## 8.5. 网络健康层（Network Health）
 
@@ -375,7 +368,7 @@ swift test
 | 接口总流量 | `NetworkStatsReader.swift`, `NetworkInterfaceClassifier.swift`, `NetworkMonitor.swift` |
 | 系统资源 | `SystemResourceReader.swift`, `ApplicationResourceReader.swift`, `SystemMetricsReader.swift` |
 | 采样性能 | `PerformanceSamplingPolicy.swift`, `NetworkMonitor.swift`, `StatusBarController.swift` |
-| 网络智能提醒 | `NetworkAnomalyDetector.swift`, `NetworkInsightCenter.swift`, `NetworkNotificationController.swift` |
+| 网络智能提醒 | `NetworkAnomalyDetector.swift`, `NetworkNotificationController.swift` |
 | 历史统计 | `NetworkHistoryStore.swift`, `NetworkHistoryPresentation.swift`, `NetworkIntelligenceModels.swift` |
 | 偏好设置 | `AppPreferences.swift`, `StatusBarStyle.swift`, `Sources/NetBar/Preferences/*.swift` |
 | 自定义角色 | `CustomCharacter.swift`, `CustomCharacterStore.swift`, `CustomCharacterImageProcessor.swift`, `StatusBarStyle.swift` |

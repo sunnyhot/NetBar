@@ -37,66 +37,6 @@ struct NetworkIntelligenceStatusPresentation: Equatable {
     }
 }
 
-struct InsightStreamView: View {
-    let summary: NetworkIntelligenceSummary
-    @ObservedObject var appPreferences: AppPreferences
-    let openPreferences: () -> Void
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            NetworkIntelligenceStatusCard(
-                presentation: NetworkIntelligenceStatusPresentation(
-                    event: summary.latestEvent,
-                    language: appPreferences.resolvedLanguage
-                ),
-                appPreferences: appPreferences,
-                openPreferences: openPreferences
-            )
-
-            if appPreferences.networkIntelligenceSettings.isInsightStreamEnabled {
-                insightCards
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var insightCards: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            NetBarSectionHeader(
-                title: appPreferences.text("洞察事件", "Insights"),
-                subtitle: appPreferences.text("最近异常与建议", "Recent anomalies and suggestions")
-            )
-
-            if summary.insightCards.isEmpty {
-                Text(appPreferences.text("暂无新的洞察事件。", "No new insights."))
-                    .font(.system(size: 12))
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .livingSignalRow(tone: .idle, padding: 9)
-            } else {
-                VStack(spacing: 7) {
-                    ForEach(Array(summary.insightCards.prefix(5))) { card in
-                        VStack(alignment: .leading, spacing: 4) {
-                            Text(card.title)
-                                .font(.system(size: 12, weight: .semibold))
-                            Text(card.message)
-                                .font(.system(size: 11))
-                                .foregroundStyle(.secondary)
-                            if !card.suggestion.isEmpty {
-                                Text(card.suggestion)
-                                    .font(.system(size: 11))
-                                    .foregroundStyle(.tertiary)
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .livingSignalRow(tone: .attention, padding: 9)
-                    }
-                }
-            }
-        }
-    }
-}
-
 struct NetworkIntelligenceStatusCard: View {
     let presentation: NetworkIntelligenceStatusPresentation
     @ObservedObject var appPreferences: AppPreferences

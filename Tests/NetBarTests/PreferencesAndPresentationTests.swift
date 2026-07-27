@@ -345,8 +345,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             recentDays: [],
             realtimeTopApplications: [],
             todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:],
-            insightCards: []
+            animationPlaybackCountsByCharacter: [:]
         )
 
         let context = StatusBarContextEvaluator.evaluate(
@@ -378,8 +377,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             recentDays: [],
             realtimeTopApplications: [],
             todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:],
-            insightCards: []
+            animationPlaybackCountsByCharacter: [:]
         )
 
         let context = StatusBarContextEvaluator.evaluate(
@@ -538,8 +536,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             recentDays: [],
             realtimeTopApplications: [],
             todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:],
-            insightCards: []
+            animationPlaybackCountsByCharacter: [:]
         )
 
         let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
@@ -571,8 +568,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             recentDays: [],
             realtimeTopApplications: [],
             todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:],
-            insightCards: []
+            animationPlaybackCountsByCharacter: [:]
         )
 
         let suggestion = SmartCharacterSuggestionEvaluator.suggestedCharacterID(
@@ -670,22 +666,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let presentation = NetworkHistoryPresentation.make(summary: .empty, language: .simplifiedChinese)
 
         XCTAssertTrue(presentation.estimateNotice.contains("本地估算值"))
-    }
-
-    func testNetworkInsightCardDisplayDataKeepsApplicationOptional() {
-        let card = NetworkInsightCard(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            suggestion: "Check Wi-Fi.",
-            timestamp: Date(timeIntervalSince1970: 10),
-            applicationName: nil,
-            cooldownKey: "networkDrop"
-        )
-
-        XCTAssertNil(card.applicationName)
-        XCTAssertEqual(card.title, "Network drop")
     }
 
     func testStatusBarTrafficDisplayModePersistsAndResets() {
@@ -1178,9 +1158,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
     func testNetworkIntelligenceSettingsV039Defaults() {
         let settings = NetworkIntelligenceSettings.default
 
-        XCTAssertTrue(settings.isInsightStreamEnabled)
-        XCTAssertEqual(settings.insightRetentionLimit, 20)
-        XCTAssertTrue(settings.isInsightSuggestionEnabled)
         XCTAssertFalse(settings.isSmartStatusBarModeEnabled)
         XCTAssertFalse(settings.isSmartCharacterSuggestionEnabled)
         XCTAssertTrue(settings.showsSmartAnomalyMarker)
@@ -1209,7 +1186,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(settings.isHistoryTrackingEnabled, NetworkIntelligenceSettings.default.isHistoryTrackingEnabled)
     }
 
-    func testNetworkIntelligenceSettingsDecodesMissingV039FieldsWithDefaults() throws {
+    func testNetworkIntelligenceSettingsIgnoresRemovedInsightFields() throws {
         let legacyJSON = """
         {
           "hasSeenNotificationOnboarding": true,
@@ -1219,7 +1196,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
           "isApplicationSpikeAlertEnabled": false,
           "isNetworkDropAlertEnabled": true,
           "isProxyAttributionAlertEnabled": false,
-          "isHistoryTrackingEnabled": true
+          "isHistoryTrackingEnabled": true,
+          "isInsightStreamEnabled": true,
+          "insightRetentionLimit": 20,
+          "isInsightSuggestionEnabled": true
         }
         """.data(using: .utf8)!
 
@@ -1228,12 +1208,15 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(decoded.hasSeenNotificationOnboarding)
         XCTAssertFalse(decoded.isAnomalyDetectionEnabled)
         XCTAssertEqual(decoded.highTrafficThreshold, .mbps25)
-        XCTAssertTrue(decoded.isInsightStreamEnabled)
-        XCTAssertEqual(decoded.insightRetentionLimit, 20)
         XCTAssertFalse(decoded.isSmartStatusBarModeEnabled)
         XCTAssertFalse(decoded.isSmartCharacterSuggestionEnabled)
         XCTAssertEqual(decoded.historyRetentionDays, 30)
         XCTAssertTrue(decoded.isApplicationHistoryRankingEnabled)
+
+        let encoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
+        XCTAssertFalse(encoded.contains("isInsightStreamEnabled"))
+        XCTAssertFalse(encoded.contains("insightRetentionLimit"))
+        XCTAssertFalse(encoded.contains("isInsightSuggestionEnabled"))
     }
 
     func testAppPreferencesPersistNetworkIntelligenceSettings() {
@@ -1566,75 +1549,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
     }
 
-    func testNetworkInsightCenterCreatesReadableCardForHighTraffic() {
-        var center = NetworkInsightCenter()
-        let event = NetworkAnomalyEvent(
-            kind: .highTraffic,
-            severity: .warning,
-            title: "High traffic",
-            message: "Current total speed is about 11.0 MB/s.",
-            timestamp: Date(timeIntervalSince1970: 100),
-            applicationName: "Arc",
-            bytesPerSecond: 11_000_000,
-            cooldownKey: "highTraffic"
-        )
-
-        let cards = center.ingest(
-            events: [event],
-            settings: .default,
-            language: .english
-        )
-
-        XCTAssertEqual(cards.count, 1)
-        XCTAssertEqual(cards.first?.kind, .highTraffic)
-        XCTAssertEqual(cards.first?.applicationName, "Arc")
-        XCTAssertTrue(cards.first?.suggestion.contains("Activity Monitor") == true)
-    }
-
-    func testNetworkInsightCenterSuppressesDuplicateCooldownCards() {
-        var center = NetworkInsightCenter()
-        let first = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            timestamp: Date(timeIntervalSince1970: 100),
-            cooldownKey: "networkDrop"
-        )
-        let second = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped again.",
-            timestamp: Date(timeIntervalSince1970: 120),
-            cooldownKey: "networkDrop"
-        )
-
-        _ = center.ingest(events: [first], settings: .default, language: .english)
-        let cards = center.ingest(events: [second], settings: .default, language: .english)
-
-        XCTAssertEqual(cards.count, 1)
-        XCTAssertEqual(cards.first?.message, "Network activity dropped.")
-    }
-
-    func testNetworkInsightCenterRespectsDisabledStream() {
-        var center = NetworkInsightCenter()
-        var settings = NetworkIntelligenceSettings.default
-        settings.isInsightStreamEnabled = false
-        let event = NetworkAnomalyEvent(
-            kind: .proxyAttributionGap,
-            severity: .info,
-            title: "Proxy attribution gap",
-            message: "Traffic may be concentrated in a proxy process.",
-            timestamp: Date(timeIntervalSince1970: 100),
-            cooldownKey: "proxyAttributionGap"
-        )
-
-        let cards = center.ingest(events: [event], settings: settings, language: .english)
-
-        XCTAssertTrue(cards.isEmpty)
-    }
-
     func testNetworkNotificationControllerRefreshesAuthorizationStatus() async {
         let center = FakeNetworkNotificationCenter(authorizationStatus: .authorized)
         let controller = NetworkNotificationController(center: center)
@@ -1761,8 +1675,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             animationPlaybackCountsByCharacter: [
                 "cat": 11,
                 "cat_b": 31
-            ],
-            insightCards: []
+            ]
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
@@ -1797,8 +1710,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             animationPlaybackCountsByCharacter: [
                 "cat": 100_000,
                 "dog": 500_000
-            ],
-            insightCards: []
+            ]
         )
 
         let cards = NetworkDailySummaryPresentation.cards(for: summary, language: .english)
@@ -2012,8 +1924,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             recentDays: days,
             realtimeTopApplications: [],
             todayTopApplications: [],
-            animationPlaybackCountsByCharacter: [:],
-            insightCards: []
+            animationPlaybackCountsByCharacter: [:]
         )
 
         let presentation = NetworkHistoryPresentation.make(summary: summary, language: .english)
@@ -3735,405 +3646,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertNotNil(preferences.loginItemErrorMessage)
     }
 
-    func testPetStateDefaultsAreCalmAndEnabledRemindersAreConservative() {
-        let settings = PetSettings.default
-        let state = PetState.default(now: Date(timeIntervalSince1970: 10))
-
-        XCTAssertFalse(settings.isEnabled)
-        XCTAssertFalse(settings.isQuietModeEnabled)
-        XCTAssertEqual(settings.personality, .healing)
-        XCTAssertEqual(settings.highTrafficThresholdBytesPerSecond, 10_000_000)
-        XCTAssertTrue(settings.enabledReminderIDs.contains(PetReminderKind.drinkWater.rawValue))
-        XCTAssertTrue(settings.enabledReminderIDs.contains(PetReminderKind.restEyes.rawValue))
-        XCTAssertTrue(settings.enabledReminderIDs.contains(PetReminderKind.highTraffic.rawValue))
-        XCTAssertTrue(settings.enabledSkillIDs.contains(PetSkillID.networkScout.rawValue))
-        XCTAssertTrue(settings.enabledSkillIDs.contains(PetSkillID.focusGuard.rawValue))
-        XCTAssertTrue(settings.enabledSkillIDs.contains(PetSkillID.luckyFlash.rawValue))
-        XCTAssertEqual(state.mood, .happy)
-        XCTAssertEqual(state.energy, 80)
-        XCTAssertEqual(state.affection, 0)
-        XCTAssertNil(state.activeSkillID)
-        XCTAssertNil(state.lastInteractionAt)
-        XCTAssertEqual(state.createdAt, Date(timeIntervalSince1970: 10))
-        XCTAssertEqual(state.lastUpdatedAt, Date(timeIntervalSince1970: 10))
-    }
-
-    func testPetStateDefaultsIncludeActivityLevel() {
-        let state = PetState.default(now: Date(timeIntervalSince1970: 10))
-
-        XCTAssertEqual(state.activityLevel, .idle)
-    }
-
-    func testPetReminderRecordUsesStringKeysForUserDefaultsEncoding() {
-        var state = PetState.default(now: Date(timeIntervalSince1970: 10))
-        state.recordReminder(.highTraffic, at: Date(timeIntervalSince1970: 20))
-
-        XCTAssertEqual(
-            state.lastReminderAtByKind[PetReminderKind.highTraffic.rawValue],
-            Date(timeIntervalSince1970: 20)
-        )
-        XCTAssertEqual(state.lastReminderDate(for: .highTraffic), Date(timeIntervalSince1970: 20))
-    }
-
-    func testPetSkillMetadataIsLocalizedAndEnabledByDefault() {
-        let scout = PetSkill.builtIn(.networkScout)
-        let focus = PetSkill.builtIn(.focusGuard)
-        let flash = PetSkill.builtIn(.luckyFlash)
-
-        XCTAssertEqual(scout.title(language: .simplifiedChinese), "网络侦察")
-        XCTAssertEqual(focus.title(language: .english), "Focus Guard")
-        XCTAssertEqual(flash.animationHint, .sparkle)
-        XCTAssertTrue(PetSkillID.defaultEnabled.contains(PetSkillID.networkScout.rawValue))
-        XCTAssertTrue(PetSkillID.defaultEnabled.contains(PetSkillID.focusGuard.rawValue))
-        XCTAssertTrue(PetSkillID.defaultEnabled.contains(PetSkillID.luckyFlash.rawValue))
-    }
-
-    func testPetControllerPersistsSettingsAndInteractionState() {
-        let defaults = isolatedDefaults()
-        let now = Date(timeIntervalSince1970: 100)
-        let controller = PetController(defaults: defaults, now: { now })
-
-        controller.updateSettings { settings in
-            settings.isEnabled = true
-            settings.personality = .playful
-        }
-        controller.interact(.pet)
-
-        let reloaded = PetController(defaults: defaults, now: { now })
-        XCTAssertTrue(reloaded.settings.isEnabled)
-        XCTAssertEqual(reloaded.settings.personality, .playful)
-        XCTAssertEqual(reloaded.state.affection, 1)
-        XCTAssertEqual(reloaded.state.mood, .happy)
-    }
-
-    func testPetControllerMapsNetworkSpeedToMoodAndHighTrafficReminder() {
-        let defaults = isolatedDefaults()
-        var currentDate = Date(timeIntervalSince1970: 100)
-        let controller = PetController(defaults: defaults, now: { currentDate })
-        controller.updateSettings { settings in
-            settings.isEnabled = true
-            settings.highTrafficThresholdBytesPerSecond = 1_000
-        }
-
-        controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: .empty)
-
-        XCTAssertEqual(controller.state.mood, .excited)
-        XCTAssertEqual(controller.latestCue?.kind, .reminder)
-        XCTAssertTrue(controller.latestCue?.message.contains(ByteFormat.speed(2_500)) == true)
-
-        currentDate = currentDate.addingTimeInterval(60)
-        controller.observe(snapshot: sampleSnapshot(download: 2_500, upload: 500), appTraffic: .empty)
-
-        XCTAssertEqual(controller.state.lastReminderAtByKind.count, 1)
-    }
-
-    func testPetControllerHighTrafficReminderMentionsTopTrafficApplication() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings { settings in
-            settings.isEnabled = true
-            settings.highTrafficThresholdBytesPerSecond = 1_000
-        }
-        let appTraffic = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 100),
-            applications: [
-                app("Quiet", processNames: ["Quiet"], download: 200, upload: 100, total: 300),
-                app("Arc", processNames: ["Arc"], download: 2_500, upload: 500, total: 3_000)
-            ],
-            sampleCount: 2,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: appTraffic)
-
-        XCTAssertEqual(controller.latestCue?.kind, .reminder)
-        XCTAssertTrue(controller.latestCue?.message.contains("Arc") == true)
-    }
-
-    func testPetControllerEmitsCueForApplicationSpikeAnomaly() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings { $0.isEnabled = true }
-        let event = NetworkAnomalyEvent(
-            kind: .applicationSpike,
-            severity: .warning,
-            title: "应用突增",
-            message: "Chrome 当前较活跃。",
-            timestamp: Date(timeIntervalSince1970: 100),
-            applicationName: "Chrome",
-            bytesPerSecond: 5_000_000,
-            cooldownKey: "applicationSpike.Chrome"
-        )
-
-        controller.observe(anomaly: event)
-
-        XCTAssertEqual(controller.latestCue?.kind, .networkIntelligence)
-        XCTAssertTrue(controller.latestCue?.message.contains("Chrome") == true)
-        XCTAssertEqual(controller.latestCue?.animationHint, .focused)
-    }
-
-    func testPetControllerMoodReflectsDailyNetworkActivity() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings { $0.isEnabled = true }
-        let summary = NetworkDailySummary(
-            dateKey: "2026-06-08",
-            downloadBytes: 20_000_000_000,
-            uploadBytes: 1_000_000_000,
-            peakDownloadBytesPerSecond: 8_000_000,
-            peakUploadBytesPerSecond: 1_000_000,
-            sampleCount: 120,
-            activeSeconds: 3_000,
-            topApplications: []
-        )
-
-        controller.observe(todaySummary: summary)
-
-        XCTAssertEqual(controller.state.mood, .excited)
-    }
-
-    func testPetControllerUpdatesActivityLevelFromDailySummary() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings {
-            $0.isEnabled = true
-            $0.isPetActivityLevelEnabled = true
-        }
-        let summary = NetworkDailySummary(
-            dateKey: "2026-06-12",
-            downloadBytes: 30_000_000_000,
-            uploadBytes: 5_000_000_000,
-            peakDownloadBytesPerSecond: 20_000_000,
-            peakUploadBytesPerSecond: 2_000_000,
-            sampleCount: 100,
-            activeSeconds: 3_600,
-            topApplications: []
-        )
-
-        controller.observe(todaySummary: summary)
-
-        XCTAssertEqual(controller.state.activityLevel, .heavy)
-    }
-
-    func testPetControllerCanDisableMoodFeedbackForAnomalies() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings {
-            $0.isEnabled = true
-            $0.isPetMoodFeedbackEnabled = false
-        }
-        let event = NetworkAnomalyEvent(
-            kind: .networkDrop,
-            severity: .critical,
-            title: "Network drop",
-            message: "Network activity dropped.",
-            timestamp: Date(timeIntervalSince1970: 100),
-            cooldownKey: "networkDrop"
-        )
-
-        controller.observe(anomaly: event)
-
-        XCTAssertNil(controller.latestCue)
-        XCTAssertEqual(controller.state.mood, .happy)
-    }
-
-    func testPetControllerMapsLowNetworkSpeedToSleepyMood() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings { $0.isEnabled = true }
-
-        controller.observe(snapshot: sampleSnapshot(download: 40, upload: 20), appTraffic: .empty)
-
-        XCTAssertEqual(controller.state.mood, .sleepy)
-        XCTAssertNil(controller.latestCue)
-    }
-
-    func testPetControllerHighTrafficReminderCooldownKeepsReminderDateAndCueCreationTime() {
-        var currentDate = Date(timeIntervalSince1970: 100)
-        let controller = PetController(defaults: isolatedDefaults(), now: { currentDate })
-        controller.updateSettings { settings in
-            settings.isEnabled = true
-            settings.highTrafficThresholdBytesPerSecond = 1_000
-        }
-
-        controller.observe(snapshot: sampleSnapshot(download: 2_000, upload: 500), appTraffic: .empty)
-        let firstReminderDate = controller.state.lastReminderDate(for: .highTraffic)
-        let firstCueCreatedAt = controller.latestCue?.createdAt
-
-        currentDate = currentDate.addingTimeInterval(15 * 60 - 1)
-        controller.observe(snapshot: sampleSnapshot(download: 3_000, upload: 500), appTraffic: .empty)
-
-        XCTAssertEqual(controller.state.lastReminderDate(for: .highTraffic), firstReminderDate)
-        XCTAssertEqual(controller.latestCue?.createdAt, firstCueCreatedAt)
-    }
-
-    func testPetControllerQuietModeSuppressesReminderCue() {
-        let defaults = isolatedDefaults()
-        let controller = PetController(defaults: defaults, now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings { settings in
-            settings.isEnabled = true
-            settings.isQuietModeEnabled = true
-            settings.highTrafficThresholdBytesPerSecond = 1_000
-        }
-
-        controller.observe(snapshot: sampleSnapshot(download: 3_000, upload: 0), appTraffic: .empty)
-
-        XCTAssertNil(controller.latestCue)
-        XCTAssertEqual(controller.state.mood, .excited)
-    }
-
-    func testPetControllerTickEmitsDrinkWaterAndTwentiethRestEyesReminder() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 100) })
-        controller.updateSettings { $0.isEnabled = true }
-
-        controller.tick()
-
-        XCTAssertEqual(controller.latestCue?.kind, .reminder)
-        XCTAssertEqual(controller.latestCue?.animationHint, .happyHop)
-        XCTAssertEqual(controller.state.lastReminderDate(for: .drinkWater), Date(timeIntervalSince1970: 100))
-        XCTAssertNil(controller.state.lastReminderDate(for: .restEyes))
-
-        for _ in 2...20 {
-            controller.tick()
-        }
-
-        XCTAssertEqual(controller.latestCue?.kind, .reminder)
-        XCTAssertEqual(controller.state.lastReminderDate(for: .restEyes), Date(timeIntervalSince1970: 100))
-    }
-
-    func testPetMoodAndSkillsProvidePanelCopy() {
-        XCTAssertEqual(PetMood.focused.title(language: .simplifiedChinese), "专注")
-        XCTAssertEqual(PetPersonality.playful.title(language: .english), "Playful")
-        XCTAssertEqual(PetReminderKind.restEyes.title(language: .simplifiedChinese), "休息眼睛")
-        XCTAssertEqual(PetSkill.allBuiltIns.count, 3)
-    }
-
-    func testPetNetworkScoutSkillReportsTopTrafficApplication() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
-        controller.updateSettings { $0.isEnabled = true }
-        let appTraffic = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                app("Quiet", processNames: ["Quiet"], download: 100, upload: 100, total: 200),
-                app("Arc", processNames: ["Arc"], download: 4_000, upload: 1_000, total: 5_000)
-            ],
-            sampleCount: 2,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let cue = controller.triggerSkill(
-            .networkScout,
-            snapshot: sampleSnapshot(download: 4_000, upload: 1_000),
-            appTraffic: appTraffic
-        )
-
-        XCTAssertEqual(cue?.kind, .skill)
-        XCTAssertTrue(cue?.message.contains("Arc") == true)
-    }
-
-    func testPetNetworkScoutSkillFallsBackToSnapshotTotalSpeedWhenApplicationsAreEmpty() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
-        controller.updateSettings { $0.isEnabled = true }
-
-        let cue = controller.triggerSkill(
-            .networkScout,
-            snapshot: sampleSnapshot(download: 4_000, upload: 1_000),
-            appTraffic: .empty
-        )
-
-        XCTAssertEqual(cue?.kind, .skill)
-        XCTAssertTrue(cue?.message.contains(ByteFormat.speed(5_000)) == true)
-    }
-
-    func testPetFocusGuardSetsFocusedMoodAndActiveSkill() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
-        controller.updateSettings { $0.isEnabled = true }
-
-        _ = controller.triggerSkill(.focusGuard, snapshot: sampleSnapshot(download: 0, upload: 0), appTraffic: .empty)
-
-        XCTAssertEqual(controller.state.mood, .focused)
-        XCTAssertEqual(controller.state.activeSkillID, PetSkillID.focusGuard.rawValue)
-    }
-
-    func testPetFocusGuardExpiresAfterTwentyFiveMinutesOnTick() {
-        var currentDate = Date(timeIntervalSince1970: 10)
-        let controller = PetController(defaults: isolatedDefaults(), now: { currentDate })
-        controller.updateSettings { $0.isEnabled = true }
-
-        _ = controller.triggerSkill(.focusGuard, snapshot: sampleSnapshot(download: 0, upload: 0), appTraffic: .empty)
-
-        XCTAssertEqual(controller.state.activeSkillStartedAt, Date(timeIntervalSince1970: 10))
-        XCTAssertEqual(controller.state.activeSkillEndsAt, Date(timeIntervalSince1970: 10 + 25 * 60))
-
-        currentDate = Date(timeIntervalSince1970: 10 + 25 * 60 + 1)
-        controller.tick()
-
-        XCTAssertNil(controller.state.activeSkillID)
-        XCTAssertNil(controller.state.activeSkillStartedAt)
-        XCTAssertNil(controller.state.activeSkillEndsAt)
-        XCTAssertNotEqual(controller.state.mood, .focused)
-    }
-
-    func testPetLuckyFlashSkillEmitsSparkleAndHappyMood() {
-        let controller = PetController(defaults: isolatedDefaults(), now: { Date(timeIntervalSince1970: 10) })
-        controller.updateSettings { $0.isEnabled = true }
-        controller.interact(.encourage)
-
-        let cue = controller.triggerSkill(.luckyFlash, snapshot: sampleSnapshot(download: 0, upload: 0), appTraffic: .empty)
-
-        XCTAssertEqual(cue?.kind, .skill)
-        XCTAssertEqual(cue?.animationHint, .sparkle)
-        XCTAssertEqual(controller.state.mood, .happy)
-    }
-
-    func testPetSkillCooldownSuppressesRepeatedTriggerAndAllowsAfterCooldown() {
-        var currentDate = Date(timeIntervalSince1970: 10)
-        let controller = PetController(defaults: isolatedDefaults(), now: { currentDate })
-        controller.updateSettings { $0.isEnabled = true }
-
-        let firstCue = controller.triggerSkill(
-            .luckyFlash,
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty
-        )
-
-        XCTAssertEqual(firstCue?.animationHint, .sparkle)
-        XCTAssertEqual(controller.state.lastSkillTriggeredDate(for: .luckyFlash), Date(timeIntervalSince1970: 10))
-
-        currentDate = Date(timeIntervalSince1970: 14)
-        let suppressedCue = controller.triggerSkill(
-            .luckyFlash,
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty
-        )
-
-        XCTAssertNil(suppressedCue)
-        XCTAssertEqual(controller.latestCue?.createdAt, firstCue?.createdAt)
-        XCTAssertEqual(controller.state.lastSkillTriggeredDate(for: .luckyFlash), Date(timeIntervalSince1970: 10))
-
-        currentDate = Date(timeIntervalSince1970: 15)
-        let cooledDownCue = controller.triggerSkill(
-            .luckyFlash,
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            appTraffic: .empty
-        )
-
-        XCTAssertEqual(cooledDownCue?.kind, .skill)
-        XCTAssertEqual(controller.state.lastSkillTriggeredDate(for: .luckyFlash), Date(timeIntervalSince1970: 15))
-    }
-
-    func testPetSettingsCanToggleReminderAndSkillIDs() {
-        var settings = PetSettings.default
-        settings.enabledReminderIDs.remove(PetReminderKind.drinkWater.rawValue)
-        settings.enabledSkillIDs.remove(PetSkillID.luckyFlash.rawValue)
-
-        XCTAssertFalse(settings.isReminderEnabled(.drinkWater))
-        XCTAssertFalse(settings.isSkillEnabled(.luckyFlash))
-
-        settings.enabledReminderIDs.insert(PetReminderKind.drinkWater.rawValue)
-        settings.enabledSkillIDs.insert(PetSkillID.luckyFlash.rawValue)
-
-        XCTAssertTrue(settings.isReminderEnabled(.drinkWater))
-        XCTAssertTrue(settings.isSkillEnabled(.luckyFlash))
-    }
 
     private func runnerFrameURLs(for character: RunCatCharacter) throws -> [URL] {
         let sourceFile = URL(fileURLWithPath: #filePath)
@@ -5401,9 +4913,9 @@ extension PreferencesAndPresentationTests {
 // MARK: - Popover Decomposition Tests
 
 extension PreferencesAndPresentationTests {
-    func testLivingSignalPopoverOwnsInsightAndSummaryFiles() throws {
-        let insightSource = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Popover", "InsightStreamView.swift"]
+    func testLivingSignalPopoverOwnsStatusAndSummaryFiles() throws {
+        let statusSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "NetworkIntelligenceStatusView.swift"]
         )
         let summarySource = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"]
@@ -5412,8 +4924,8 @@ extension PreferencesAndPresentationTests {
             pathComponents: ["Sources", "NetBar", "Popover", "NetworkPopoverView.swift"]
         )
 
-        XCTAssertTrue(insightSource.contains("struct InsightStreamView"))
-        XCTAssertTrue(insightSource.contains("struct NetworkIntelligenceStatusCard"))
+        XCTAssertTrue(statusSource.contains("struct NetworkIntelligenceStatusCard"))
+        XCTAssertFalse(statusSource.contains("struct InsightStreamView"))
         XCTAssertTrue(summarySource.contains("struct TodayNetworkSummaryPanel"))
         XCTAssertTrue(summarySource.contains("struct HistoryLedgerPanel"))
         XCTAssertFalse(rootSource.contains("struct TodayNetworkSummary: View"))
@@ -5469,7 +4981,7 @@ extension PreferencesAndPresentationTests {
 
     func testPopoverPanelsAvoidBroadSystemTrafficColorLiterals() throws {
         let panelFiles = [
-            ["Sources", "NetBar", "Popover", "InsightStreamView.swift"],
+            ["Sources", "NetBar", "Popover", "NetworkIntelligenceStatusView.swift"],
             ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"],
             ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"],
             ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]

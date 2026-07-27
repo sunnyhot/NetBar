@@ -27,9 +27,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var isNetworkDropAlertEnabled: Bool
     var isProxyAttributionAlertEnabled: Bool
     var isHistoryTrackingEnabled: Bool
-    var isInsightStreamEnabled: Bool
-    var insightRetentionLimit: Int
-    var isInsightSuggestionEnabled: Bool
     var isSmartStatusBarModeEnabled: Bool
     var isSmartCharacterSuggestionEnabled: Bool
     var showsSmartAnomalyMarker: Bool
@@ -47,9 +44,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         isNetworkDropAlertEnabled: Bool,
         isProxyAttributionAlertEnabled: Bool,
         isHistoryTrackingEnabled: Bool,
-        isInsightStreamEnabled: Bool = true,
-        insightRetentionLimit: Int = 20,
-        isInsightSuggestionEnabled: Bool = true,
         isSmartStatusBarModeEnabled: Bool = false,
         isSmartCharacterSuggestionEnabled: Bool = false,
         showsSmartAnomalyMarker: Bool = true,
@@ -66,9 +60,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         self.isNetworkDropAlertEnabled = isNetworkDropAlertEnabled
         self.isProxyAttributionAlertEnabled = isProxyAttributionAlertEnabled
         self.isHistoryTrackingEnabled = isHistoryTrackingEnabled
-        self.isInsightStreamEnabled = isInsightStreamEnabled
-        self.insightRetentionLimit = insightRetentionLimit
-        self.isInsightSuggestionEnabled = isInsightSuggestionEnabled
         self.isSmartStatusBarModeEnabled = isSmartStatusBarModeEnabled
         self.isSmartCharacterSuggestionEnabled = isSmartCharacterSuggestionEnabled
         self.showsSmartAnomalyMarker = showsSmartAnomalyMarker
@@ -114,18 +105,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             Bool.self,
             forKey: .isHistoryTrackingEnabled
         ) ?? defaultSettings.isHistoryTrackingEnabled
-        isInsightStreamEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isInsightStreamEnabled
-        ) ?? defaultSettings.isInsightStreamEnabled
-        insightRetentionLimit = try container.decodeIfPresent(
-            Int.self,
-            forKey: .insightRetentionLimit
-        ) ?? defaultSettings.insightRetentionLimit
-        isInsightSuggestionEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isInsightSuggestionEnabled
-        ) ?? defaultSettings.isInsightSuggestionEnabled
         isSmartStatusBarModeEnabled = try container.decodeIfPresent(
             Bool.self,
             forKey: .isSmartStatusBarModeEnabled
@@ -167,9 +146,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(isNetworkDropAlertEnabled, forKey: .isNetworkDropAlertEnabled)
         try container.encode(isProxyAttributionAlertEnabled, forKey: .isProxyAttributionAlertEnabled)
         try container.encode(isHistoryTrackingEnabled, forKey: .isHistoryTrackingEnabled)
-        try container.encode(isInsightStreamEnabled, forKey: .isInsightStreamEnabled)
-        try container.encode(insightRetentionLimit, forKey: .insightRetentionLimit)
-        try container.encode(isInsightSuggestionEnabled, forKey: .isInsightSuggestionEnabled)
         try container.encode(isSmartStatusBarModeEnabled, forKey: .isSmartStatusBarModeEnabled)
         try container.encode(isSmartCharacterSuggestionEnabled, forKey: .isSmartCharacterSuggestionEnabled)
         try container.encode(showsSmartAnomalyMarker, forKey: .showsSmartAnomalyMarker)
@@ -188,9 +164,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         isNetworkDropAlertEnabled: true,
         isProxyAttributionAlertEnabled: true,
         isHistoryTrackingEnabled: true,
-        isInsightStreamEnabled: true,
-        insightRetentionLimit: 20,
-        isInsightSuggestionEnabled: true,
         isSmartStatusBarModeEnabled: false,
         isSmartCharacterSuggestionEnabled: false,
         showsSmartAnomalyMarker: true,
@@ -209,9 +182,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case isNetworkDropAlertEnabled
         case isProxyAttributionAlertEnabled
         case isHistoryTrackingEnabled
-        case isInsightStreamEnabled
-        case insightRetentionLimit
-        case isInsightSuggestionEnabled
         case isSmartStatusBarModeEnabled
         case isSmartCharacterSuggestionEnabled
         case showsSmartAnomalyMarker
@@ -283,40 +253,6 @@ struct NetworkAnomalyEvent: Codable, Equatable, Identifiable {
         self.timestamp = timestamp
         self.applicationName = applicationName
         self.bytesPerSecond = bytesPerSecond
-        self.cooldownKey = cooldownKey
-    }
-}
-
-struct NetworkInsightCard: Equatable, Identifiable {
-    let id: UUID
-    let kind: NetworkAnomalyKind
-    let severity: NetworkAnomalySeverity
-    let title: String
-    let message: String
-    let suggestion: String
-    let timestamp: Date
-    let applicationName: String?
-    let cooldownKey: String
-
-    init(
-        id: UUID = UUID(),
-        kind: NetworkAnomalyKind,
-        severity: NetworkAnomalySeverity,
-        title: String,
-        message: String,
-        suggestion: String,
-        timestamp: Date,
-        applicationName: String?,
-        cooldownKey: String
-    ) {
-        self.id = id
-        self.kind = kind
-        self.severity = severity
-        self.title = title
-        self.message = message
-        self.suggestion = suggestion
-        self.timestamp = timestamp
-        self.applicationName = applicationName
         self.cooldownKey = cooldownKey
     }
 }
@@ -442,7 +378,6 @@ struct NetworkIntelligenceSummary: Equatable {
     var realtimeTopApplications: [ApplicationTrafficRate]
     var todayTopApplications: [ApplicationDailyUsage]
     var animationPlaybackCountsByCharacter: [String: UInt64]
-    var insightCards: [NetworkInsightCard]
 
     var favoriteAnimationCharacterID: String? {
         animationPlaybackCountsByCharacter
@@ -460,7 +395,6 @@ struct NetworkIntelligenceSummary: Equatable {
         recentDays: [],
         realtimeTopApplications: [],
         todayTopApplications: [],
-        animationPlaybackCountsByCharacter: [:],
-        insightCards: []
+        animationPlaybackCountsByCharacter: [:]
     )
 }

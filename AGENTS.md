@@ -20,7 +20,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Package.swift` | 30 | SPM 配置：macOS .v13、Swift 5 语言模式、`NetBar` executable target + `NetBarTests` test target |
-| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.39.17` |
+| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.40.1` |
 | `Resources/NetBar.entitlements` | 10 | App 沙盒与自动化相关 entitlements |
 | `.github/workflows/release.yml` | 141 | tag 触发的 GitHub Release 构建、测试、打包与发布流程 |
 | `Scripts/build-app.sh` | 117 | `swift build --disable-sandbox -c release` 后组装 `build/NetBar.app`，可选 codesign |
@@ -111,14 +111,13 @@ Main.swift (@main)
        │    ├─ StatusBarSettings + StatusBarDisplayRenderer + StatusBarRenderedImageCache
        │    ├─ RunCatAnimation + CustomCharacterStore
        │    ├─ DetailsWindowController → NetworkPopoverView
-       │    └─ NetworkIntelligenceCoordinator → notifications + pet cues
+       │    └─ NetworkIntelligenceCoordinator → notifications
        ├─ PreferencesWindowController → Preferences/*.swift
-       ├─ PetController
        ├─ NetworkNotificationController
        └─ AppUpdater
 ```
 
-**数据流**: `getifaddrs/nettop/ps/Mach` → Reader 协议 → `NetworkMonitor.@Published` → Combine/SwiftUI → `StatusBarController` / `NetworkPopoverView` / 通知 / 宠物。
+**数据流**: `getifaddrs/nettop/ps/Mach` → Reader 协议 → `NetworkMonitor.@Published` → Combine/SwiftUI → `StatusBarController` / `NetworkPopoverView` / 通知。
 
 ## 发布链路
 

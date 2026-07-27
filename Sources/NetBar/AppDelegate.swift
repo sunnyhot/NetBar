@@ -10,7 +10,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let powerObserver = SystemPowerObserver()
     private let networkHistoryStore = NetworkHistoryStore()
     private let notificationController = NetworkNotificationController()
-    private let petController = PetController()
     private lazy var updater = AppUpdater(appPreferences: appPreferences)
     private lazy var preferencesWindowController = PreferencesWindowController(
         settings: settings,
@@ -19,7 +18,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         historyStore: networkHistoryStore,
         updater: updater,
         notificationController: notificationController,
-        petController: petController,
         diagnosticsSnapshot: { [weak self] in
             guard let self else {
                 return DiagnosticsCenter.makeSnapshot(
@@ -84,7 +82,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             customCharacterStore: customCharacterStore,
             powerObserver: powerObserver,
             notificationController: notificationController,
-            petController: petController,
             openPreferences: { [weak self] in
                 self?.showPreferences(nil)
             },
