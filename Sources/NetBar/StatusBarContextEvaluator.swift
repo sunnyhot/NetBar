@@ -14,7 +14,7 @@ struct SmartStatusBarContext: Equatable {
     let trafficDisplayModeOverride: StatusBarTrafficDisplayMode?
     let overrideLine: String?
     /// Accent tone for the status bar color pipeline, derived from health state.
-    /// `.normal` means "use the user's default"; smart overrides set amber/coral/critical.
+    /// `.normal` means "use the user's default"; offline health uses critical.
     let tone: NetworkHealthTone
 
     static let manual = SmartStatusBarContext(
@@ -52,24 +52,6 @@ enum StatusBarContextEvaluator {
                     trafficDisplayModeOverride: nil,
                     overrideLine: language.text("网络离线", "Offline"),
                     tone: .critical
-                )
-            case .poor:
-                let label = health.primaryCause?.shortLabel(language: language)
-                    ?? language.text("连接较差", "Poor connection")
-                return SmartStatusBarContext(
-                    emphasis: .health(.poor),
-                    trafficDisplayModeOverride: nil,
-                    overrideLine: label,
-                    tone: .coral
-                )
-            case .fluctuating:
-                let label = health.primaryCause?.shortLabel(language: language)
-                    ?? language.text("延迟波动", "Latency fluctuating")
-                return SmartStatusBarContext(
-                    emphasis: .health(.fluctuating),
-                    trafficDisplayModeOverride: nil,
-                    overrideLine: label,
-                    tone: .amber
                 )
             case .good:
                 // Preserve user layout; tone stays normal.
@@ -163,23 +145,6 @@ enum SmartCharacterSuggestionEvaluator {
         if let health {
             switch health.state {
             case .offline:
-                return "little_cloud"
-            case .poor, .fluctuating:
-                // Connectivity, DNS, latency, or attribution issues suggest
-                // little_cloud. High-traffic / app-spike notices reuse their
-                // existing characters below.
-                if let cause = health.primaryCause {
-                    switch cause {
-                    case .highTraffic:
-                        return "penguin"
-                    case .applicationSpike:
-                        return "shiba_inu"
-                    case .recovery:
-                        return "bunny"
-                    default:
-                        return "little_cloud"
-                    }
-                }
                 return "little_cloud"
             case .good:
                 break

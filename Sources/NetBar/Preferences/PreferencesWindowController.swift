@@ -11,7 +11,6 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     private let notificationController: NetworkNotificationController
     private let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     private let clearNetworkHistory: () -> Void
-    private let requestHealthRetest: () -> Void
     private var window: NSWindow?
 
     init(
@@ -22,8 +21,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         updater: AppUpdater,
         notificationController: NetworkNotificationController,
         diagnosticsSnapshot: @escaping () -> DiagnosticsSnapshot,
-        clearNetworkHistory: @escaping () -> Void,
-        requestHealthRetest: @escaping () -> Void = {}
+        clearNetworkHistory: @escaping () -> Void
     ) {
         self.settings = settings
         self.appPreferences = appPreferences
@@ -33,7 +31,6 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         self.notificationController = notificationController
         self.diagnosticsSnapshot = diagnosticsSnapshot
         self.clearNetworkHistory = clearNetworkHistory
-        self.requestHealthRetest = requestHealthRetest
     }
 
     func show() {
@@ -68,8 +65,7 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
                 updater: updater,
                 notificationController: notificationController,
                 diagnosticsSnapshot: diagnosticsSnapshot,
-                clearNetworkHistory: clearNetworkHistory,
-                requestHealthRetest: requestHealthRetest
+                clearNetworkHistory: clearNetworkHistory
             )
         )
         preferencesWindow.collectionBehavior = [.moveToActiveSpace]
@@ -88,7 +84,6 @@ private struct PreferencesView: View {
     @ObservedObject var notificationController: NetworkNotificationController
     let diagnosticsSnapshot: () -> DiagnosticsSnapshot
     let clearNetworkHistory: () -> Void
-    let requestHealthRetest: () -> Void
     @State private var selectedTab: PreferencesTab = .general
 
     var body: some View {
@@ -125,8 +120,7 @@ private struct PreferencesView: View {
             IntelligencePreferencesView(
                 appPreferences: appPreferences,
                 notificationController: notificationController,
-                clearHistory: clearNetworkHistory,
-                requestHealthRetest: requestHealthRetest
+                clearHistory: clearNetworkHistory
             )
         case .about:
             AboutPreferencesView(

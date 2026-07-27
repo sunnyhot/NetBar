@@ -4,14 +4,12 @@ struct IntelligencePreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var notificationController: NetworkNotificationController
     let clearHistory: () -> Void
-    let requestHealthRetest: () -> Void
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 onboardingSection
                 anomalySection
-                networkDiagnosticsSection
                 notificationSection
                 historySection
             }
@@ -89,41 +87,6 @@ struct IntelligencePreferencesView: View {
                 appPreferences.text("代理/VPN 归因提醒", "Proxy/VPN attribution alerts"),
                 isOn: settingsBinding(\.isProxyAttributionAlertEnabled)
             )
-        }
-    }
-
-    private var networkDiagnosticsSection: some View {
-        PreferenceSection(
-            title: appPreferences.text("主动网络诊断", "Active Network Diagnostics"),
-            systemImage: "stethoscope"
-        ) {
-            Toggle(
-                appPreferences.text("启用主动诊断", "Enable active diagnostics"),
-                isOn: settingsBinding(\.isActiveNetworkDiagnosticsEnabled)
-            )
-
-            Text(appPreferences.text(
-                "启用后，NetBar 会定期解析并连接 GitHub（已用于更新检查），测量 DNS 耗时、HTTPS 延迟和成功/失败次数。不会上传任何流量、应用或浏览数据。",
-                "When enabled, NetBar periodically resolves and connects to GitHub (already used for update checks), measuring DNS duration, HTTPS latency, and success/failure counts. No traffic, application, or browsing data is uploaded."
-            ))
-            .font(.system(size: 11))
-            .foregroundStyle(.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-
-            HStack {
-                Text(appPreferences.text("参考目标", "Reference target"))
-                    .font(.system(size: 12, weight: .medium))
-                Spacer()
-                Text("github.com")
-                    .font(.system(size: 12, weight: .semibold, design: .monospaced))
-                    .foregroundStyle(.secondary)
-            }
-
-            if appPreferences.networkIntelligenceSettings.isActiveNetworkDiagnosticsEnabled {
-                Button(appPreferences.text("立即复测", "Retest Now")) {
-                    requestHealthRetest()
-                }
-            }
         }
     }
 

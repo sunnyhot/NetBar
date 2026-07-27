@@ -649,8 +649,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             ),
             notificationAuthorization: "authorized",
             historyStatus: "available",
-            historyPath: "/Users/example/Library/Application Support/NetBar/NetworkHistory.json",
-            healthDiagnostics: "Active"
+            historyPath: "/Users/example/Library/Application Support/NetBar/NetworkHistory.json"
         )
 
         let text = DiagnosticsCenter.copyText(for: snapshot, language: .english)

@@ -51,15 +51,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     language: self.appPreferences.resolvedLanguage
                 ),
                 historyStatus: self.networkHistoryStore.diagnosticsStatusText,
-                historyPath: self.networkHistoryStore.diagnosticsPath,
-                healthDiagnostics: self.statusBarController?.healthDiagnostics ?? ""
+                historyPath: self.networkHistoryStore.diagnosticsPath
             )
         },
         clearNetworkHistory: { [weak self] in
             self?.statusBarController?.clearNetworkHistory()
-        },
-        requestHealthRetest: { [weak self] in
-            self?.statusBarController?.requestHealthRetest()
         }
     )
     private var cancellables: Set<AnyCancellable> = []

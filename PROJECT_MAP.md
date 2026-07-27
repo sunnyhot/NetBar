@@ -42,7 +42,7 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 - `Sources/NetBar`: 58 个 Swift 文件，约 18,000 行
 - `Tests/NetBarTests`: 3 个 Swift 文件，约 7,500 行，352 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.40.1`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.40.2`
 
 ## 3. 启动与对象装配
 
@@ -229,11 +229,9 @@ NetworkIntelligenceCoordinator
 
 ```text
 NetworkSnapshot / ApplicationTrafficState / NetworkIntelligenceSummary
-macOS path, power, lock and sleep state
-                       │
-opt-in NetworkHealthProbe ─ recent active samples
+macOS 本地外部接口状态 + anomaly notices
                        ▼
-            NetworkHealthEvaluator → NetworkHealthSnapshot
+              NetworkHealthSnapshot
                        │
        ┌───────────────┴───────────────┐
        ▼                               ▼
@@ -243,20 +241,16 @@ NetworkPopoverView          StatusBarContextEvaluator
 
 关键文件：
 
-- `NetworkHealthModels.swift`: 健康状态（good/fluctuating/poor/offline）、证据模式、阈值、cause、notice、snapshot
-- `NetworkHealthProbe.swift`: 主动诊断协议 `NetworkHealthProbing` + `LiveNetworkHealthProbe`（复用 GitHub 参考目标，getaddrinfo + ephemeral HTTPS HEAD）
-- `NetworkHealthEvaluator.swift`: 纯规则评估 + 滞回（降级需连续 2 次、恢复需连续 3 次），阈值集中可注入
-- `NetworkHealthCoordinator.swift`: 自适应调度（后台 60s / 弹窗 15s / 验证 10s / 低电量暂停 / 锁屏暂停）、取消、最近样本窗口、复测冷却
-- `NetworkMonitor.swift`: 持有 coordinator，发布 `@Published healthSnapshot`，喂入被动证据（接口可用性 + anomaly notices）
-- `Popover/NetworkHealthPanel.swift`: 健康摘要面板（consent 前 local-only、consent 后状态/指标/复测/证据明细）
+- `NetworkHealthModels.swift`: 健康状态、cause、notice、接口指标和 snapshot
+- `NetworkMonitor.swift`: 发布 `@Published healthSnapshot`，仅使用接口可用性和 anomaly notices
+- `Popover/NetworkHealthPanel.swift`: 展示本地接口、路径状态和异常提示
 - `StatusBarContextEvaluator.swift`: 消费 health 产出 tone + 短文案 + 角色建议（smart override，不写回偏好）
 
 原则：
 
-- 主动诊断默认关闭，需明确同意后启用
-- 参考目标失败（本地路径可用）只产 fluctuating/poor，不产 offline
+- 不进行 DNS、HTTPS 或其他公网主动探测
+- 健康状态只依据 macOS 本地外部接口，不声称测量公网质量
 - 高流量/突增/代理归因只成 notice，不降低健康状态
-- 取消（睡眠/锁屏/禁用/关闭）不计为失败
 - smart override 全为 render-time 值，不写回 StatusBarSettings 或用户角色选择
 
 ## 9. 自动更新
@@ -347,7 +341,7 @@ swift test
 
 - `PreferencesAndPresentationTests.swift`: 偏好、状态栏、窗口、智能、历史、自定义角色、内置角色资源、更新、宠物、应用展示
 - `SystemResourceTests.swift`: 系统资源、采样策略、NetworkMonitor 集成、应用资源、streaming nettop
-- `NetworkHealthTests.swift`: 健康阈值边界、滞回、证据模式、probe outcome 分类、coordinator 调度/冷却/取消、智能菜单栏与角色映射、设置向后兼容
+- `NetworkHealthTests.swift`: 本地接口健康状态、异常提示、智能菜单栏与角色映射
 
 重点测试方向：
 
