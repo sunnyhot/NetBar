@@ -42,7 +42,7 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 - `Sources/NetBar`: 58 个 Swift 文件，约 18,000 行
 - `Tests/NetBarTests`: 3 个 Swift 文件，约 7,500 行，352 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.40.2`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.40.3`
 
 ## 3. 启动与对象装配
 
@@ -213,7 +213,7 @@ NetworkIntelligenceCoordinator
 关键文件：
 
 - `NetworkIntelligenceModels.swift`: 设置、异常事件、日汇总
-- `NetworkAnomalyDetector.swift`: 持续高流量、应用突增、断流/恢复、代理归因差异
+- `NetworkAnomalyDetector.swift`: 持续高流量、应用突增、断流/恢复
 - `Popover/NetworkIntelligenceStatusView.swift`: 展示最新异常状态，不保留事件流或建议卡片
 - `NetworkHistoryStore.swift`: 日维度统计、Top 应用、动画播放计数、本地 JSON 持久化
 - `NetworkNotificationController.swift`: 通知授权、发送和 cooldown
@@ -250,7 +250,7 @@ NetworkPopoverView          StatusBarContextEvaluator
 
 - 不进行 DNS、HTTPS 或其他公网主动探测
 - 健康状态只依据 macOS 本地外部接口，不声称测量公网质量
-- 高流量/突增/代理归因只成 notice，不降低健康状态
+- 高流量与应用突增只成 notice，不降低健康状态
 - smart override 全为 render-time 值，不写回 StatusBarSettings 或用户角色选择
 
 ## 9. 自动更新

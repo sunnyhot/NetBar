@@ -20,7 +20,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Package.swift` | 30 | SPM 配置：macOS .v13、Swift 5 语言模式、`NetBar` executable target + `NetBarTests` test target |
-| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.40.2` |
+| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.40.3` |
 | `Resources/NetBar.entitlements` | 10 | App 沙盒与自动化相关 entitlements |
 | `.github/workflows/release.yml` | 141 | tag 触发的 GitHub Release 构建、测试、打包与发布流程 |
 | `Scripts/build-app.sh` | 117 | `swift build --disable-sandbox -c release` 后组装 `build/NetBar.app`，可选 codesign |
@@ -30,19 +30,19 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Sources/NetBar
 
-当前 `Sources/NetBar` 共 60 个 Swift 文件，约 16,700 行：
+当前 `Sources/NetBar` 共 60 个 Swift 文件，约 16,600 行：
 
 - 顶层核心文件 36 个
 - `Sources/NetBar/Popover/` 详情弹窗子视图 10 个
 - `Sources/NetBar/Preferences/` 偏好设置子视图 14 个
-- 最大文件：`StatusBarStyle.swift` 2107 行、`AppUpdater.swift` 1008 行、`StatusBarController.swift` 854 行、`NetworkMonitor.swift` 783 行
+- 最大文件：`StatusBarStyle.swift` 2107 行、`AppUpdater.swift` 1008 行、`StatusBarController.swift` 854 行、`NetworkMonitor.swift` 781 行
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Main.swift` | 16 | `@main` 入口，创建 `AppDelegate` 并启动 `NSApplication.run()` |
 | `AppDelegate.swift` | 232 | 初始化偏好、状态栏、历史、通知、宠物、更新器；配置主菜单、Dock/外观/语言 |
-| `NetworkMonitor.swift` | 783 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录、网络智能摘要和本地接口健康状态 |
-| `NetworkHealthModels.swift` | 176 | 本地接口健康状态、cause、notice、metrics 和 snapshot 值类型 |
+| `NetworkMonitor.swift` | 781 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录、网络智能摘要和本地接口健康状态 |
+| `NetworkHealthModels.swift` | 163 | 本地接口健康状态、cause、notice、metrics 和 snapshot 值类型 |
 | `StatusBarController.swift` | 854 | `NSStatusItem` 控制器：状态栏渲染调度、详情窗口、右键菜单、RunCat 动画和通知联动 |
 | `StatusBarStyle.swift` | 2107 | CoreGraphics 状态栏渲染引擎：设置模型、布局、签名 diff、文字/角色/特效绘制 |
 | `StatusBarRenderCache.swift` | 70 | 状态栏图片和文字布局 LRU cache |
@@ -51,10 +51,10 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | `AppUpdater.swift` | 1008 | 自动更新：`latest.json`/GitHub API、下载、SHA256、解压、架构/签名校验、自替换安装 |
 | `AppPreferences.swift` | 398 | 全局偏好：Dock、语言、外观、排序、popover 位置、网络智能设置、开机启动 |
 | `NetworkHistoryStore.swift` | 416 | 本地历史统计持久化、日汇总、Top 应用、动画播放计数 |
-| `NetworkIntelligenceModels.swift` | 390 | 网络智能设置、异常事件、洞察卡片、日汇总模型 |
-| `NetworkAnomalyDetector.swift` | 285 | 高流量、应用突增、断流/恢复、代理归因差异检测 |
-| `NetworkIntelligenceCoordinator.swift` | 19 | 将异常事件分发到通知、宠物 cue 和每日摘要 |
-| `NetworkNotificationController.swift` | 172 | macOS 通知授权、发送和冷却控制 |
+| `NetworkIntelligenceModels.swift` | 377 | 网络智能设置、异常事件和日汇总模型 |
+| `NetworkAnomalyDetector.swift` | 243 | 高流量、应用突增、断流/恢复检测 |
+| `NetworkIntelligenceCoordinator.swift` | 14 | 将异常事件分发到通知 |
+| `NetworkNotificationController.swift` | 168 | macOS 通知授权、发送和冷却控制 |
 | `ApplicationTrafficReader.swift` | 341 | 应用级流量读取：持久 `StreamingNettopReader` + one-shot fallback，解析 nettop CSV |
 | `ApplicationResourceReader.swift` | 278 | 每应用 CPU/内存读取（`ps aux`）与系统资源摘要 |
 | `SystemResourceReader.swift` | 242 | Mach/system API 系统内存、CPU tick、热状态读取 |
@@ -66,17 +66,16 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | `StatusBarContextEvaluator.swift` | 201 | 智能状态栏上下文与角色推荐评估 |
 | `RunCatAnimation.swift` | 437 | 内置角色定义、帧推进、速度映射、轮换播放 |
 | `CustomCharacter*.swift` | 1163 | 自定义角色模型、存储、图片处理和渲染接入 |
-| `Pet*.swift` | 878 | 宠物状态、控制器、技能与提醒 |
 | `NetBarDesignSystem.swift` | 230 | SwiftUI 设计系统组件、颜色、卡片样式 |
-| `Preferences/*.swift` | 2269 | 偏好设置窗口与各 Tab/Section 子视图 |
+| `Preferences/*.swift` | 2317 | 偏好设置窗口与各 Tab/Section 子视图 |
 
 ### Tests
 
-当前测试共 3 个 Swift 文件、约 7,500 行、293 个测试：
+当前测试共 3 个 Swift 文件、约 6,700 行、291 个测试：
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 5117 | 偏好、状态栏渲染、窗口布局、智能提醒、历史统计、自定义角色、内置角色资源、更新 manifest、宠物、应用列表展示 |
+| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 5070 | 偏好、状态栏渲染、窗口布局、智能提醒、历史统计、自定义角色、内置角色资源、更新 manifest、应用列表展示 |
 | `Tests/NetBarTests/SystemResourceTests.swift` | 1447 | 系统资源模型、采样策略、NetworkMonitor 集成、应用资源读取、streaming nettop 行为 |
 | `Tests/NetBarTests/NetworkHealthTests.swift` | 162 | 本地接口健康状态、异常提示、智能菜单栏与角色映射 |
 

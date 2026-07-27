@@ -148,8 +148,6 @@ final class NetworkNotificationController: ObservableObject {
             return 10 * 60
         case .networkDrop, .networkRecovered:
             return 3 * 60
-        case .proxyAttributionGap:
-            return 15 * 60
         }
     }
 }
@@ -165,8 +163,6 @@ extension NetworkIntelligenceSettings {
             return isApplicationSpikeAlertEnabled
         case .networkDrop, .networkRecovered:
             return isNetworkDropAlertEnabled
-        case .proxyAttributionGap:
-            return isProxyAttributionAlertEnabled
         }
     }
 }

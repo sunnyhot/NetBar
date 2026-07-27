@@ -155,7 +155,7 @@ enum SmartCharacterSuggestionEvaluator {
            isFresh(event.timestamp, now: now, interval: anomalyFreshnessInterval),
            event.severity != .info {
             switch event.kind {
-            case .networkDrop, .proxyAttributionGap:
+            case .networkDrop:
                 return "little_cloud"
             case .applicationSpike:
                 return "shiba_inu"

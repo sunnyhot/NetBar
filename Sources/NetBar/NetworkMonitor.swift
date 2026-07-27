@@ -548,8 +548,6 @@ final class NetworkMonitor: ObservableObject {
             cause = .connectivity
         case .networkRecovered:
             cause = .recovery
-        case .proxyAttributionGap:
-            cause = .proxyAttributionGap
         }
         guard let cause else { return [] }
         return [NetworkHealthNotice(cause: cause, timestamp: event.timestamp)]

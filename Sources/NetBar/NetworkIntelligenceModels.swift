@@ -25,7 +25,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var highTrafficThreshold: HighTrafficThreshold
     var isApplicationSpikeAlertEnabled: Bool
     var isNetworkDropAlertEnabled: Bool
-    var isProxyAttributionAlertEnabled: Bool
     var isHistoryTrackingEnabled: Bool
     var isSmartStatusBarModeEnabled: Bool
     var isSmartCharacterSuggestionEnabled: Bool
@@ -41,7 +40,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         highTrafficThreshold: HighTrafficThreshold,
         isApplicationSpikeAlertEnabled: Bool,
         isNetworkDropAlertEnabled: Bool,
-        isProxyAttributionAlertEnabled: Bool,
         isHistoryTrackingEnabled: Bool,
         isSmartStatusBarModeEnabled: Bool = false,
         isSmartCharacterSuggestionEnabled: Bool = false,
@@ -56,7 +54,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         self.highTrafficThreshold = highTrafficThreshold
         self.isApplicationSpikeAlertEnabled = isApplicationSpikeAlertEnabled
         self.isNetworkDropAlertEnabled = isNetworkDropAlertEnabled
-        self.isProxyAttributionAlertEnabled = isProxyAttributionAlertEnabled
         self.isHistoryTrackingEnabled = isHistoryTrackingEnabled
         self.isSmartStatusBarModeEnabled = isSmartStatusBarModeEnabled
         self.isSmartCharacterSuggestionEnabled = isSmartCharacterSuggestionEnabled
@@ -94,10 +91,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             Bool.self,
             forKey: .isNetworkDropAlertEnabled
         ) ?? defaultSettings.isNetworkDropAlertEnabled
-        isProxyAttributionAlertEnabled = try container.decodeIfPresent(
-            Bool.self,
-            forKey: .isProxyAttributionAlertEnabled
-        ) ?? defaultSettings.isProxyAttributionAlertEnabled
         isHistoryTrackingEnabled = try container.decodeIfPresent(
             Bool.self,
             forKey: .isHistoryTrackingEnabled
@@ -137,7 +130,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(highTrafficThreshold, forKey: .highTrafficThreshold)
         try container.encode(isApplicationSpikeAlertEnabled, forKey: .isApplicationSpikeAlertEnabled)
         try container.encode(isNetworkDropAlertEnabled, forKey: .isNetworkDropAlertEnabled)
-        try container.encode(isProxyAttributionAlertEnabled, forKey: .isProxyAttributionAlertEnabled)
         try container.encode(isHistoryTrackingEnabled, forKey: .isHistoryTrackingEnabled)
         try container.encode(isSmartStatusBarModeEnabled, forKey: .isSmartStatusBarModeEnabled)
         try container.encode(isSmartCharacterSuggestionEnabled, forKey: .isSmartCharacterSuggestionEnabled)
@@ -154,7 +146,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         highTrafficThreshold: .mbps10,
         isApplicationSpikeAlertEnabled: true,
         isNetworkDropAlertEnabled: true,
-        isProxyAttributionAlertEnabled: true,
         isHistoryTrackingEnabled: true,
         isSmartStatusBarModeEnabled: false,
         isSmartCharacterSuggestionEnabled: false,
@@ -171,7 +162,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case highTrafficThreshold
         case isApplicationSpikeAlertEnabled
         case isNetworkDropAlertEnabled
-        case isProxyAttributionAlertEnabled
         case isHistoryTrackingEnabled
         case isSmartStatusBarModeEnabled
         case isSmartCharacterSuggestionEnabled
@@ -193,7 +183,6 @@ enum NetworkAnomalyKind: String, Codable, CaseIterable, Identifiable {
     case applicationSpike
     case networkDrop
     case networkRecovered
-    case proxyAttributionGap
 
     var id: String { rawValue }
 
@@ -207,8 +196,6 @@ enum NetworkAnomalyKind: String, Codable, CaseIterable, Identifiable {
             return language.text("网络断流", "Network drop")
         case .networkRecovered:
             return language.text("网络恢复", "Network recovered")
-        case .proxyAttributionGap:
-            return language.text("代理归因差异", "Proxy attribution gap")
         }
     }
 }

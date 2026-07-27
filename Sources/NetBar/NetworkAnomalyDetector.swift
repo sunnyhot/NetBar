@@ -45,9 +45,6 @@ struct NetworkAnomalyDetector {
         } else {
             resetDropTracking()
         }
-        if settings.isProxyAttributionAlertEnabled, let event = proxyGapEvent(snapshot: snapshot, appTraffic: appTraffic, now: now, language: language) {
-            events.append(event)
-        }
         return events
     }
 
@@ -233,45 +230,6 @@ struct NetworkAnomalyDetector {
         recoveryStartedAt = nil
         droppedState = false
         recentActiveSamples.removeAll()
-    }
-
-    private mutating func proxyGapEvent(
-        snapshot: NetworkSnapshot,
-        appTraffic: ApplicationTrafficState,
-        now: Date,
-        language: AppLanguage
-    ) -> NetworkAnomalyEvent? {
-        let summary = ApplicationTrafficPresentation.attributionSummary(
-            snapshot: snapshot,
-            applications: appTraffic.applications
-        )
-        guard summary.interfaceBytesPerSecond >= 1_048_576 else {
-            return nil
-        }
-
-        let rawCoverage = summary.applicationBytesPerSecond / summary.interfaceBytesPerSecond
-        guard rawCoverage < 0.40,
-              let proxy = summary.proxyCandidateNames.first else {
-            return nil
-        }
-
-        let key = "proxyAttributionGap"
-        guard canEmit(cooldownKey: key, now: now, cooldown: 15 * 60) else { return nil }
-        markEmitted(cooldownKey: key, now: now)
-
-        return NetworkAnomalyEvent(
-            kind: .proxyAttributionGap,
-            severity: .warning,
-            title: NetworkAnomalyKind.proxyAttributionGap.title(language: language),
-            message: language.text(
-                "流量可能集中在代理/VPN 进程 \(proxy)。",
-                "Traffic may be concentrated in proxy/VPN process \(proxy)."
-            ),
-            timestamp: now,
-            applicationName: proxy,
-            bytesPerSecond: summary.interfaceBytesPerSecond,
-            cooldownKey: key
-        )
     }
 
     private func canEmit(cooldownKey: String, now: Date, cooldown: TimeInterval) -> Bool {

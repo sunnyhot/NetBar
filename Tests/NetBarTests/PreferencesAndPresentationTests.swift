@@ -1150,7 +1150,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(settings.highTrafficThreshold, .mbps10)
         XCTAssertTrue(settings.isApplicationSpikeAlertEnabled)
         XCTAssertTrue(settings.isNetworkDropAlertEnabled)
-        XCTAssertTrue(settings.isProxyAttributionAlertEnabled)
         XCTAssertTrue(settings.isHistoryTrackingEnabled)
     }
 
@@ -1181,7 +1180,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(settings.isSystemNotificationEnabled, NetworkIntelligenceSettings.default.isSystemNotificationEnabled)
         XCTAssertEqual(settings.isApplicationSpikeAlertEnabled, NetworkIntelligenceSettings.default.isApplicationSpikeAlertEnabled)
         XCTAssertEqual(settings.isNetworkDropAlertEnabled, NetworkIntelligenceSettings.default.isNetworkDropAlertEnabled)
-        XCTAssertEqual(settings.isProxyAttributionAlertEnabled, NetworkIntelligenceSettings.default.isProxyAttributionAlertEnabled)
         XCTAssertEqual(settings.isHistoryTrackingEnabled, NetworkIntelligenceSettings.default.isHistoryTrackingEnabled)
     }
 
@@ -1194,7 +1192,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
           "highTrafficThreshold": 26214400,
           "isApplicationSpikeAlertEnabled": false,
           "isNetworkDropAlertEnabled": true,
-          "isProxyAttributionAlertEnabled": false,
           "isHistoryTrackingEnabled": true,
           "isInsightStreamEnabled": true,
           "insightRetentionLimit": 20,
@@ -1229,7 +1226,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             highTrafficThreshold: .mbps25,
             isApplicationSpikeAlertEnabled: false,
             isNetworkDropAlertEnabled: true,
-            isProxyAttributionAlertEnabled: false,
             isHistoryTrackingEnabled: true,
             isSmartCharacterSuggestionEnabled: true
         )
@@ -1242,7 +1238,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isSystemNotificationEnabled)
         XCTAssertFalse(reloaded.networkIntelligenceSettings.isApplicationSpikeAlertEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isNetworkDropAlertEnabled)
-        XCTAssertFalse(reloaded.networkIntelligenceSettings.isProxyAttributionAlertEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isSmartCharacterSuggestionEnabled)
         XCTAssertTrue(reloaded.networkIntelligenceSettings.isHistoryTrackingEnabled)
     }
@@ -1252,7 +1247,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(NetworkAnomalyKind.applicationSpike.title(language: .english), "Application spike")
         XCTAssertEqual(NetworkAnomalyKind.networkDrop.title(language: .simplifiedChinese), "网络断流")
         XCTAssertEqual(NetworkAnomalyKind.networkRecovered.title(language: .english), "Network recovered")
-        XCTAssertEqual(NetworkAnomalyKind.proxyAttributionGap.title(language: .simplifiedChinese), "代理归因差异")
     }
 
     func testNetworkAnomalyDetectorEmitsHighTrafficAfterSustainedThreshold() {
@@ -1505,47 +1499,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
 
         XCTAssertEqual(freshBaseline.map(\.kind), [.networkDrop])
-    }
-
-    func testNetworkAnomalyDetectorEmitsProxyAttributionGap() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        let now = Date(timeIntervalSince1970: 100)
-        let appTraffic = ApplicationTrafficState(
-            timestamp: now,
-            applications: [appRate("ClashX", download: 100_000, upload: 20_000)],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let events = detector.detect(snapshot: sampleSnapshot(download: 2_000_000, upload: 500_000, timestamp: now), appTraffic: appTraffic, settings: settings, now: now)
-
-        XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
-    }
-
-    func testNetworkAnomalyDetectorProxyGapUsesRawCoverageBeforeRounding() {
-        var detector = NetworkAnomalyDetector()
-        let settings = NetworkIntelligenceSettings.default
-        let now = Date(timeIntervalSince1970: 100)
-        let appTraffic = ApplicationTrafficState(
-            timestamp: now,
-            applications: [appRate("ClashX", download: 970_000, upload: 20_000)],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let events = detector.detect(
-            snapshot: sampleSnapshot(download: 2_000_000, upload: 500_000, timestamp: now),
-            appTraffic: appTraffic,
-            settings: settings,
-            now: now
-        )
-
-        XCTAssertEqual(events.map(\.kind), [.proxyAttributionGap])
     }
 
     func testNetworkNotificationControllerRefreshesAuthorizationStatus() async {

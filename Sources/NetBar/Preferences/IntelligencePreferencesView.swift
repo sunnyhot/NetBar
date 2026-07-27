@@ -83,10 +83,6 @@ struct IntelligencePreferencesView: View {
                 appPreferences.text("断流/恢复提醒", "Drop/recovery alerts"),
                 isOn: settingsBinding(\.isNetworkDropAlertEnabled)
             )
-            Toggle(
-                appPreferences.text("代理/VPN 归因提醒", "Proxy/VPN attribution alerts"),
-                isOn: settingsBinding(\.isProxyAttributionAlertEnabled)
-            )
         }
     }
 

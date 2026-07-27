@@ -31,7 +31,6 @@ enum NetworkHealthTone: Equatable {
 enum NetworkHealthCause: Equatable {
     case highTraffic
     case applicationSpike
-    case proxyAttributionGap
     case connectivity
     case localPathUnavailable
     case recovery
@@ -42,8 +41,6 @@ enum NetworkHealthCause: Equatable {
             return language.text("流量较高", "High traffic")
         case .applicationSpike:
             return language.text("应用占用高", "App spike")
-        case .proxyAttributionGap:
-            return language.text("代理归因差异", "Proxy attribution")
         case .connectivity:
             return language.text("网络活动中断", "Network activity dropped")
         case .localPathUnavailable:
@@ -64,11 +61,6 @@ enum NetworkHealthCause: Equatable {
             return language.text(
                 "某个应用的流量明显升高。",
                 "An application's traffic increased significantly."
-            )
-        case .proxyAttributionGap:
-            return language.text(
-                "代理或 VPN 接管了部分流量，应用归因可能与接口总量不一致。",
-                "A proxy or VPN is handling part of the traffic, so app attribution may not match interface totals."
             )
         case .connectivity:
             return language.text(
@@ -99,11 +91,6 @@ enum NetworkHealthCause: Equatable {
             return language.text(
                 "可在应用列表中查看对应进程。",
                 "Check the application list for the responsible process."
-            )
-        case .proxyAttributionGap:
-            return language.text(
-                "这通常符合预期，无需处理。",
-                "This is usually expected and needs no action."
             )
         case .connectivity, .localPathUnavailable:
             return language.text(
