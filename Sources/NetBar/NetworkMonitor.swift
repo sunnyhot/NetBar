@@ -36,6 +36,7 @@ final class NetworkMonitor: ObservableObject {
     private var anomalyDetector = NetworkAnomalyDetector()
     private var previousCPUTickSample: CPUTickSample?
     private var isReadingApplicationTraffic = false
+    private var applicationTrafficGeneration: UInt64 = 0
     private var isRefreshing = false
     private var shouldSampleApplicationTraffic = false
     private var timer: Timer?
@@ -126,6 +127,7 @@ final class NetworkMonitor: ObservableObject {
 
     func resumeApplicationTrafficSampling() {
         guard !shouldSampleApplicationTraffic else { return }
+        applicationTrafficGeneration &+= 1
         shouldSampleApplicationTraffic = true
         // Invalidate any stale timer before creating a new one
         applicationTimer?.invalidate()
@@ -136,6 +138,7 @@ final class NetworkMonitor: ObservableObject {
     }
 
     func pauseApplicationTrafficSampling() {
+        applicationTrafficGeneration &+= 1
         shouldSampleApplicationTraffic = false
         applicationTimer?.invalidate()
         applicationTimer = nil
@@ -381,6 +384,7 @@ final class NetworkMonitor: ObservableObject {
         let reader = appTrafficReader
         let resourceReader = self.resourceReader
         let systemResourceReader = self.systemResourceReader
+        let generation = applicationTrafficGeneration
         Task { [weak self, reader, resourceReader, systemResourceReader] in
             let (result, resourceUsages, systemSummary) = await Task.detached(priority: .utility) { [reader, resourceReader, systemResourceReader] in
                 let trafficResult = reader.readApplications()
@@ -390,10 +394,9 @@ final class NetworkMonitor: ObservableObject {
                 return (trafficResult, resourceUsages, systemSummary)
             }.value
 
-            guard let self else {
-                // If monitor is deallocated, ensure we don't leave isRefreshing stuck
-                return
-            }
+            guard let self else { return }
+            guard generation == self.applicationTrafficGeneration,
+                  self.shouldSampleApplicationTraffic else { return }
             self.applyApplicationTraffic(result, resourceUsages: resourceUsages, systemSummary: systemSummary, sampledAt: self.now())
         }
     }

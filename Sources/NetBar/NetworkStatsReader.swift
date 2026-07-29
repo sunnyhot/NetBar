@@ -1,11 +1,11 @@
 import Foundation
 import SystemConfiguration
 
-protocol NetworkStatsReading {
+protocol NetworkStatsReading: Sendable {
     func readInterfaces() -> [InterfaceStats]
 }
 
-final class SystemNetworkStatsReader: NetworkStatsReading {
+final class SystemNetworkStatsReader: NetworkStatsReading, @unchecked Sendable {
     func readInterfaces() -> [InterfaceStats] {
         var addressList: UnsafeMutablePointer<ifaddrs>?
         guard getifaddrs(&addressList) == 0, let firstAddress = addressList else {
@@ -57,12 +57,13 @@ final class SystemNetworkStatsReader: NetworkStatsReading {
         }
     }
 
-    private static var cachedPrimaryInterface: (name: String?, fetchedAt: Date)?
+    private static let primaryInterfaceCache = LockedValue<(name: String?, fetchedAt: Date)?>(nil)
     private static let primaryInterfaceCacheTTL: TimeInterval = 30
 
     private static func primaryInterfaceName() -> String? {
         let now = Date()
-        if let cached = cachedPrimaryInterface, now.timeIntervalSince(cached.fetchedAt) < primaryInterfaceCacheTTL {
+        if let cached = primaryInterfaceCache.withValue({ $0 }),
+           now.timeIntervalSince(cached.fetchedAt) < primaryInterfaceCacheTTL {
             return cached.name
         }
 
@@ -77,7 +78,7 @@ final class SystemNetworkStatsReader: NetworkStatsReading {
             return primary
         }()
 
-        cachedPrimaryInterface = (name: name, fetchedAt: now)
+        primaryInterfaceCache.set((name: name, fetchedAt: now))
         return name
     }
 

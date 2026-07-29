@@ -317,7 +317,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         return (name, Int32(pidText))
     }
 
-    private static let displayNameCache = NSCache<NSNumber, NSString>()
+    private static let displayNameCache = LockedObjectCache<NSNumber, NSString>()
 
     fileprivate static func displayNamePublic(for pid: Int32?, fallback: String) -> String {
         guard let pid else { return fallback }

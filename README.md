@@ -261,10 +261,12 @@ getifaddrs / nettop / ps
 - `ApplicationResourceReader`：通过 `ps` 读取应用级 CPU 和内存。
 - `SystemResourceReader`：读取系统内存、CPU 和热状态。
 - `StatusBarController`：管理 macOS 菜单栏项目、点击交互和渲染刷新。
-- `StatusBarStyle`：CoreGraphics 渲染引擎，负责菜单栏文字、背景和角色绘制。
+- `StatusBarStyle`：状态栏偏好模型和持久化。
+- `StatusBarColorStyle`：状态栏颜色模式、调色板和布局枚举。
+- `StatusBarRenderer`：CoreGraphics 渲染引擎，负责菜单栏文字、背景和角色绘制。
 - `NetworkPopoverView`：SwiftUI 详情窗口内容。
 - `AppPreferences`：偏好设置和 UserDefaults 持久化。
-- `AppUpdater`：基于 GitHub Releases 的自动更新检查与安装。
+- `AppUpdater` / `AppUpdateRelease`：基于 GitHub Releases 的自动更新协调、Release 解析和完整性校验。
 
 ## 项目结构
 
@@ -276,6 +278,8 @@ NetBar
 │   ├── NetworkMonitor.swift
 │   ├── StatusBarController.swift
 │   ├── StatusBarStyle.swift
+│   ├── StatusBarColorStyle.swift
+│   ├── StatusBarRenderer.swift
 │   ├── NetworkPopoverView.swift
 │   ├── Preferences/
 │   └── ...
@@ -333,7 +337,7 @@ swift test
 
 - UI 和用户可见文案同时考虑中文和英文。
 - 新增偏好项需要持久化，并确认默认值合理。
-- 修改状态栏渲染时重点检查 `StatusBarStyle.swift`。
+- 修改状态栏渲染时重点检查 `StatusBarRenderer.swift` 和 `StatusBarColorStyle.swift`；偏好持久化检查 `StatusBarStyle.swift`。
 - 修改网络读取逻辑时尽量保持协议可注入，方便测试。
 - 修改发布流程时同步检查版本号、更新说明和打包产物。
 

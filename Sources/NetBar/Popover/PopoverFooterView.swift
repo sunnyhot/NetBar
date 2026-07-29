@@ -37,6 +37,7 @@ private struct FooterView: View {
                 }
                 .buttonStyle(NetBarIconButtonStyle())
                 .help(appPreferences.text("偏好设置", "Preferences"))
+                .accessibilityLabel(appPreferences.text("打开偏好设置", "Open Preferences"))
 
                 Button {
                     monitor.refresh()
@@ -46,12 +47,14 @@ private struct FooterView: View {
                 }
                 .buttonStyle(NetBarIconButtonStyle())
                 .help(appPreferences.text("立即刷新", "Refresh Now"))
+                .accessibilityLabel(appPreferences.text("立即刷新", "Refresh Now"))
 
                 Button { NSApplication.shared.terminate(nil) } label: {
                     Image(systemName: "power")
                 }
                 .buttonStyle(NetBarIconButtonStyle(tone: .warning))
                 .help(appPreferences.text("退出 NetBar", "Quit NetBar"))
+                .accessibilityLabel(appPreferences.text("退出 NetBar", "Quit NetBar"))
             }
         }
         .livingSignalToolbarSurface(padding: 8)

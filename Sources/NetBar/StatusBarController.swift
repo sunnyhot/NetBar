@@ -59,10 +59,6 @@ final class GooglyEyesClickMonitor {
         self.removeMonitor = removeMonitor
     }
 
-    deinit {
-        monitorTokens.forEach(removeMonitor)
-    }
-
     func setActive(_ active: Bool, onMouseDown: @escaping () -> Void = {}, onMouseUp: @escaping () -> Void = {}) {
         if active {
             self.onMouseDown = onMouseDown
@@ -273,17 +269,6 @@ final class StatusBarController {
         updateStatusItem()
     }
 
-    deinit {
-        if let global = mouseMovedMonitorGlobal {
-            NSEvent.removeMonitor(global)
-        }
-        if let local = mouseMovedMonitorLocal {
-            NSEvent.removeMonitor(local)
-        }
-        renderCoalesceTimer?.invalidate()
-        animationPlaybackFlushTimer?.invalidate()
-    }
-
     private func configureStatusItem() {
         guard let button = statusItem.button else { return }
         button.action = #selector(toggleDetailsWindow(_:))
@@ -293,7 +278,11 @@ final class StatusBarController {
         button.imageScaling = .scaleNone
         button.title = ""
         button.wantsLayer = false
-        button.toolTip = "NetBar 网络流量，点击查看明细"
+        let accessibilityLabel = text("NetBar 网络流量", "NetBar Network Traffic")
+        let accessibilityHelp = text("点击查看网络流量明细", "Click to view network traffic details")
+        button.toolTip = accessibilityHelp
+        button.setAccessibilityLabel(accessibilityLabel)
+        button.setAccessibilityHelp(accessibilityHelp)
     }
 
     private func configureObservers() {
@@ -394,6 +383,19 @@ final class StatusBarController {
             .store(in: &cancellables)
 
         setupCatAnimationIfNeeded(force: true)
+    }
+
+    func shutdown() {
+        applicationTrafficVisibilityScheduler?.invalidate()
+        pauseGooglyEyesTracking()
+        catAnimation?.setActive(false)
+        catAnimation = nil
+        renderCoalesceTimer?.invalidate()
+        renderCoalesceTimer = nil
+        animationPlaybackFlushTimer?.invalidate()
+        animationPlaybackFlushTimer = nil
+        cancellables.removeAll()
+        monitor.stop()
     }
 
     private func handleNetworkIntelligenceUpdate() {

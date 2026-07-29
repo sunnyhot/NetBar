@@ -36,7 +36,6 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
     func show() {
         let preferencesWindow = makeWindowIfNeeded()
         preferencesWindow.title = appPreferences.text("NetBar 偏好设置", "NetBar Preferences")
-        preferencesWindow.center()
         NSApplication.shared.activate(ignoringOtherApps: true)
         preferencesWindow.makeKeyAndOrderFront(nil)
     }
@@ -56,6 +55,11 @@ final class PreferencesWindowController: NSObject, NSWindowDelegate {
         preferencesWindow.minSize = NSSize(width: 620, height: 520)
         preferencesWindow.isReleasedWhenClosed = false
         preferencesWindow.delegate = self
+        let autosaveName = "NetBar.PreferencesWindow"
+        if !preferencesWindow.setFrameUsingName(autosaveName) {
+            preferencesWindow.center()
+        }
+        preferencesWindow.setFrameAutosaveName(autosaveName)
         preferencesWindow.contentViewController = NSHostingController(
             rootView: PreferencesView(
                 settings: settings,

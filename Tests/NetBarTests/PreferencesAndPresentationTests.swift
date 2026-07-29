@@ -5,13 +5,13 @@ import XCTest
 
 @MainActor
 final class PreferencesAndPresentationTests: XCTestCase {
-    private var isolatedDefaultSuiteNames: Set<String> = []
+    private nonisolated let isolatedDefaultSuiteNames = LockedValue<Set<String>>([])
 
-    override func tearDown() {
-        for suiteName in isolatedDefaultSuiteNames {
+    nonisolated override func tearDown() {
+        for suiteName in isolatedDefaultSuiteNames.withValue({ $0 }) {
             UserDefaults(suiteName: suiteName)?.removePersistentDomain(forName: suiteName)
         }
-        isolatedDefaultSuiteNames.removeAll()
+        isolatedDefaultSuiteNames.set([])
         super.tearDown()
     }
 
@@ -2651,12 +2651,15 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testUpdateReleaseFetcherFallsBackToGitHubAPIAfterManifestGatewayTimeout() async throws {
-        var requestedURLs: [URL] = []
+        let requestedURLs = LockedValue<[URL]>([])
         let fetcher = UpdateReleaseFetcher(
             repository: "sunnyhot/NetBar",
             currentVersion: "0.37.1",
             loadData: { request in
-                requestedURLs.append(try XCTUnwrap(request.url))
+                let requestURL = try XCTUnwrap(request.url)
+                requestedURLs.mutate { urls in
+                    urls.append(requestURL)
+                }
                 if request.url?.host == "github.com" {
                     let response = HTTPURLResponse(
                         url: request.url!,
@@ -2696,7 +2699,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
         XCTAssertEqual(release.tagName, "v0.38.1")
         XCTAssertEqual(release.assets.first?.name, "NetBar.app.zip")
-        XCTAssertEqual(requestedURLs.map(\.host), ["github.com", "api.github.com"])
+        XCTAssertEqual(requestedURLs.withValue { $0.map(\.host) }, ["github.com", "api.github.com"])
     }
 
     func testAvailableUpdateProvidesVersionTextAndReleaseBody() {
@@ -2802,7 +2805,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
     private func isolatedDefaults() -> UserDefaults {
         let suiteName = "NetBarTests.\(UUID().uuidString)"
-        isolatedDefaultSuiteNames.insert(suiteName)
+        _ = isolatedDefaultSuiteNames.mutate { $0.insert(suiteName) }
         let defaults = UserDefaults(suiteName: suiteName)!
         defaults.removePersistentDomain(forName: suiteName)
         return defaults
@@ -3356,7 +3359,7 @@ private final class FakeLoginItemManager: LoginItemManaging {
     }
 }
 
-private final class SequenceNetworkStatsReader: NetworkStatsReading {
+private final class SequenceNetworkStatsReader: NetworkStatsReading, @unchecked Sendable {
     private var samples: [[InterfaceStats]]
     private var index = 0
 
@@ -4139,6 +4142,41 @@ extension PreferencesAndPresentationTests {
         XCTAssertTrue(source.contains("struct PreferencesTabBar"))
         XCTAssertFalse(source.contains("TabView(selection:"))
         XCTAssertFalse(source.contains(".animation(.easeInOut(duration: 0.2), value: selectedTab)"))
+    }
+
+    func testMainMenuIncludesStandardUtilityMenusAndServices() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "AppDelegate.swift"]
+        )
+
+        XCTAssertTrue(source.contains("NSApplication.shared.servicesMenu"))
+        XCTAssertTrue(source.contains("text(\"编辑\", \"Edit\")"))
+        XCTAssertTrue(source.contains("text(\"显示\", \"View\")"))
+        XCTAssertTrue(source.contains("text(\"窗口\", \"Window\")"))
+        XCTAssertTrue(source.contains("text(\"帮助\", \"Help\")"))
+        XCTAssertTrue(source.contains("NSApplication.shared.helpMenu"))
+    }
+
+    func testPreferencesWindowRestoresAndAutosavesItsFrame() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesWindowController.swift"]
+        )
+
+        XCTAssertTrue(source.contains("setFrameUsingName(autosaveName)"))
+        XCTAssertTrue(source.contains("setFrameAutosaveName(autosaveName)"))
+    }
+
+    func testIconOnlyTrafficControlsProvideVoiceOverLabels() throws {
+        let statusSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "StatusBarController.swift"]
+        )
+        let footerSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "PopoverFooterView.swift"]
+        )
+
+        XCTAssertTrue(statusSource.contains("button.setAccessibilityLabel"))
+        XCTAssertTrue(statusSource.contains("button.setAccessibilityHelp"))
+        XCTAssertEqual(footerSource.components(separatedBy: ".accessibilityLabel(").count - 1, 3)
     }
 
     func testLivingSignalScrollingPanelsAvoidExpensivePerRowEffects() throws {

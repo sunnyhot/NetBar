@@ -174,6 +174,7 @@ struct AboutPreferencesView: View {
                             .foregroundStyle(.secondary)
                     }
                     .help(appPreferences.text("打开 GitHub Releases", "Open GitHub Releases"))
+                    .accessibilityLabel(appPreferences.text("打开 GitHub Releases", "Open GitHub Releases"))
                 }
             }
         }

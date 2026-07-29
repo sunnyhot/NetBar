@@ -151,8 +151,10 @@ struct CPUTickSample: Equatable {
 final class LiveSystemResourceReader: SystemResourceReading, @unchecked Sendable {
     func readMemoryUsage() -> MemoryUsage {
         // Use Mach host statistics for memory info
-        let pageSize = UInt64(vm_kernel_page_size)
         let host = mach_host_self()
+        var hostPageSize: vm_size_t = 0
+        let pageSizeResult = host_page_size(host, &hostPageSize)
+        let pageSize = pageSizeResult == KERN_SUCCESS ? UInt64(hostPageSize) : 4_096
 
         var size = mach_msg_type_number_t(MemoryLayout<vm_statistics64_data_t>.size / MemoryLayout<integer_t>.size)
         var vmStats = vm_statistics64_data_t()

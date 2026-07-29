@@ -269,7 +269,7 @@ enum ApplicationTrafficPresentation {
         }
     }
 
-    private static let systemProcessCache = NSCache<NSString, NSNumber>()
+    private static let systemProcessCache = LockedObjectCache<NSString, NSNumber>()
 
     static func isLikelySystemProcess(_ application: ApplicationTrafficRate) -> Bool {
         let cacheKey = application.id as NSString

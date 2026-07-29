@@ -39,10 +39,10 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 
 当前规模：
 
-- `Sources/NetBar`: 53 个 Swift 文件，约 14,360 行
-- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,600 行，244 个测试
+- `Sources/NetBar`: 58 个 Swift 文件，约 14,480 行
+- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,690 行，248 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.40.4`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.41.1`
 
 ## 3. 启动与对象装配
 
@@ -121,7 +121,9 @@ StatusBarController
 关键文件：
 
 - `StatusBarController.swift`: 状态栏交互、渲染调度、右键菜单、详情窗口、RunCat 动画、Googly Eyes 鼠标追踪
-- `StatusBarStyle.swift`: 状态栏布局、文字、背景、角色、颜色模式、特效绘制
+- `StatusBarStyle.swift`: `StatusBarSettings` 偏好模型与持久化
+- `StatusBarColorStyle.swift`: 颜色模式、动态调色板和布局枚举
+- `StatusBarRenderer.swift`: 状态栏布局、文字、背景、角色和特效绘制
 - `StatusBarRenderCache.swift`: 图片和文字布局 cache
 - `RunCatAnimation.swift`: 内置角色元数据、动画帧推进、速度和轮换
 - `CustomCharacter.swift`
@@ -227,6 +229,8 @@ NetworkIntelligenceCoordinator
 关键文件：
 
 - `AppUpdater.swift`
+- `AppUpdateRelease.swift`
+- `AppUpdateDialogView.swift`
 - `Resources/Info.plist`
 - `.github/workflows/release.yml`
 - `Scripts/package-release.sh`
@@ -313,7 +317,7 @@ swift test
 
 重点测试方向：
 
-- 修改 `StatusBarStyle.swift`：补状态栏 presentation/signature/image/layout 测试
+- 修改 `StatusBarRenderer.swift` / `StatusBarColorStyle.swift`：补状态栏 presentation/signature/image/layout 测试
 - 修改采样或资源读取：补 `NetworkMonitor`、mock reader、采样策略测试
 - 修改应用列表：补 `ApplicationTrafficPresentation` 测试
 - 修改历史/提醒：补 `NetworkHistoryStore`、`NetworkAnomalyDetector` 和通知 cooldown 测试
@@ -324,7 +328,7 @@ swift test
 
 | 需求 | 优先查看 |
 |---|---|
-| 菜单栏显示格式、宽度、颜色、角色布局 | `StatusBarStyle.swift`, `StatusBarController.swift`, `StatusBarRenderCache.swift` |
+| 菜单栏显示格式、宽度、颜色、角色布局 | `StatusBarRenderer.swift`, `StatusBarColorStyle.swift`, `StatusBarStyle.swift`, `StatusBarController.swift`, `StatusBarRenderCache.swift` |
 | 详情窗口展示 | `NetworkPopoverView.swift`, `ApplicationTrafficPresentation.swift`, `NetworkHistoryPresentation.swift` |
 | 应用级流量 | `ApplicationTrafficReader.swift`, `NetworkMonitor.swift` |
 | 接口总流量 | `NetworkStatsReader.swift`, `NetworkInterfaceClassifier.swift`, `NetworkMonitor.swift` |
@@ -333,9 +337,9 @@ swift test
 | 网络智能提醒 | `NetworkAnomalyDetector.swift`, `NetworkNotificationController.swift` |
 | 历史统计 | `NetworkHistoryStore.swift`, `NetworkHistoryPresentation.swift`, `NetworkIntelligenceModels.swift` |
 | 偏好设置 | `AppPreferences.swift`, `StatusBarStyle.swift`, `Sources/NetBar/Preferences/*.swift` |
-| 自定义角色 | `CustomCharacter.swift`, `CustomCharacterStore.swift`, `CustomCharacterImageProcessor.swift`, `StatusBarStyle.swift` |
+| 自定义角色 | `CustomCharacter.swift`, `CustomCharacterStore.swift`, `CustomCharacterImageProcessor.swift`, `StatusBarRenderer.swift` |
 | RunCat 内置角色 | `RunCatAnimation.swift`, `Resources/RunCat/`, `PreferencesAndPresentationTests.swift` |
-| 自动更新 | `AppUpdater.swift`, `.github/workflows/release.yml`, `Scripts/package-release.sh` |
+| 自动更新 | `AppUpdater.swift`, `AppUpdateRelease.swift`, `AppUpdateDialogView.swift`, `.github/workflows/release.yml`, `Scripts/package-release.sh` |
 | 发布打包 | `Scripts/build-app.sh`, `Scripts/verify-release-app.sh`, `Scripts/package-release.sh` |
 
 ## 13. 工程约定

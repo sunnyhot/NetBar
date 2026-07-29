@@ -200,6 +200,7 @@ enum ActivityLevel: Equatable {
 
 // MARK: - RunCat Animation Controller
 
+@MainActor
 final class RunCatAnimation {
     struct AnimatedCharacter: Equatable {
         let id: String
@@ -245,13 +246,6 @@ final class RunCatAnimation {
         self.character = AnimatedCharacter(asset: character)
         self.speedMultiplier = speedMultiplier
         self.onFrameChange = onFrameChange
-    }
-
-    deinit {
-        timer?.invalidate()
-        timer = nil
-        rotationTimer?.invalidate()
-        rotationTimer = nil
     }
 
     func setActive(_ active: Bool) {
@@ -382,7 +376,9 @@ final class RunCatAnimation {
         timer?.invalidate()
         let interval = targetInterval()
         timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            self?.advanceFrame()
+            Task { @MainActor [weak self] in
+                self?.advanceFrame()
+            }
         }
     }
 
@@ -411,7 +407,9 @@ final class RunCatAnimation {
         guard pool.count > 1 else { return }  // No rotation needed with only 1 character
         let interval = max(rotationIntervalMinutes * 60, 10)  // Minimum 10 seconds
         rotationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            self?.rotateToNextCharacter()
+            Task { @MainActor [weak self] in
+                self?.rotateToNextCharacter()
+            }
         }
     }
 

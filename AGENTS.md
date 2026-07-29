@@ -20,7 +20,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Package.swift` | 30 | SPM 配置：macOS .v13、Swift 5 语言模式、`NetBar` executable target + `NetBarTests` test target |
-| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.40.4` |
+| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.41.1` |
 | `Resources/NetBar.entitlements` | 10 | App 沙盒与自动化相关 entitlements |
 | `.github/workflows/release.yml` | 141 | tag 触发的 GitHub Release 构建、测试、打包与发布流程 |
 | `Scripts/build-app.sh` | 117 | `swift build --disable-sandbox -c release` 后组装 `build/NetBar.app`，可选 codesign |
@@ -30,24 +30,29 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Sources/NetBar
 
-当前 `Sources/NetBar` 共 53 个 Swift 文件，约 14,360 行：
+当前 `Sources/NetBar` 共 58 个 Swift 文件，约 14,480 行：
 
-- 顶层核心文件 33 个
+- 顶层核心文件 38 个
 - `Sources/NetBar/Popover/` 详情弹窗子视图 8 个
 - `Sources/NetBar/Preferences/` 偏好设置子视图 12 个
-- 最大文件：`StatusBarStyle.swift` 2072 行、`AppUpdater.swift` 1008 行、`StatusBarController.swift` 826 行、`NetworkMonitor.swift` 719 行
+- 最大文件：`StatusBarRenderer.swift` 1146 行、`StatusBarController.swift` 828 行、`NetworkMonitor.swift` 722 行、`StatusBarColorStyle.swift` 695 行
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Main.swift` | 16 | `@main` 入口，创建 `AppDelegate` 并启动 `NSApplication.run()` |
-| `AppDelegate.swift` | 232 | 初始化偏好、状态栏、历史、通知和更新器；配置主菜单、Dock/外观/语言 |
-| `NetworkMonitor.swift` | 719 | 核心监控引擎：接口采样、应用流量采样、系统资源采样、历史记录和高流量检测 |
-| `StatusBarController.swift` | 826 | `NSStatusItem` 控制器：状态栏渲染调度、详情窗口、右键菜单、RunCat 动画和通知联动 |
-| `StatusBarStyle.swift` | 2072 | CoreGraphics 状态栏渲染引擎：设置模型、布局、签名 diff、文字/角色/特效绘制 |
-| `StatusBarRenderCache.swift` | 70 | 状态栏图片和文字布局 LRU cache |
+| `AppDelegate.swift` | 272 | 初始化偏好、状态栏、历史、通知和更新器；配置标准主菜单、Dock/外观/语言 |
+| `NetworkMonitor.swift` | 722 | 核心监控引擎：接口采样、应用流量采样、generation 防旧结果覆盖、系统资源、历史和高流量检测 |
+| `StatusBarController.swift` | 828 | `NSStatusItem` 控制器：状态栏渲染调度、详情窗口、右键菜单、RunCat 动画、无障碍和通知联动 |
+| `StatusBarStyle.swift` | 235 | `StatusBarSettings` 状态栏偏好模型和 UserDefaults 持久化 |
+| `StatusBarColorStyle.swift` | 695 | 状态栏颜色模式、动态调色板和布局枚举 |
+| `StatusBarRenderer.swift` | 1146 | CoreGraphics 状态栏布局、签名 diff、文字、角色与特效渲染 |
+| `StatusBarRenderCache.swift` | 150 | 状态栏图片、预览和文字布局 LRU cache |
 | `Popover/NetworkPopoverView.swift` | 146 | SwiftUI 详情窗口容器：组合趋势、今日/近 7 日统计、接口、实时应用列表和系统资源 |
 | `DetailsWindowController.swift` | 476 | 详情窗口创建、定位、外部点击关闭策略；打开后延迟刷新以避开首帧动画 |
-| `AppUpdater.swift` | 1008 | 自动更新：`latest.json`/GitHub API、下载、SHA256、解压、架构/签名校验、自替换安装 |
+| `AppUpdater.swift` | 600 | 自动更新协调器：检查、下载、解压、校验和自替换安装 |
+| `AppUpdateRelease.swift` | 263 | Release/manifest 模型、GitHub fetch、SHA256 和更新错误 |
+| `AppUpdateDialogView.swift` | 153 | SwiftUI 更新提示与下载进度界面 |
+| `LockedObjectCache.swift` | 55 | 严格并发兼容的同步缓存和值容器 |
 | `AppPreferences.swift` | 398 | 全局偏好：Dock、语言、外观、排序、popover 位置、网络智能设置、开机启动 |
 | `NetworkHistoryStore.swift` | 317 | 本地历史统计持久化、日汇总和动画播放计数 |
 | `NetworkIntelligenceModels.swift` | 256 | 网络提醒设置、异常事件和日汇总模型 |
@@ -69,12 +74,12 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Tests
 
-当前测试共 2 个 Swift 文件、约 5,600 行、244 个测试：
+当前测试共 2 个 Swift 文件、约 5,690 行、248 个测试：
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|
-| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 4226 | 偏好、状态栏渲染、窗口布局、高流量提醒、历史统计、自定义角色、内置角色资源、更新 manifest、应用列表展示 |
-| `Tests/NetBarTests/SystemResourceTests.swift` | 1358 | 系统资源模型、采样策略、NetworkMonitor 集成、应用资源读取、streaming nettop 行为 |
+| `Tests/NetBarTests/PreferencesAndPresentationTests.swift` | 4264 | 偏好、状态栏渲染、窗口布局、标准菜单与无障碍、高流量提醒、历史统计、自定义角色、内置角色资源、更新 manifest、应用列表展示 |
+| `Tests/NetBarTests/SystemResourceTests.swift` | 1424 | 系统资源模型、采样策略、NetworkMonitor 集成、应用资源读取、旧采样丢弃和 streaming nettop 行为 |
 
 ## 常用命令
 
@@ -162,9 +167,9 @@ dist/NetBar.app.zip.sha256
 
 ## 已知坑点
 
-1. **`StatusBarStyle.swift` 很大**：修改渲染逻辑要精准定位，优先补测试覆盖签名、布局或像素行为。
+1. **状态栏渲染仍是高复杂度区域**：设置在 `StatusBarStyle.swift`，颜色和布局枚举在 `StatusBarColorStyle.swift`，绘制在 `StatusBarRenderer.swift`；修改时优先补签名、布局或像素测试。
 2. **`NetworkPopoverView.swift` 很大**：详情页 UI 和展示逻辑集中，改动时注意不要引入布局回归。
-3. **`AppUpdater.swift` 风险高**：涉及网络、zip、SHA256、架构/签名校验和自替换安装；发布相关改动必须跑测试和本地打包验证。
+3. **自动更新风险高**：`AppUpdater.swift`、`AppUpdateRelease.swift` 和 `AppUpdateDialogView.swift` 共同覆盖网络、zip、SHA256、架构/签名校验和自替换安装；发布相关改动必须跑测试和本地打包验证。
 4. **`nettop` 进程依赖**：沙盒/系统版本差异可能影响输出和 spawn；streaming reader 依赖 `/usr/bin/script` 分配伪终端以减少缓冲。
 5. **构建需 `--disable-sandbox`**：`build-app.sh` 已封装，不要手动拼装 `.app`。
 6. **签名形态**：本地默认保留 SwiftPM linker-signed/ad-hoc 形态；正式分发如要公证，需要开发者签名和 hardened runtime 策略。
@@ -176,7 +181,7 @@ dist/NetBar.app.zip.sha256
 ## Agent 工作指南
 
 - 先读 `PROJECT_MAP.md`，再动核心模块。
-- 修改状态栏渲染先看 `StatusBarStyle.swift`、`StatusBarController.swift`、`StatusBarRenderCache.swift`。
+- 修改状态栏渲染先看 `StatusBarRenderer.swift`、`StatusBarColorStyle.swift`、`StatusBarController.swift`、`StatusBarRenderCache.swift`；设置持久化看 `StatusBarStyle.swift`。
 - 新增偏好设置优先复用 `Preferences/*.swift` 的分组组件，并确认 UserDefaults key 和 reset 行为。
 - 新增用户可见文案必须补中英文。
 - 修改采样、历史、通知、更新或发布链路时必须跑 `swift test`。

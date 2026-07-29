@@ -1,5 +1,17 @@
 # Changelog
 
+## Unreleased
+
+## v0.41.1 (2026-07-29)
+
+### Engineering — 并发、采样与 macOS 体验维护
+
+- 清理严格并发诊断中的共享缓存、下载回调、Mach 页面大小和动画计时器警告
+- 为应用流量采样增加 generation 校验，详情窗口关闭后丢弃仍在执行的旧采样结果
+- 将状态栏设置、颜色策略、CoreGraphics 渲染以及更新 Release/UI/协调逻辑拆分到独立文件
+- 补齐 Services、Edit、View、Window、Help 菜单，保存偏好窗口位置和尺寸，并完善状态栏及图标按钮的 VoiceOver 标签
+- 同步项目地图、文件规模和当前 `0.41.1` 版本信息
+
 ## v0.41.0 (2026-07-27)
 
 ### Cleanup — 收敛智能告警与详情弹窗展示层

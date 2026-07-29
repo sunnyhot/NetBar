@@ -144,7 +144,7 @@ final class PSApplicationResourceReader: ApplicationResourceReading, @unchecked 
         return results
     }
 
-    private static let displayNameCache = NSCache<NSNumber, NSString>()
+    private static let displayNameCache = LockedObjectCache<NSNumber, NSString>()
 
     private static func displayName(for pid: Int32, fallback: String) -> String {
         let key = NSNumber(value: pid)

@@ -891,6 +891,56 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should reset after blocked read completes")
     }
 
+    func testPausedApplicationTrafficIgnoresInFlightResult() async {
+        let staleResult = ApplicationTrafficReadResult(
+            stats: [
+                ApplicationTrafficStats(
+                    id: "Stale.42",
+                    processName: "Stale",
+                    displayName: "Stale",
+                    pid: 42,
+                    receivedBytes: 4_096,
+                    sentBytes: 2_048
+                )
+            ],
+            errorMessage: nil
+        )
+        let trafficReader = BlockingApplicationTrafficReader(result: staleResult)
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[
+                InterfaceStats(
+                    name: "en0",
+                    receivedBytes: 100,
+                    sentBytes: 50,
+                    receivedPackets: 10,
+                    sentPackets: 5
+                )
+            ]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            resourceReader: MockApplicationResourceReader(processes: []),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        let startDeadline = Date().addingTimeInterval(1)
+        while !trafficReader.hasStarted && Date() < startDeadline {
+            try? await Task.sleep(for: .milliseconds(10))
+        }
+        XCTAssertTrue(trafficReader.hasStarted)
+        monitor.isApplicationTrafficVisible = false
+        trafficReader.unblock()
+        try? await Task.sleep(for: .milliseconds(100))
+
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 0)
+        XCTAssertTrue(monitor.appTraffic.applications.isEmpty)
+        XCTAssertFalse(monitor.appTraffic.isRefreshing)
+    }
+
     func testStartDoesNotCreateAppTrafficTimerWhenNotVisible() async {
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
@@ -1265,7 +1315,7 @@ private final class MockApplicationResourceReader: ApplicationResourceReading, @
 
 // MARK: - Test Helpers
 
-private final class SequenceNetworkStatsReader: NetworkStatsReading {
+private final class SequenceNetworkStatsReader: NetworkStatsReading, @unchecked Sendable {
     private var samples: [[InterfaceStats]]
     private var index = 0
 
@@ -1296,11 +1346,27 @@ private final class SequenceApplicationTrafficReader: ApplicationTrafficReading,
 }
 
 private final class BlockingApplicationTrafficReader: ApplicationTrafficReading, @unchecked Sendable {
+    private let startedLock = NSLock()
     private let semaphore = DispatchSemaphore(value: 0)
+    private let result: ApplicationTrafficReadResult
+    private var didStart = false
+
+    init(result: ApplicationTrafficReadResult = ApplicationTrafficReadResult(stats: [], errorMessage: nil)) {
+        self.result = result
+    }
 
     func readApplications() -> ApplicationTrafficReadResult {
+        startedLock.lock()
+        didStart = true
+        startedLock.unlock()
         semaphore.wait()
-        return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
+        return result
+    }
+
+    var hasStarted: Bool {
+        startedLock.lock()
+        defer { startedLock.unlock() }
+        return didStart
     }
 
     func unblock() {

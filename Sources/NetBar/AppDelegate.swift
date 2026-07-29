@@ -112,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationWillTerminate(_ notification: Notification) {
+        statusBarController?.shutdown()
         statusBarController?.flushNetworkHistory()
         networkHistoryStore.flushNow()
     }
@@ -141,6 +142,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             await updater.checkForUpdates(isManual: true)
             preferencesWindowController.show()
         }
+    }
+
+    @objc private func showHelp(_ sender: Any?) {
+        guard let url = URL(string: "https://github.com/sunnyhot/NetBar") else { return }
+        NSWorkspace.shared.open(url)
     }
 
     private func configurePreferenceObservers() {
@@ -197,6 +203,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(targetedMenuItem(title: text("偏好设置...", "Preferences..."), action: #selector(showPreferences(_:)), keyEquivalent: ","))
         appMenu.addItem(targetedMenuItem(title: text("检查更新...", "Check for Updates..."), action: #selector(checkForUpdates(_:))))
         appMenu.addItem(.separator())
+        let servicesItem = NSMenuItem(title: text("服务", "Services"), action: nil, keyEquivalent: "")
+        let servicesMenu = NSMenu(title: text("服务", "Services"))
+        servicesItem.submenu = servicesMenu
+        appMenu.addItem(servicesItem)
+        NSApplication.shared.servicesMenu = servicesMenu
+        appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: text("隐藏 NetBar", "Hide NetBar"), action: #selector(NSApplication.hide(_:)), keyEquivalent: "h"))
         appMenu.addItem(NSMenuItem(title: text("隐藏其他", "Hide Others"), action: #selector(NSApplication.hideOtherApplications(_:)), keyEquivalent: "h"))
         appMenu.items.last?.keyEquivalentModifierMask = [.command, .option]
@@ -204,14 +216,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: text("退出 NetBar", "Quit NetBar"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
 
+        let editMenuItem = NSMenuItem(title: text("编辑", "Edit"), action: nil, keyEquivalent: "")
+        let editMenu = NSMenu(title: text("编辑", "Edit"))
+        editMenuItem.submenu = editMenu
+        mainMenu.addItem(editMenuItem)
+        editMenu.addItem(NSMenuItem(title: text("撤销", "Undo"), action: #selector(UndoManager.undo), keyEquivalent: "z"))
+        let redoItem = NSMenuItem(title: text("重做", "Redo"), action: #selector(UndoManager.redo), keyEquivalent: "z")
+        redoItem.keyEquivalentModifierMask = [.command, .shift]
+        editMenu.addItem(redoItem)
+        editMenu.addItem(.separator())
+        editMenu.addItem(NSMenuItem(title: text("剪切", "Cut"), action: #selector(NSText.cut(_:)), keyEquivalent: "x"))
+        editMenu.addItem(NSMenuItem(title: text("复制", "Copy"), action: #selector(NSText.copy(_:)), keyEquivalent: "c"))
+        editMenu.addItem(NSMenuItem(title: text("粘贴", "Paste"), action: #selector(NSText.paste(_:)), keyEquivalent: "v"))
+        editMenu.addItem(NSMenuItem(title: text("全选", "Select All"), action: #selector(NSText.selectAll(_:)), keyEquivalent: "a"))
+
+        let viewMenuItem = NSMenuItem(title: text("显示", "View"), action: nil, keyEquivalent: "")
+        let viewMenu = NSMenu(title: text("显示", "View"))
+        viewMenuItem.submenu = viewMenu
+        mainMenu.addItem(viewMenuItem)
+        viewMenu.addItem(targetedMenuItem(title: text("显示流量窗口", "Show Traffic Window"), action: #selector(showNetworkWindow(_:)), keyEquivalent: "0"))
+
         let windowMenuItem = NSMenuItem()
         let windowMenu = NSMenu(title: text("窗口", "Window"))
         windowMenuItem.submenu = windowMenu
         mainMenu.addItem(windowMenuItem)
-        windowMenu.addItem(targetedMenuItem(title: text("流量窗口", "Traffic Window"), action: #selector(showNetworkWindow(_:)), keyEquivalent: "0"))
         windowMenu.addItem(NSMenuItem(title: text("最小化", "Minimize"), action: #selector(NSWindow.performMiniaturize(_:)), keyEquivalent: "m"))
         windowMenu.addItem(NSMenuItem(title: text("缩放", "Zoom"), action: #selector(NSWindow.performZoom(_:)), keyEquivalent: ""))
+        windowMenu.addItem(.separator())
+        windowMenu.addItem(NSMenuItem(title: text("前置全部窗口", "Bring All to Front"), action: #selector(NSApplication.arrangeInFront(_:)), keyEquivalent: ""))
         NSApplication.shared.windowsMenu = windowMenu
+
+        let helpMenuItem = NSMenuItem(title: text("帮助", "Help"), action: nil, keyEquivalent: "")
+        let helpMenu = NSMenu(title: text("帮助", "Help"))
+        helpMenuItem.submenu = helpMenu
+        mainMenu.addItem(helpMenuItem)
+        helpMenu.addItem(targetedMenuItem(title: text("NetBar 帮助", "NetBar Help"), action: #selector(showHelp(_:)), keyEquivalent: "?"))
+        NSApplication.shared.helpMenu = helpMenu
 
         NSApplication.shared.mainMenu = mainMenu
     }
