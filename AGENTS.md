@@ -20,7 +20,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | 文件 | 行数 | 职责 |
 |---|---:|---|
 | `Package.swift` | 30 | SPM 配置：macOS .v13、Swift 5 语言模式、`NetBar` executable target + `NetBarTests` test target |
-| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.41.1` |
+| `Resources/Info.plist` | 32 | Bundle ID `local.codex.NetBar`，当前版本 `0.41.2` |
 | `Resources/NetBar.entitlements` | 10 | App 沙盒与自动化相关 entitlements |
 | `.github/workflows/release.yml` | 141 | tag 触发的 GitHub Release 构建、测试、打包与发布流程 |
 | `Scripts/build-app.sh` | 117 | `swift build --disable-sandbox -c release` 后组装 `build/NetBar.app`，可选 codesign |
@@ -30,7 +30,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Sources/NetBar
 
-当前 `Sources/NetBar` 共 58 个 Swift 文件，约 14,480 行：
+当前 `Sources/NetBar` 共 58 个 Swift 文件，约 14,540 行：
 
 - 顶层核心文件 38 个
 - `Sources/NetBar/Popover/` 详情弹窗子视图 8 个
@@ -53,7 +53,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | `AppUpdateRelease.swift` | 263 | Release/manifest 模型、GitHub fetch、SHA256 和更新错误 |
 | `AppUpdateDialogView.swift` | 153 | SwiftUI 更新提示与下载进度界面 |
 | `LockedObjectCache.swift` | 55 | 严格并发兼容的同步缓存和值容器 |
-| `AppPreferences.swift` | 398 | 全局偏好：Dock、语言、外观、排序、popover 位置、网络智能设置、开机启动 |
+| `AppPreferences.swift` | 398 | 全局偏好：Dock、语言、外观、排序、popover 位置、提醒与历史设置、开机启动 |
 | `NetworkHistoryStore.swift` | 317 | 本地历史统计持久化、日汇总和动画播放计数 |
 | `NetworkIntelligenceModels.swift` | 256 | 网络提醒设置、异常事件和日汇总模型 |
 | `NetworkAnomalyDetector.swift` | 71 | 持续高流量检测 |
@@ -74,7 +74,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 
 ### Tests
 
-当前测试共 2 个 Swift 文件、约 5,690 行、248 个测试：
+当前测试共 2 个 Swift 文件、约 5,750 行、252 个测试：
 
 | 文件 | 行数 | 职责 |
 |---|---:|---|

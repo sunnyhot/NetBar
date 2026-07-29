@@ -39,10 +39,10 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 
 当前规模：
 
-- `Sources/NetBar`: 58 个 Swift 文件，约 14,480 行
-- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,690 行，248 个测试
+- `Sources/NetBar`: 58 个 Swift 文件，约 14,540 行
+- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,750 行，252 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.41.1`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.41.2`
 
 ## 3. 启动与对象装配
 
@@ -65,7 +65,7 @@ Main.swift
 
 - `Main.swift`: `@main` 入口，创建 `AppDelegate` 并启动 `NSApplication.run()`
 - `AppDelegate.swift`: 统一装配控制器、设置主菜单、应用外观、Dock policy、更新检查和 onboarding 展示
-- `AppPreferences.swift`: App 级偏好、语言、外观、Dock、登录项、网络智能设置
+- `AppPreferences.swift`: App 级偏好、语言、外观、Dock、登录项、提醒与历史设置
 - `StatusBarStyle.swift`: `StatusBarSettings` 持久化状态栏显示偏好
 
 ## 4. 监控数据流
@@ -175,7 +175,7 @@ PreferencesWindowController
        │    ├─ MenuBarAnimationPreferencesView
        │    ├─ MenuBarCharacterPreferencesView
        │    └─ MenuBarSubcomponents
-       ├─ IntelligencePreferencesView
+       ├─ AlertsAndHistoryPreferencesView
        └─ AboutPreferencesView
 ```
 
@@ -188,7 +188,7 @@ PreferencesWindowController
 - `MenuBarLayoutPreferencesView.swift`: 宽度、对齐、行距、排序等布局
 - `MenuBarAnimationPreferencesView.swift`: 动画速度、头部摆动、速度来源
 - `MenuBarCharacterPreferencesView.swift`: 内置/自定义角色选择
-- `IntelligencePreferencesView.swift`: 高流量检测、通知和历史设置
+- `AlertsAndHistoryPreferencesView.swift`: 高流量提醒、通知和历史设置
 - `AboutPreferencesView.swift`: 关于、更新和诊断入口
 - `PreferencesComponents.swift`: 通用设置组件
 
@@ -198,7 +198,7 @@ PreferencesWindowController
 - 用户可见字符串使用中英文双参数
 - 偏好 UI 已拆分，避免重新堆回 `PreferencesWindowController`
 
-## 8. 网络智能、历史、通知
+## 8. 提醒、历史与通知
 
 ```text
 NetworkMonitor
@@ -334,7 +334,7 @@ swift test
 | 接口总流量 | `NetworkStatsReader.swift`, `NetworkInterfaceClassifier.swift`, `NetworkMonitor.swift` |
 | 系统资源 | `SystemResourceReader.swift`, `ApplicationResourceReader.swift` |
 | 采样性能 | `PerformanceSamplingPolicy.swift`, `NetworkMonitor.swift`, `StatusBarController.swift` |
-| 网络智能提醒 | `NetworkAnomalyDetector.swift`, `NetworkNotificationController.swift` |
+| 高流量提醒 | `NetworkAnomalyDetector.swift`, `NetworkNotificationController.swift` |
 | 历史统计 | `NetworkHistoryStore.swift`, `NetworkHistoryPresentation.swift`, `NetworkIntelligenceModels.swift` |
 | 偏好设置 | `AppPreferences.swift`, `StatusBarStyle.swift`, `Sources/NetBar/Preferences/*.swift` |
 | 自定义角色 | `CustomCharacter.swift`, `CustomCharacterStore.swift`, `CustomCharacterImageProcessor.swift`, `StatusBarRenderer.swift` |

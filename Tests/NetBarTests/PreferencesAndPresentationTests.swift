@@ -1533,6 +1533,42 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
+    func testPreferredPrimaryInterfaceUsesSystemPrimaryBeforeActiveFallback() {
+        let active = interfaceRate(id: "en1", download: 100, upload: 0)
+        let primary = InterfaceRate(
+            id: "en0",
+            name: "en0",
+            displayName: "Wi-Fi / en0",
+            downloadBytesPerSecond: 0,
+            uploadBytesPerSecond: 0,
+            totalReceivedBytes: 0,
+            totalSentBytes: 0,
+            receivedPackets: 0,
+            sentPackets: 0,
+            isPrimary: true
+        )
+
+        XCTAssertEqual(
+            InterfacePresentation.preferredPrimaryInterface(in: [active, primary])?.id,
+            "en0"
+        )
+    }
+
+    func testPreferredPrimaryInterfaceFallsBackToActiveThenFirstKnownInterface() {
+        let idle = interfaceRate(id: "en2", download: 0, upload: 0)
+        let active = interfaceRate(id: "utun4", download: 25, upload: 0)
+
+        XCTAssertEqual(
+            InterfacePresentation.preferredPrimaryInterface(in: [idle, active])?.id,
+            "utun4"
+        )
+        XCTAssertEqual(
+            InterfacePresentation.preferredPrimaryInterface(in: [idle])?.id,
+            "en2"
+        )
+        XCTAssertNil(InterfacePresentation.preferredPrimaryInterface(in: []))
+    }
+
     func testGooglyEyesCharacterIsAvailableAsSpecialMenuBarCharacter() {
         let character = RunCatCharacter.byId("googly_eyes")
 
@@ -4142,6 +4178,35 @@ extension PreferencesAndPresentationTests {
         XCTAssertTrue(source.contains("struct PreferencesTabBar"))
         XCTAssertFalse(source.contains("TabView(selection:"))
         XCTAssertFalse(source.contains(".animation(.easeInOut(duration: 0.2), value: selectedTab)"))
+    }
+
+    func testPreferencesUsesAccurateAlertsAndHistoryNaming() throws {
+        let windowSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "PreferencesWindowController.swift"]
+        )
+        let alertsSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "AlertsAndHistoryPreferencesView.swift"]
+        )
+
+        XCTAssertTrue(windowSource.contains("提醒与历史"))
+        XCTAssertTrue(windowSource.contains("Alerts & History"))
+        XCTAssertTrue(alertsSource.contains("struct AlertsAndHistoryPreferencesView"))
+        XCTAssertTrue(alertsSource.contains("高流量提醒"))
+        XCTAssertFalse(windowSource.contains("appPreferences.text(\"智能\", \"Intelligence\")"))
+        XCTAssertFalse(alertsSource.contains("appPreferences.text(\"智能检测\", \"Intelligence\")"))
+    }
+
+    func testInterfacePanelDefaultsToPrimaryAndDisclosesAdvancedDiagnostics() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
+        )
+
+        XCTAssertTrue(source.contains("@State private var showsAdvancedDiagnostics = false"))
+        XCTAssertTrue(source.contains("struct PrimaryInterfaceSection"))
+        XCTAssertTrue(source.contains("DisclosureGroup(isExpanded: $isExpanded)"))
+        XCTAssertTrue(source.contains("高级接口诊断"))
+        XCTAssertTrue(source.contains("showsPacketCounts: false"))
+        XCTAssertTrue(source.contains("showsPacketCounts: true"))
     }
 
     func testMainMenuIncludesStandardUtilityMenusAndServices() throws {

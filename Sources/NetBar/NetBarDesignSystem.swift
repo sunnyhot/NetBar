@@ -1,6 +1,12 @@
 import SwiftUI
 
 enum InterfacePresentation {
+    static func preferredPrimaryInterface(in interfaces: [InterfaceRate]) -> InterfaceRate? {
+        interfaces.first(where: \.isPrimary)
+            ?? interfaces.first(where: \.hasTraffic)
+            ?? interfaces.first
+    }
+
     static func iconName(for interfaceName: String) -> String {
         let name = interfaceName.lowercased()
         if name.hasPrefix("en") && !name.contains("bridge") {

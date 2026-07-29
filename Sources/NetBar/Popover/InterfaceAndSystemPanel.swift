@@ -5,52 +5,105 @@ struct InterfaceAndSystemPanel: View {
     let systemResources: SystemResourceSummary
     @ObservedObject var appPreferences: AppPreferences
     let refresh: () -> Void
+    @State private var showsAdvancedDiagnostics = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: LivingSignalLayout.verticalSectionSpacing) {
             if systemResources.totalMemory > 0 {
                 SystemResourceCard(summary: systemResources, appPreferences: appPreferences)
             }
-            InterfaceList(
+            PrimaryInterfaceSection(
                 interfaces: snapshot.interfaces,
                 appPreferences: appPreferences,
                 refresh: refresh
             )
+            AdvancedInterfaceDiagnostics(
+                interfaces: snapshot.interfaces,
+                appPreferences: appPreferences,
+                isExpanded: $showsAdvancedDiagnostics
+            )
         }
     }
 }
-// MARK: - Interface List
 
-private struct InterfaceList: View {
+// MARK: - Primary Interface
+
+private struct PrimaryInterfaceSection: View {
     let interfaces: [InterfaceRate]
     @ObservedObject var appPreferences: AppPreferences
     let refresh: () -> Void
 
-    private var activeInterfaces: [InterfaceRate] {
-        interfaces.filter(\.hasTraffic)
-    }
-
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
             NetBarSectionHeader(
-                title: appPreferences.text("接口明细", "Interfaces"),
-                subtitle: appPreferences.text("活动接口与累计包量", "Active interfaces and cumulative packets")
+                title: appPreferences.text("主网络接口", "Primary Interface"),
+                subtitle: appPreferences.text("当前默认网络路径", "Current default network path")
             )
 
-            if activeInterfaces.isEmpty {
+            if let primaryInterface = InterfacePresentation.preferredPrimaryInterface(in: interfaces) {
+                InterfaceRow(
+                    interface: primaryInterface,
+                    appPreferences: appPreferences,
+                    showsPacketCounts: false
+                )
+            } else {
                 EmptyInterfacesView(
-                    hasKnownInterfaces: !interfaces.isEmpty,
+                    hasKnownInterfaces: false,
                     appPreferences: appPreferences,
                     refresh: refresh
                 )
-            } else {
-                VStack(spacing: 6) {
-                    ForEach(activeInterfaces) { item in
-                        InterfaceRow(interface: item)
+            }
+        }
+    }
+}
+
+// MARK: - Advanced Interface Diagnostics
+
+private struct AdvancedInterfaceDiagnostics: View {
+    let interfaces: [InterfaceRate]
+    @ObservedObject var appPreferences: AppPreferences
+    @Binding var isExpanded: Bool
+
+    var body: some View {
+        DisclosureGroup(isExpanded: $isExpanded) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(appPreferences.text(
+                    "所有已识别接口、累计流量与收发包数",
+                    "All known interfaces, cumulative traffic, and packet counts"
+                ))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
+
+                if interfaces.isEmpty {
+                    Text(appPreferences.text("暂无接口数据", "No interface data"))
+                        .font(.system(size: 11))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, minHeight: 44)
+                } else {
+                    VStack(spacing: 6) {
+                        ForEach(interfaces) { item in
+                            InterfaceRow(
+                                interface: item,
+                                appPreferences: appPreferences,
+                                showsPacketCounts: true
+                            )
+                        }
                     }
                 }
             }
+            .padding(.top, 8)
+        } label: {
+            Label(
+                appPreferences.text("高级接口诊断", "Advanced Interface Diagnostics"),
+                systemImage: "network"
+            )
+            .font(.system(size: 11, weight: .semibold))
         }
+        .livingSignalRow(tone: .neutral, padding: 10)
+        .accessibilityHint(appPreferences.text(
+            "展开后显示所有网络接口和包计数",
+            "Expand to show all network interfaces and packet counts"
+        ))
     }
 }
 
@@ -93,6 +146,8 @@ private struct EmptyInterfacesView: View {
 
 private struct InterfaceRow: View {
     let interface: InterfaceRate
+    @ObservedObject var appPreferences: AppPreferences
+    let showsPacketCounts: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -107,7 +162,7 @@ private struct InterfaceRow: View {
                     .lineLimit(1)
 
                 if interface.isPrimary {
-                    NetBarBadge(text: "主接口", tone: .download)
+                    NetBarBadge(text: appPreferences.text("主接口", "Primary"), tone: .download)
                 }
 
                 Spacer()
@@ -130,9 +185,9 @@ private struct InterfaceRow: View {
                 )
             }
 
-            HStack(spacing: 0) {
+            HStack(spacing: 8) {
                 VStack(alignment: .leading, spacing: 1) {
-                    Text("接收")
+                    Text(appPreferences.text("累计接收", "Received"))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.tertiary)
                     Text(ByteFormat.bytes(interface.totalReceivedBytes))
@@ -141,34 +196,27 @@ private struct InterfaceRow: View {
 
                 Spacer()
 
-                VStack(alignment: .center, spacing: 1) {
-                    Text("入包")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.quaternary)
-                    Text(ByteFormat.packets(interface.receivedPackets))
-                        .font(.system(size: 10, weight: .medium, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer()
-
                 VStack(alignment: .trailing, spacing: 1) {
-                    Text("发送")
+                    Text(appPreferences.text("累计发送", "Sent"))
                         .font(.system(size: 9, weight: .medium))
                         .foregroundStyle(.tertiary)
                     Text(ByteFormat.bytes(interface.totalSentBytes))
                         .font(.system(size: 11, weight: .semibold, design: .rounded))
                 }
 
-                Spacer()
+                if showsPacketCounts {
+                    Spacer()
 
-                VStack(alignment: .trailing, spacing: 1) {
-                    Text("出包")
-                        .font(.system(size: 9, weight: .medium))
-                        .foregroundStyle(.quaternary)
-                    Text(ByteFormat.packets(interface.sentPackets))
+                    VStack(alignment: .trailing, spacing: 1) {
+                        Text(appPreferences.text("收 / 发包", "Packets In / Out"))
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.quaternary)
+                        Text(
+                            "\(ByteFormat.packets(interface.receivedPackets)) / \(ByteFormat.packets(interface.sentPackets))"
+                        )
                         .font(.system(size: 10, weight: .medium, design: .monospaced))
                         .foregroundStyle(.tertiary)
+                    }
                 }
             }
         }

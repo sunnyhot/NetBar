@@ -120,8 +120,8 @@ private struct PreferencesView: View {
                 customCharacterStore: customCharacterStore,
                 historyStore: historyStore
             )
-        case .intelligence:
-            IntelligencePreferencesView(
+        case .alertsAndHistory:
+            AlertsAndHistoryPreferencesView(
                 appPreferences: appPreferences,
                 notificationController: notificationController,
                 clearHistory: clearNetworkHistory
@@ -139,7 +139,7 @@ private struct PreferencesView: View {
 private enum PreferencesTab: Int, CaseIterable, Identifiable {
     case general
     case menuBar
-    case intelligence
+    case alertsAndHistory
     case about
 
     var id: Int { rawValue }
@@ -150,8 +150,8 @@ private enum PreferencesTab: Int, CaseIterable, Identifiable {
             return "gearshape"
         case .menuBar:
             return "menubar.rectangle"
-        case .intelligence:
-            return "sparkles"
+        case .alertsAndHistory:
+            return "bell.badge"
         case .about:
             return "info.circle"
         }
@@ -164,8 +164,8 @@ private enum PreferencesTab: Int, CaseIterable, Identifiable {
             return appPreferences.text("通用", "General")
         case .menuBar:
             return appPreferences.text("菜单栏", "Menu Bar")
-        case .intelligence:
-            return appPreferences.text("智能", "Intelligence")
+        case .alertsAndHistory:
+            return appPreferences.text("提醒与历史", "Alerts & History")
         case .about:
             return appPreferences.text("关于", "About")
         }

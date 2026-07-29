@@ -1,6 +1,6 @@
 import SwiftUI
 
-struct IntelligencePreferencesView: View {
+struct AlertsAndHistoryPreferencesView: View {
     @ObservedObject var appPreferences: AppPreferences
     @ObservedObject var notificationController: NetworkNotificationController
     let clearHistory: () -> Void
@@ -8,8 +8,8 @@ struct IntelligencePreferencesView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                onboardingSection
-                anomalySection
+                alertOnboardingSection
+                highTrafficAlertSection
                 notificationSection
                 historySection
             }
@@ -20,23 +20,23 @@ struct IntelligencePreferencesView: View {
         }
     }
 
-    private var onboardingSection: some View {
+    private var alertOnboardingSection: some View {
         Group {
             if !appPreferences.networkIntelligenceSettings.hasSeenNotificationOnboarding {
                 PreferenceSection(
-                    title: appPreferences.text("异常通知", "Anomaly Notifications"),
+                    title: appPreferences.text("高流量提醒", "High Traffic Alerts"),
                     systemImage: "bell.badge"
                 ) {
                     Text(appPreferences.text(
-                        "NetBar 可以在流量持续超过阈值时提醒你。开启后会请求 macOS 通知权限。",
-                        "NetBar can notify you when traffic stays above your threshold. macOS notification permission is requested only after you enable it."
+                        "当网络流量持续超过设定阈值时，NetBar 可以发送提醒。开启后会请求 macOS 通知权限。",
+                        "NetBar can alert you when network traffic stays above your threshold. macOS notification permission is requested only after you enable it."
                     ))
                     .font(.system(size: 12))
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
 
                     HStack {
-                        Button(appPreferences.text("开启异常通知", "Enable Notifications")) {
+                        Button(appPreferences.text("开启提醒", "Enable Alerts")) {
                             updateSettings {
                                 $0.hasSeenNotificationOnboarding = true
                                 $0.isSystemNotificationEnabled = true
@@ -55,13 +55,13 @@ struct IntelligencePreferencesView: View {
         }
     }
 
-    private var anomalySection: some View {
+    private var highTrafficAlertSection: some View {
         PreferenceSection(
-            title: appPreferences.text("智能检测", "Intelligence"),
-            systemImage: "sparkles"
+            title: appPreferences.text("高流量提醒", "High Traffic Alerts"),
+            systemImage: "speedometer"
         ) {
             Toggle(
-                appPreferences.text("异常检测", "Anomaly detection"),
+                appPreferences.text("检测持续高流量", "Detect sustained high traffic"),
                 isOn: settingsBinding(\.isAnomalyDetectionEnabled)
             )
 
