@@ -40,13 +40,6 @@ struct StatusBarRenderSignature: Equatable {
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~250ms buckets
     let catHeadSwing: Bool
     let customCharacterRevision: Int
-    let googlyEyesState: GooglyEyesRenderState?
-}
-
-struct GooglyEyesRenderState: Equatable {
-    let mouseLocation: CGPoint
-    let statusItemFrame: CGRect
-    let isBlinking: Bool
 }
 
 enum StatusBarPulseRenderPolicy {
@@ -205,7 +198,6 @@ enum StatusBarDisplayRenderer {
         appearanceName: String,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        googlyEyesState: GooglyEyesRenderState? = nil,
         renderTime: TimeInterval = Date().timeIntervalSince1970,
         reduceMotion: Bool = NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
     ) -> StatusBarRenderSignature {
@@ -249,8 +241,7 @@ enum StatusBarDisplayRenderer {
             catColorMode: settings.catColorMode,
             catColorTimeBucket: Self.colorTimeBucket(forMode: settings.catColorMode),
             catHeadSwing: settings.catHeadSwing,
-            customCharacterRevision: customCharacterStore?.revision ?? 0,
-            googlyEyesState: googlyEyesState
+            customCharacterRevision: customCharacterStore?.revision ?? 0
         )
     }
 
@@ -268,7 +259,6 @@ enum StatusBarDisplayRenderer {
         settings: StatusBarSettings,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        googlyEyesState: GooglyEyesRenderState? = nil,
         renderTime: TimeInterval = Date().timeIntervalSince1970
     ) -> NSImage {
         image(
@@ -277,7 +267,6 @@ enum StatusBarDisplayRenderer {
             scale: NSScreen.main?.backingScaleFactor ?? 2,
             customCharacterStore: customCharacterStore,
             catFrameIndex: catFrameIndex,
-            googlyEyesState: googlyEyesState,
             renderTime: renderTime
         )
     }
@@ -288,7 +277,6 @@ enum StatusBarDisplayRenderer {
         scale: CGFloat,
         customCharacterStore: CustomCharacterStore? = nil,
         catFrameIndex: Int? = nil,
-        googlyEyesState: GooglyEyesRenderState? = nil,
         renderTime: TimeInterval = Date().timeIntervalSince1970
     ) -> NSImage {
         let layout = layout(
@@ -357,8 +345,6 @@ enum StatusBarDisplayRenderer {
             )
             if character.isCustom {
                 catHasCustomColor = true
-            } else if character.isGooglyEyes {
-                catHasCustomColor = true
             } else if character.isTemplate {
                 // Template character with non-solid mode, or solid mode with non-white color
                 catHasCustomColor = colorMode != .solid || settings.catColor != PersistedColor.white
@@ -408,41 +394,49 @@ enum StatusBarDisplayRenderer {
             }
             let drawRect = NSRect(x: catX, y: catY, width: catSize.width, height: catSize.height)
 
-            if character.isGooglyEyes {
-                drawGooglyEyes(
-                    in: drawRect,
-                    state: googlyEyesState,
-                    accentColor: googlyEyesAccentColor(colorMode: colorMode, settings: settings, frameIndex: frameIdx),
-                    colorMode: colorMode,
-                    facing: settings.catFacing
-                )
-            } else {
-                let catImage = characterImage(
-                    for: character,
-                    frameIndex: frameIdx,
-                    customCharacterStore: customCharacterStore
-                )
+            let catImage = characterImage(
+                for: character,
+                frameIndex: frameIdx,
+                customCharacterStore: customCharacterStore
+            )
 
-                if let catImg = catImage {
-                    let now = renderTime
+            if let catImg = catImage {
+                let now = renderTime
 
-                    let shouldFlip = shouldMirrorCharacter(settings: settings, frameIndex: frameIdx)
+                let shouldFlip = shouldMirrorCharacter(settings: settings, frameIndex: frameIdx)
 
-                    if shouldFlip {
-                        // Mirror the drawing context for character facing and optional head swing.
-                        if let currentContext = NSGraphicsContext.current {
-                            let transform = currentContext.cgContext
-                            transform.saveGState()
-                            transform.translateBy(x: drawRect.midX * 2, y: 0)
-                            transform.scaleBy(x: -1, y: 1)
-                        }
+                if shouldFlip {
+                    // Mirror the drawing context for character facing and optional head swing.
+                    if let currentContext = NSGraphicsContext.current {
+                        let transform = currentContext.cgContext
+                        transform.saveGState()
+                        transform.translateBy(x: drawRect.midX * 2, y: 0)
+                        transform.scaleBy(x: -1, y: 1)
                     }
+                }
 
-                    if character.supportsColorControls {
-                        // Color-capable characters use the same tint pipeline, whether their
-                        // source frames are template silhouettes or full-color sprites.
-                        if colorMode == .solid {
-                            // Solid color: use single-color tint
+                if character.supportsColorControls {
+                    // Color-capable characters use the same tint pipeline, whether their
+                    // source frames are template silhouettes or full-color sprites.
+                    if colorMode == .solid {
+                        // Solid color: use single-color tint
+                        let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                        if let tinted = tintImage(catImg, color: tintColor) {
+                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                        } else {
+                            catImg.isTemplate = true
+                            catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                        }
+                    } else {
+                        // Fancy mode: use gradient/multi-color tinting
+                        let colors = colorMode.gradientColors(at: now, frameIndex: frameIdx, baseColor: settings.catColor, size: catImg.size)
+                        let tinted = character.isTemplate
+                            ? tintImageGradient(catImg, colors: colors)
+                            : tintImageGradientPreservingDetails(catImg, colors: colors)
+                        if let tinted {
+                            tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
+                        } else {
+                            // Fallback to single-color tint
                             let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
                             if let tinted = tintImage(catImg, color: tintColor) {
                                 tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
@@ -450,45 +444,26 @@ enum StatusBarDisplayRenderer {
                                 catImg.isTemplate = true
                                 catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
                             }
-                        } else {
-                            // Fancy mode: use gradient/multi-color tinting
-                            let colors = colorMode.gradientColors(at: now, frameIndex: frameIdx, baseColor: settings.catColor, size: catImg.size)
-                            let tinted = character.isTemplate
-                                ? tintImageGradient(catImg, colors: colors)
-                                : tintImageGradientPreservingDetails(catImg, colors: colors)
-                            if let tinted {
-                                tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
-                            } else {
-                                // Fallback to single-color tint
-                                let tintColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
-                                if let tinted = tintImage(catImg, color: tintColor) {
-                                    tinted.draw(in: drawRect, from: NSRect(origin: .zero, size: tinted.size), operation: .sourceOver, fraction: 1.0)
-                                } else {
-                                    catImg.isTemplate = true
-                                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
-                                }
-                            }
-                        }
-                    } else {
-                        // Original-only characters keep authored colors.
-                        catImg.isTemplate = false
-                        catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
-                    }
-
-                    if shouldFlip {
-                        if let currentContext = NSGraphicsContext.current {
-                            currentContext.cgContext.restoreGState()
                         }
                     }
+                } else {
+                    // Original-only characters keep authored colors.
+                    catImg.isTemplate = false
+                    catImg.draw(in: drawRect, from: NSRect(origin: .zero, size: catImg.size), operation: .sourceOver, fraction: 1.0)
+                }
 
-                    // Draw sparkle decorations for modes that have them
-                    if !character.isCustom && colorMode.hasSparkles {
-                        if let currentContext = NSGraphicsContext.current {
-                            let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
-                            drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
-                        }
+                if shouldFlip {
+                    if let currentContext = NSGraphicsContext.current {
+                        currentContext.cgContext.restoreGState()
                     }
+                }
 
+                // Draw sparkle decorations for modes that have them
+                if !character.isCustom && colorMode.hasSparkles {
+                    if let currentContext = NSGraphicsContext.current {
+                        let sparkleColor = colorMode.color(at: now, frameIndex: frameIdx, baseColor: settings.catColor)
+                        drawSparkles(in: currentContext, rect: drawRect, time: now, color: sparkleColor)
+                    }
                 }
             }
         }
@@ -506,162 +481,6 @@ enum StatusBarDisplayRenderer {
         image.addRepresentation(representation)
         image.isTemplate = useTemplate
         return image
-    }
-
-    private static func drawGooglyEyes(
-        in rect: NSRect,
-        state: GooglyEyesRenderState?,
-        accentColor: NSColor,
-        colorMode: CatColorMode,
-        facing: StatusBarCharacterFacing
-    ) {
-        let scale = max(min(rect.width / 36, rect.height / 18), 0.1)
-        let eyeDiameter: CGFloat = 13.8 * scale
-        let pupilDiameter: CGFloat = 5.2 * scale
-        let maximumPupilTravel: CGFloat = 3.4 * scale
-        let eyeY = rect.midY - eyeDiameter / 2
-        let centers = [
-            CGPoint(x: rect.minX + rect.width * 0.32, y: rect.midY),
-            CGPoint(x: rect.minX + rect.width * 0.68, y: rect.midY)
-        ]
-
-        for center in centers {
-            let eyeRect = NSRect(
-                x: center.x - eyeDiameter / 2,
-                y: eyeY,
-                width: eyeDiameter,
-                height: eyeDiameter
-            )
-            let eyePath = NSBezierPath(ovalIn: eyeRect)
-            NSColor.white.withAlphaComponent(0.96).setFill()
-            eyePath.fill()
-            accentColor.withAlphaComponent(0.38).setStroke()
-            eyePath.lineWidth = 0.8 * scale
-            eyePath.stroke()
-
-            if state?.isBlinking == true {
-                let blinkPath = NSBezierPath()
-                blinkPath.move(to: CGPoint(x: eyeRect.minX + 1.8 * scale, y: center.y))
-                blinkPath.curve(
-                    to: CGPoint(x: eyeRect.maxX - 1.8 * scale, y: center.y),
-                    controlPoint1: CGPoint(x: center.x - 2.2 * scale, y: center.y - 1.3 * scale),
-                    controlPoint2: CGPoint(x: center.x + 2.2 * scale, y: center.y - 1.3 * scale)
-                )
-                accentColor.withAlphaComponent(0.82).setStroke()
-                blinkPath.lineWidth = 1.6 * scale
-                blinkPath.lineCapStyle = .round
-                blinkPath.stroke()
-                continue
-            }
-
-            let offset: CGSize
-            if let state {
-                let screenCenter = GooglyEyesTracker.screenCenter(
-                    forLocalCenter: center,
-                    statusItemFrame: state.statusItemFrame
-                )
-                offset = GooglyEyesTracker.pupilOffset(
-                    from: screenCenter,
-                    toward: state.mouseLocation,
-                    maximumDistance: maximumPupilTravel
-                )
-            } else {
-                offset = .zero
-            }
-
-            let pupilRect = NSRect(
-                x: center.x + offset.width - pupilDiameter / 2,
-                y: center.y + offset.height - pupilDiameter / 2,
-                width: pupilDiameter,
-                height: pupilDiameter
-            )
-            let pupilCenter = CGPoint(x: pupilRect.midX, y: pupilRect.midY)
-            if colorMode == .heatVision {
-                drawHeatVisionBeam(from: pupilCenter, gazeOffset: offset, in: rect, facing: facing, scale: scale)
-            }
-
-            accentColor.withAlphaComponent(0.88).setFill()
-            NSBezierPath(ovalIn: pupilRect).fill()
-
-            let catchlightRect = NSRect(
-                x: pupilRect.minX + 1.2 * scale,
-                y: pupilRect.maxY - 2.2 * scale,
-                width: 1.2 * scale,
-                height: 1.2 * scale
-            )
-            NSColor.white.withAlphaComponent(0.82).setFill()
-            NSBezierPath(ovalIn: catchlightRect).fill()
-        }
-    }
-
-    static func heatVisionBeamEnd(
-        from start: CGPoint,
-        gazeOffset: CGSize = .zero,
-        in rect: NSRect,
-        facing: StatusBarCharacterFacing,
-        scale: CGFloat
-    ) -> CGPoint {
-        let travel = rect.width * 0.9 + 7 * scale
-        let gazeDistance = hypot(gazeOffset.width, gazeOffset.height)
-        if gazeDistance > 0.01 {
-            return CGPoint(
-                x: start.x + gazeOffset.width / gazeDistance * travel,
-                y: start.y + gazeOffset.height / gazeDistance * travel
-            )
-        }
-
-        let verticalDrift = (start.y - rect.midY) * 0.08
-        switch facing {
-        case .right:
-            return CGPoint(x: start.x + travel, y: start.y + verticalDrift)
-        case .left:
-            return CGPoint(x: start.x - travel, y: start.y + verticalDrift)
-        }
-    }
-
-    private static func drawHeatVisionBeam(
-        from start: CGPoint,
-        gazeOffset: CGSize,
-        in rect: NSRect,
-        facing: StatusBarCharacterFacing,
-        scale: CGFloat
-    ) {
-        let end = heatVisionBeamEnd(from: start, gazeOffset: gazeOffset, in: rect, facing: facing, scale: scale)
-
-        func strokeBeam(color: NSColor, lineWidth: CGFloat) {
-            let path = NSBezierPath()
-            path.move(to: start)
-            path.line(to: end)
-            path.lineCapStyle = .round
-            path.lineWidth = lineWidth
-            color.setStroke()
-            path.stroke()
-        }
-
-        if let context = NSGraphicsContext.current {
-            context.cgContext.saveGState()
-            context.cgContext.setShadow(
-                offset: .zero,
-                blur: 3.6 * scale,
-                color: NSColor.systemRed.withAlphaComponent(0.55).cgColor
-            )
-            strokeBeam(color: NSColor.systemRed.withAlphaComponent(0.32), lineWidth: 4.8 * scale)
-            context.cgContext.restoreGState()
-        }
-
-        strokeBeam(color: NSColor.systemRed.withAlphaComponent(0.75), lineWidth: 2.4 * scale)
-        strokeBeam(color: NSColor(calibratedRed: 1, green: 0.9, blue: 0.54, alpha: 0.9), lineWidth: 0.85 * scale)
-    }
-
-    private static func googlyEyesAccentColor(
-        colorMode: CatColorMode,
-        settings: StatusBarSettings,
-        frameIndex: Int
-    ) -> NSColor {
-        if colorMode == .solid, settings.catColor == PersistedColor.white {
-            return NSColor.black
-        }
-        return colorMode.color(at: Date().timeIntervalSince1970, frameIndex: frameIndex, baseColor: settings.catColor)
     }
 
     private static func characterAsset(

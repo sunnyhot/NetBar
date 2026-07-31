@@ -513,29 +513,9 @@ final class SystemResourceTests: XCTestCase {
         await waitForSnapshotSamples(3, monitor: monitor)
         let events = monitor.refreshIntelligence(settings: .default)
 
-        XCTAssertEqual(events.map(\.kind), [.highTraffic])
-        XCTAssertEqual(monitor.intelligenceSummary.latestEvent?.kind, .highTraffic)
-    }
-
-    func testNetworkIntelligenceCoordinatorForwardsEventsToNotification() {
-        var notified: [NetworkAnomalyEvent] = []
-        var notificationSettings: [NetworkIntelligenceSettings] = []
-        let coordinator = NetworkIntelligenceCoordinator(
-            notify: { event, settings in
-                notified.append(event)
-                notificationSettings.append(settings)
-            }
-        )
-        let event = NetworkAnomalyEvent(
-            kind: .highTraffic,
-            title: "High",
-            message: "Traffic",
-            timestamp: Date(timeIntervalSince1970: 1_717_200_000)
-        )
-        coordinator.handle(events: [event], settings: .default)
-
-        XCTAssertEqual(notified, [event])
-        XCTAssertEqual(notificationSettings, [.default])
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.title, "高流量")
+        XCTAssertEqual(monitor.intelligenceSummary.latestEvent?.title, "高流量")
     }
 
     func testNetworkMonitorRefreshesSystemResources() async {

@@ -53,8 +53,7 @@ struct NetworkAnomalyDetector {
         )
 
         return NetworkAnomalyEvent(
-            kind: .highTraffic,
-            title: NetworkAnomalyKind.highTraffic.title(language: language),
+            title: language.text("高流量", "High traffic"),
             message: message,
             timestamp: now
         )

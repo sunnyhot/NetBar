@@ -178,8 +178,4 @@ extension View {
     func netBarCard(cornerRadius: CGFloat = 12, padding: CGFloat = 0, isProminent: Bool = false) -> some View {
         modifier(NetBarCardModifier(cornerRadius: cornerRadius, padding: padding, isProminent: isProminent))
     }
-
-    func netBarPanelBackground() -> some View {
-        livingSignalPanelBackground()
-    }
 }

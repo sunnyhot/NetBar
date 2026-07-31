@@ -4,41 +4,21 @@ import ServiceManagement
 
 enum ApplicationSortMode: String, CaseIterable, Identifiable {
     case activity
-    case download
-    case upload
-    case total
     case memory
     case cpu
-    case name
 
     var id: String { rawValue }
 
     static let displayModes: [ApplicationSortMode] = [.activity, .memory, .cpu]
 
-    var displayModeFallback: ApplicationSortMode {
-        Self.displayModes.contains(self) ? self : .activity
-    }
-
-    var title: String {
-        title(language: .simplifiedChinese)
-    }
-
     func title(language: AppLanguage) -> String {
         switch self {
         case .activity:
             return language.text("实时流量", "Live traffic")
-        case .download:
-            return language.text("下载速度", "Download")
-        case .upload:
-            return language.text("上传速度", "Upload")
-        case .total:
-            return language.text("累计流量", "Total traffic")
         case .memory:
             return language.text("内存占用", "Memory")
         case .cpu:
             return language.text("CPU 占用", "CPU")
-        case .name:
-            return language.text("应用名称", "App name")
         }
     }
 }
@@ -49,10 +29,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
     case english
 
     var id: String { rawValue }
-
-    var title: String {
-        title(language: .simplifiedChinese)
-    }
 
     func title(language: AppLanguage) -> String {
         switch self {
@@ -86,10 +62,6 @@ enum PopoverPosition: String, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    var title: String {
-        title(language: .simplifiedChinese)
-    }
-
     func title(language: AppLanguage) -> String {
         switch self {
         case .left:
@@ -106,10 +78,6 @@ enum AppAppearanceMode: String, CaseIterable, Identifiable {
     case dark
 
     var id: String { rawValue }
-
-    var title: String {
-        title(language: .simplifiedChinese)
-    }
 
     func title(language: AppLanguage) -> String {
         switch self {
@@ -184,10 +152,6 @@ enum DockIconVisibility: String, CaseIterable, Identifiable {
         case .visible:    return .regular
         case .menuBarOnly: return .accessory
         }
-    }
-
-    var title: String {
-        title(language: .simplifiedChinese)
     }
 
     func title(language: AppLanguage) -> String {
@@ -281,7 +245,7 @@ final class AppPreferences: ObservableObject {
         self.loginItemManager = loginItemManager
         showsDockIcon = defaults.object(forKey: Keys.showsDockIcon) as? Bool ?? Defaults.showsDockIcon
         hidesSystemProcesses = defaults.object(forKey: Keys.hidesSystemProcesses) as? Bool ?? Defaults.hidesSystemProcesses
-        applicationSort = (ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort).displayModeFallback
+        applicationSort = ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? Defaults.language
         appearanceMode = AppAppearanceMode(rawValue: defaults.string(forKey: Keys.appearanceMode) ?? "") ?? Defaults.appearanceMode
         popoverPosition = PopoverPosition(rawValue: defaults.string(forKey: Keys.popoverPosition) ?? "") ?? Defaults.popoverPosition
@@ -330,10 +294,6 @@ final class AppPreferences: ObservableObject {
 
     func text(_ simplifiedChinese: String, _ english: String) -> String {
         resolvedLanguage.text(simplifiedChinese, english)
-    }
-
-    func refreshLoginItemStatus() {
-        launchesAtLogin = loginItemManager.refreshStatus()
     }
 
     func setLaunchesAtLogin(_ isEnabled: Bool) async {

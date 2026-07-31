@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+## v0.42.0 (2026-07-31)
+
+### Cleanup — 精简无用功能与接线弹出位置
+
+- **修复**「弹出位置」偏好:此前该设置在偏好设置中可选但完全不起作用,现真正控制详情窗口在菜单栏图标的左侧或右侧弹出,贴边时自动翻转到另一侧
+- **精简角色颜色模式**:由 22 种收敛为 5 种(纯色 / 彩虹 / 霓虹 / 火焰 / 极光);已选用被移除模式的用户会平滑回退到纯色
+- **移除「追踪眼睛」(Googly Eyes)角色**及其鼠标追踪、眨眼与热视线渲染等约 250 行输入监控代码
+- **精简应用排序模式**:从 7 种收敛为 UI 实际暴露的 3 种(实时流量 / 内存占用 / CPU 占用),移除不可达的下载 / 上传 / 累计 / 名称排序
+- **移除一次性 nettop 读取器**的死实例路径,保留并迁移其 CSV 解析为 `NettopLineParser`
+- **移除 `NetworkIntelligenceCoordinator` 透传层和单 case 的 `NetworkAnomalyKind` 枚举**,高流量事件直接由 `StatusBarController` 转发到通知控制器
+- 删除多处无引用的死代码:`refreshLoginItemStatus`、`CustomCharacterImageProcessor.clearCache`、`netBarPanelBackground`、`RunCatCharacter.resourceDir` 及若干无参 `title` 访问器
+- 去重偏好设置中重复出现的角色颜色控件块
+- 净删减约 1400 行代码,测试数 252 → 237
+
 ## v0.41.2 (2026-07-29)
 
 ### Cleanup — 收敛提醒命名与接口详情

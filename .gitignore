@@ -4,5 +4,6 @@ build/
 dist/
 .worktrees/
 .superpowers/
+.zcode/
 Resources/AppIcon.iconset/
 Resources/AppIcon.tiff

@@ -102,35 +102,19 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     }
 }
 
-enum NetworkAnomalyKind: String, Codable, CaseIterable, Identifiable {
-    case highTraffic
-
-    var id: String { rawValue }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .highTraffic:
-            return language.text("高流量", "High traffic")
-        }
-    }
-}
-
 struct NetworkAnomalyEvent: Codable, Equatable, Identifiable {
     let id: UUID
-    let kind: NetworkAnomalyKind
     let title: String
     let message: String
     let timestamp: Date
 
     init(
         id: UUID = UUID(),
-        kind: NetworkAnomalyKind,
         title: String,
         message: String,
         timestamp: Date
     ) {
         self.id = id
-        self.kind = kind
         self.title = title
         self.message = message
         self.timestamp = timestamp

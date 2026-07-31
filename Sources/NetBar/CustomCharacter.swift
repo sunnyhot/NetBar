@@ -194,15 +194,6 @@ struct CharacterAsset: Equatable, Identifiable {
         }
     }
 
-    var isGooglyEyes: Bool {
-        switch source {
-        case .builtIn(let character):
-            return character.isGooglyEyes
-        case .custom:
-            return false
-        }
-    }
-
     var supportsColorControls: Bool {
         switch source {
         case .builtIn(let character):

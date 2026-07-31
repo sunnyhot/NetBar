@@ -21,8 +21,6 @@ struct RunCatCharacter: Equatable, Identifiable {
         case special = "特别"       // Special color runners
     }
 
-    var resourceDir: String { id }
-    var isGooglyEyes: Bool { id == Self.googlyEyesID }
     var supportsColorControls: Bool { !Self.originalColorOnlyIDs.contains(id) }
 
     var displayName: String {
@@ -102,8 +100,6 @@ struct RunCatCharacter: Equatable, Identifiable {
                         frameCount: 5, frameWidth: 22, isTemplate: false, category: .seasonal),
 
         // Special color runners
-        RunCatCharacter(id: googlyEyesID, nameZh: "追踪眼睛", nameEn: "Googly Eyes", nameJa: "Googly Eyes",
-                        frameCount: 2, frameWidth: 36, isTemplate: false, category: .special),
         RunCatCharacter(id: "golden_cat", nameZh: "黄金猫", nameEn: "Golden Cat", nameJa: "黄金のネコ",
                         frameCount: 10, frameWidth: 45, isTemplate: false, category: .special),
         RunCatCharacter(id: "metal_cluster_cat", nameZh: "金属集群猫", nameEn: "Metal Cluster Cat", nameJa: "メタルクラスタ キャット",
@@ -122,7 +118,6 @@ struct RunCatCharacter: Equatable, Identifiable {
         allCharacters.first { $0.id == id } ?? allCharacters[0]
     }
 
-    private static let googlyEyesID = "googly_eyes"
     private static let originalColorOnlyIDs: Set<String> = [
         "shiba_inu",
         "bunny",
@@ -133,29 +128,6 @@ struct RunCatCharacter: Equatable, Identifiable {
         "sushi"
     ]
     static let defaultCat = allCharacters[0]
-}
-
-enum GooglyEyesTracker {
-    static func screenCenter(forLocalCenter localCenter: CGPoint, statusItemFrame: CGRect) -> CGPoint {
-        CGPoint(
-            x: statusItemFrame.minX + localCenter.x,
-            y: statusItemFrame.minY + localCenter.y
-        )
-    }
-
-    static func pupilOffset(
-        from eyeCenter: CGPoint,
-        toward mouseLocation: CGPoint,
-        maximumDistance: CGFloat
-    ) -> CGSize {
-        let deltaX = mouseLocation.x - eyeCenter.x
-        let deltaY = mouseLocation.y - eyeCenter.y
-        let distance = hypot(deltaX, deltaY)
-        guard distance > 0, maximumDistance > 0 else { return .zero }
-
-        let scale = min(distance, maximumDistance) / distance
-        return CGSize(width: deltaX * scale, height: deltaY * scale)
-    }
 }
 
 struct CharacterPreviewFrameTimeline: Equatable {
@@ -349,19 +321,11 @@ final class RunCatAnimation {
         timer = nil
     }
 
-    var isGooglyEyes: Bool {
-        character.id == "googly_eyes"
-    }
-
     private func targetInterval() -> TimeInterval {
         let baseInterval: TimeInterval
         switch activityLevel {
         case .idle:
-            if isGooglyEyes {
-                baseInterval = 1.0 / 5.0  // 5 FPS for GooglyEyes idle
-            } else {
-                baseInterval = 2.0  // 0.5 FPS
-            }
+            baseInterval = 2.0  // 0.5 FPS
         case .low:
             baseInterval = 1.0  // 1 FPS
         case .moderate:

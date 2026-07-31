@@ -293,7 +293,7 @@ struct CharacterPickerPreviewIcon: View {
                     .interpolation(.none)
                     .aspectRatio(contentMode: .fit)
             } else {
-                Image(systemName: character.isGooglyEyes ? "eye" : "questionmark.square.dashed")
+                Image(systemName: "questionmark.square.dashed")
                     .symbolRenderingMode(.hierarchical)
                     .resizable()
                     .aspectRatio(contentMode: .fit)

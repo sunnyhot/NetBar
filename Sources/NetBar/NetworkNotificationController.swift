@@ -128,24 +128,17 @@ final class NetworkNotificationController: ObservableObject {
         settings: NetworkIntelligenceSettings
     ) -> Bool {
         guard settings.isSystemNotificationEnabled else { return false }
-        guard settings.isEnabled(for: event.kind) else { return false }
+        guard settings.isAnomalyDetectionEnabled else { return false }
         guard authorizationStatus == .authorized else { return false }
 
         let currentDate = now()
-        if let lastDeliveredAt = lastDeliveredAtByKey[event.kind.rawValue],
+        let cooldownKey = "highTraffic"
+        if let lastDeliveredAt = lastDeliveredAtByKey[cooldownKey],
            currentDate.timeIntervalSince(lastDeliveredAt) < 10 * 60 {
             return false
         }
 
-        lastDeliveredAtByKey[event.kind.rawValue] = currentDate
+        lastDeliveredAtByKey[cooldownKey] = currentDate
         return true
-    }
-}
-
-extension NetworkIntelligenceSettings {
-    func isEnabled(for kind: NetworkAnomalyKind) -> Bool {
-        guard isAnomalyDetectionEnabled else { return false }
-
-        return kind == .highTraffic
     }
 }

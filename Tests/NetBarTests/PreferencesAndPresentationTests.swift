@@ -380,22 +380,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(catalogSource.contains("characterPickerFrameTick ?? 0"))
     }
 
-    func testAnimationSectionExposesSharedCharacterColorModeControl() throws {
-        let animationSource = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarAnimationPreferencesView.swift"]
-        )
-        let sharedControlsSource = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarSubcomponents.swift"]
-        )
-        let combinedSource = animationSource + "\n" + sharedControlsSource
-
-        XCTAssertTrue(animationSource.contains("CharacterColorModePicker"))
-        XCTAssertTrue(combinedSource.contains("settings.catColorMode"))
-        XCTAssertTrue(combinedSource.contains("CatColorMode.allCases"))
-        XCTAssertTrue(combinedSource.contains("\"颜色模式\""))
-        XCTAssertTrue(combinedSource.contains("\"Color Mode\""))
-    }
-
     func testMenuBarPresetAppliesTotalTrafficMode() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
 
@@ -531,6 +515,65 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains("LivingSignalLayout.preferredPopoverHeight"))
         XCTAssertTrue(source.contains("LivingSignalLayout.minimumPopoverWidth"))
         XCTAssertTrue(source.contains("LivingSignalLayout.minimumPopoverHeight"))
+    }
+
+    func testPopoverPositionLeadingPlacesWindowLeftOfAnchor() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1400, height: 900)
+        let anchorFrame = NSRect(x: 700, y: 880, width: 24, height: 24)
+        let windowWidth = LivingSignalLayout.preferredPopoverWidth
+
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(width: windowWidth, height: LivingSignalLayout.preferredPopoverHeight),
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: 10,
+            horizontalAlignment: .leading
+        )
+
+        // Leading alignment opens the window to the left of the anchor, touching its left edge.
+        XCTAssertEqual(frame.width, windowWidth)
+        XCTAssertLessThanOrEqual(frame.maxX, anchorFrame.minX)
+        XCTAssertGreaterThan(frame.maxX, visibleFrame.minX)
+    }
+
+    func testPopoverPositionTrailingPlacesWindowRightOfAnchor() {
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1400, height: 900)
+        let anchorFrame = NSRect(x: 700, y: 880, width: 24, height: 24)
+        let windowWidth = LivingSignalLayout.preferredPopoverWidth
+
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(width: windowWidth, height: LivingSignalLayout.preferredPopoverHeight),
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: 10,
+            horizontalAlignment: .trailing
+        )
+
+        XCTAssertEqual(frame.width, windowWidth)
+        XCTAssertGreaterThanOrEqual(frame.minX, anchorFrame.maxX)
+        XCTAssertLessThan(frame.minX, visibleFrame.maxX)
+    }
+
+    func testPopoverPositionLeadingFlipsToTrailingWhenNoRoomOnLeft() {
+        // Anchor hugs the left screen edge: no room to open on the leading (left) side.
+        let visibleFrame = NSRect(x: 0, y: 0, width: 1400, height: 900)
+        let anchorFrame = NSRect(x: 0, y: 880, width: 24, height: 24)
+        let windowWidth = LivingSignalLayout.preferredPopoverWidth
+
+        let frame = DetailsWindowLayout.frame(
+            forWindowSize: NSSize(width: windowWidth, height: LivingSignalLayout.preferredPopoverHeight),
+            visibleFrame: visibleFrame,
+            anchorFrame: anchorFrame,
+            padding: 10,
+            horizontalAlignment: .leading
+        )
+
+        // Flipped to the trailing (right) side of the anchor.
+        XCTAssertEqual(frame.width, windowWidth)
+        XCTAssertGreaterThanOrEqual(frame.minX, anchorFrame.maxX)
+        // Still fully on screen.
+        XCTAssertGreaterThanOrEqual(frame.minX, visibleFrame.minX + 10)
+        XCTAssertLessThanOrEqual(frame.maxX, visibleFrame.maxX - 10)
     }
 
     func testDetailsWindowDismissesForOutsideClickButKeepsInsideClick() {
@@ -887,7 +930,24 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testNetworkAnomalyEventLocalizedTitles() {
-        XCTAssertEqual(NetworkAnomalyKind.highTraffic.title(language: .simplifiedChinese), "高流量")
+        var detector = NetworkAnomalyDetector()
+        let settings = NetworkIntelligenceSettings.default
+        let start = Date(timeIntervalSince1970: 100)
+
+        _ = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start),
+            settings: settings,
+            now: start,
+            language: .simplifiedChinese
+        )
+        let events = detector.detect(
+            snapshot: sampleSnapshot(download: 11_000_000, upload: 500_000, timestamp: start.addingTimeInterval(11)),
+            settings: settings,
+            now: start.addingTimeInterval(11),
+            language: .simplifiedChinese
+        )
+
+        XCTAssertEqual(events.first?.title, "高流量")
     }
 
     func testNetworkAnomalyDetectorEmitsHighTrafficAfterSustainedThreshold() {
@@ -903,7 +963,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
             now: start.addingTimeInterval(11)
         )
 
-        XCTAssertEqual(events.map(\.kind), [.highTraffic])
+        XCTAssertEqual(events.count, 1)
+        XCTAssertEqual(events.first?.title, "高流量")
     }
 
     func testNetworkAnomalyDetectorClearsHighTrafficTimerWhenDisabled() {
@@ -930,7 +991,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             now: start.addingTimeInterval(21)
         )
 
-        XCTAssertEqual(restartedWindow.map(\.kind), [.highTraffic])
+        XCTAssertEqual(restartedWindow.count, 1)
     }
 
     func testNetworkAnomalyDetectorUsesRequestedLanguageForEventPresentation() {
@@ -971,7 +1032,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let controller = NetworkNotificationController(center: center, now: { Date(timeIntervalSince1970: 100) })
         let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
         let event = NetworkAnomalyEvent(
-            kind: .highTraffic,
             title: "High",
             message: "Traffic",
             timestamp: Date(timeIntervalSince1970: 100)
@@ -991,7 +1051,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let controller = NetworkNotificationController(center: center, now: { currentDate })
         let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
         let event = NetworkAnomalyEvent(
-            kind: .highTraffic,
             title: "High",
             message: "Traffic",
             timestamp: currentDate
@@ -1010,7 +1069,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let controller = NetworkNotificationController(center: center, now: { Date(timeIntervalSince1970: 100) })
         let settings = NetworkIntelligenceSettings.default.withSystemNotificationsEnabled()
         let event = NetworkAnomalyEvent(
-            kind: .highTraffic,
             title: "High",
             message: "Traffic",
             timestamp: Date(timeIntervalSince1970: 100)
@@ -1569,16 +1627,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertNil(InterfacePresentation.preferredPrimaryInterface(in: []))
     }
 
-    func testGooglyEyesCharacterIsAvailableAsSpecialMenuBarCharacter() {
-        let character = RunCatCharacter.byId("googly_eyes")
-
-        XCTAssertEqual(character.id, "googly_eyes")
-        XCTAssertEqual(character.category, .special)
-        XCTAssertTrue(character.isGooglyEyes)
-        XCTAssertTrue(character.supportsColorControls)
-        XCTAssertEqual(character.frameWidth, 36)
-    }
-
     func testOriginalColorBuiltInCharactersOptOutOfColorControls() {
         let unsupported = RunCatCharacter.allCharacters
             .filter { !$0.supportsColorControls }
@@ -1626,133 +1674,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             10,
             dominantColorSummary(in: image)
         )
-    }
-
-    func testFullColorChromaModePreservesDarkCharacterDetails() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsCat = true
-        settings.catCharacter = "chroma_slime"
-        settings.catColorMode = CatColorMode.crystalPrism.rawValue
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
-        settings.backgroundColor = .olive
-        settings.usesSystemTextColor = false
-        settings.textColor = .black
-
-        let image = StatusBarDisplayRenderer.image(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            scale: 2,
-            catFrameIndex: 0,
-            renderTime: 19.25
-        )
-
-        XCTAssertGreaterThan(
-            darkPixelCount(in: image, horizontalRegion: 0.0..<0.34),
-            8,
-            dominantColorSummary(in: image)
-        )
-    }
-
-    func testFullColorChromaModesPreserveDarkDetailsForAllDetailedBuiltInSprites() throws {
-        let detailedCharacters = try RunCatCharacter.allCharacters.filter { character in
-            guard !character.isTemplate, !character.isGooglyEyes, character.supportsColorControls else {
-                return false
-            }
-            let firstFrame = try runnerFrameURLs(for: character)[0]
-            guard let image = NSImage(contentsOf: firstFrame) else {
-                return false
-            }
-            return darkPixelCount(in: image, horizontalRegion: 0.0..<1.0) > 8
-        }
-
-        XCTAssertFalse(detailedCharacters.isEmpty)
-
-        for character in detailedCharacters {
-            let settings = StatusBarSettings(defaults: isolatedDefaults())
-            settings.showsCat = true
-            settings.catCharacter = character.id
-            settings.catColorMode = CatColorMode.crystalPrism.rawValue
-            settings.catPosition = .right
-            settings.usesAutomaticWidth = false
-            settings.itemWidth = 220
-            settings.showsBackground = true
-            settings.backgroundOpacity = 1
-            settings.backgroundColor = .olive
-            settings.usesSystemTextColor = false
-            settings.textColor = .black
-
-            let image = StatusBarDisplayRenderer.image(
-                snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-                settings: settings,
-                scale: 2,
-                catFrameIndex: 0,
-                renderTime: 19.25
-            )
-            let characterRegion = ((220.0 - 8.0 - Double(character.frameWidth)) / 220.0)..<((220.0 - 8.0) / 220.0)
-
-            XCTAssertGreaterThan(
-                darkPixelCount(in: image, horizontalRegion: characterRegion),
-                8,
-                "\(character.id): \(dominantColorSummary(in: image))"
-            )
-        }
-    }
-
-    func testRandomCycleModeTintsSilhouetteRunnerDuringCharacterRotation() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsCat = true
-        settings.catCharacter = "reindeer"
-        settings.catColorMode = CatColorMode.randomCycle.rawValue
-        settings.catPosition = .right
-        settings.usesAutomaticWidth = false
-        settings.itemWidth = 220
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
-        settings.backgroundColor = .olive
-        settings.usesSystemTextColor = false
-        settings.textColor = .black
-        settings.catRotationEnabled = true
-
-        let image = StatusBarDisplayRenderer.image(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            scale: 2,
-            catFrameIndex: 0,
-            renderTime: 19.25
-        )
-        let characterRegion = ((220.0 - 8.0 - 58.0) / 220.0)..<((220.0 - 8.0) / 220.0)
-
-        XCTAssertGreaterThan(
-            saturatedPixelCount(in: image, horizontalRegion: characterRegion),
-            20,
-            dominantColorSummary(in: image)
-        )
-    }
-
-    func testRockKingdomInspiredChromaModesUseRichMultiStopPalettes() {
-        let modes: [CatColorMode] = [.crystalPrism, .starlightShift, .phantomChroma]
-
-        for mode in modes {
-            let colors = mode.gradientColors(
-                at: 19.25,
-                frameIndex: 2,
-                baseColor: PersistedColor.white,
-                size: NSSize(width: 42, height: 18)
-            )
-            XCTAssertGreaterThanOrEqual(colors.count, 5, mode.rawValue)
-            XCTAssertEqual(colors.first?.position, 0, mode.rawValue)
-            XCTAssertEqual(colors.last?.position, 1, mode.rawValue)
-
-            let components = colors.compactMap { hsbComponents(for: $0.color) }
-            XCTAssertEqual(components.count, colors.count, mode.rawValue)
-            XCTAssertTrue(components.allSatisfy { $0.saturation >= 0.62 }, mode.rawValue)
-            XCTAssertGreaterThan(hueSpread(in: components), 0.32, mode.rawValue)
-        }
-
-        XCTAssertEqual(CatColorMode.crystalPrism.displayName(zh: true), "水晶炫彩")
-        XCTAssertEqual(CatColorMode.starlightShift.displayName(zh: false), "Starlight Shift")
-        XCTAssertTrue(CatColorMode.phantomChroma.hasSparkles)
     }
 
     func testDuplicateGooglyCatRunnerIsRemovedFromBuiltInCharacterList() {
@@ -1816,7 +1737,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
     func testOfficialRunnerResourcesContainRoleDefiningAnimationFrames() throws {
-        for character in RunCatCharacter.allCharacters where !character.isGooglyEyes {
+        for character in RunCatCharacter.allCharacters {
             let urls = try runnerFrameURLs(for: character)
             XCTAssertEqual(urls.count, character.frameCount, character.id)
 
@@ -1827,268 +1748,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             let bitmap = try XCTUnwrap(NSBitmapImageRep(data: firstFrame), character.id)
             XCTAssertLessThanOrEqual(bitmap.pixelsWide, character.frameWidth * 2, character.id)
         }
-    }
-
-    func testGooglyEyesCharacterUsesSelectedSolidColor() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsCat = true
-        settings.catCharacter = "googly_eyes"
-        settings.catColorMode = CatColorMode.solid.rawValue
-        settings.catColor = PersistedColor(red: 1, green: 0.05, blue: 0.02, alpha: 1)
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
-        settings.backgroundColor = .olive
-        settings.usesSystemTextColor = false
-        settings.textColor = .black
-
-        let image = StatusBarDisplayRenderer.image(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            scale: 2,
-            catFrameIndex: 0
-        )
-
-        XCTAssertGreaterThan(
-            redPixelCount(in: image, horizontalRegion: 0.0..<1.0),
-            10,
-            dominantColorSummary(in: image)
-        )
-    }
-
-    func testArcanePrismColorModeUsesRichHighSaturationPalette() {
-        let mode = CatColorMode.arcanePrism
-
-        XCTAssertEqual(mode.displayName(zh: true), "魔法炫彩")
-        XCTAssertEqual(mode.displayName(zh: false), "Arcane Prism")
-        XCTAssertTrue(mode.isDynamic)
-        XCTAssertTrue(mode.hasSparkles)
-
-        let colors = mode.gradientColors(
-            at: 12.5,
-            frameIndex: 3,
-            baseColor: PersistedColor.white,
-            size: NSSize(width: 28, height: 18)
-        )
-        XCTAssertGreaterThanOrEqual(colors.count, 6)
-        XCTAssertEqual(colors.first?.position, 0)
-        XCTAssertEqual(colors.last?.position, 1)
-
-        let components = colors.compactMap { hsbComponents(for: $0.color) }
-        XCTAssertEqual(components.count, colors.count)
-        XCTAssertTrue(components.allSatisfy { $0.saturation >= 0.72 })
-        XCTAssertTrue(components.allSatisfy { $0.brightness >= 0.78 })
-        XCTAssertGreaterThan(hueSpread(in: components), 0.45)
-
-        let shiftedColors = mode.gradientColors(
-            at: 13.1,
-            frameIndex: 3,
-            baseColor: PersistedColor.white,
-            size: NSSize(width: 28, height: 18)
-        )
-        guard
-            let firstHue = hsbComponents(for: colors[0].color)?.hue,
-            let shiftedFirstHue = hsbComponents(for: shiftedColors[0].color)?.hue
-        else {
-            return XCTFail("Expected arcane prism colors to expose HSB components")
-        }
-        let hueDelta = max(firstHue, shiftedFirstHue) - min(firstHue, shiftedFirstHue)
-        XCTAssertGreaterThan(hueDelta, 0.02)
-    }
-
-    func testHeatVisionColorModeAddsDirectionalEyeBeams() {
-        let mode = CatColorMode.heatVision
-
-        XCTAssertEqual(mode.displayName(zh: true), "热视线")
-        XCTAssertEqual(mode.displayName(zh: false), "Heat Vision")
-        XCTAssertTrue(mode.isDynamic)
-        XCTAssertTrue(mode.hasSparkles)
-
-        let colors = mode.gradientColors(
-            at: 8.25,
-            frameIndex: 1,
-            baseColor: PersistedColor.white,
-            size: NSSize(width: 36, height: 18)
-        )
-        XCTAssertGreaterThanOrEqual(colors.count, 4)
-
-        let components = colors.compactMap { hsbComponents(for: $0.color) }
-        XCTAssertEqual(components.count, colors.count)
-        XCTAssertTrue(components.allSatisfy { $0.saturation >= 0.78 })
-        XCTAssertTrue(components.allSatisfy { $0.brightness >= 0.82 })
-        XCTAssertTrue(components.allSatisfy { component in
-            component.hue <= 0.14 || component.hue >= 0.94
-        })
-
-        let rect = NSRect(x: 12, y: 4, width: 36, height: 18)
-        let start = CGPoint(x: rect.midX, y: rect.midY)
-        let rightEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
-            from: start,
-            in: rect,
-            facing: .right,
-            scale: 1
-        )
-        let leftEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
-            from: start,
-            in: rect,
-            facing: .left,
-            scale: 1
-        )
-
-        XCTAssertGreaterThan(rightEnd.x, rect.maxX)
-        XCTAssertLessThan(leftEnd.x, rect.minX)
-        XCTAssertEqual(rightEnd.y, leftEnd.y, accuracy: 0.01)
-    }
-
-    func testHeatVisionBeamEndFollowsGooglyEyeGazeOffset() {
-        let rect = NSRect(x: 12, y: 4, width: 36, height: 18)
-        let start = CGPoint(x: rect.midX, y: rect.midY)
-
-        let upperLeftEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
-            from: start,
-            gazeOffset: CGSize(width: -3, height: 2),
-            in: rect,
-            facing: .right,
-            scale: 1
-        )
-        let lowerRightEnd = StatusBarDisplayRenderer.heatVisionBeamEnd(
-            from: start,
-            gazeOffset: CGSize(width: 3, height: -2),
-            in: rect,
-            facing: .left,
-            scale: 1
-        )
-
-        XCTAssertLessThan(upperLeftEnd.x, rect.minX)
-        XCTAssertGreaterThan(upperLeftEnd.y, rect.midY)
-        XCTAssertGreaterThan(lowerRightEnd.x, rect.maxX)
-        XCTAssertLessThan(lowerRightEnd.y, rect.midY)
-    }
-
-    func testGooglyEyesPupilOffsetTracksMouseAndStaysInsideEye() {
-        let offset = GooglyEyesTracker.pupilOffset(
-            from: CGPoint(x: 10, y: 10),
-            toward: CGPoint(x: 100, y: 70),
-            maximumDistance: 4
-        )
-
-        XCTAssertGreaterThan(offset.width, 0)
-        XCTAssertGreaterThan(offset.height, 0)
-        XCTAssertLessThanOrEqual(hypot(offset.width, offset.height), 4.0001)
-    }
-
-    func testGooglyEyesPupilOffsetIsZeroWhenMouseIsAtEyeCenter() {
-        let offset = GooglyEyesTracker.pupilOffset(
-            from: CGPoint(x: 42, y: 24),
-            toward: CGPoint(x: 42, y: 24),
-            maximumDistance: 4
-        )
-
-        XCTAssertEqual(offset, .zero)
-    }
-
-    func testGooglyEyesScreenCenterSupportsSecondaryDisplayCoordinates() {
-        let center = GooglyEyesTracker.screenCenter(
-            forLocalCenter: CGPoint(x: 12, y: 9),
-            statusItemFrame: CGRect(x: -1440, y: 900, width: 80, height: 24)
-        )
-
-        XCTAssertEqual(center, CGPoint(x: -1428, y: 909))
-
-        let offset = GooglyEyesTracker.pupilOffset(
-            from: center,
-            toward: CGPoint(x: 1800, y: 909),
-            maximumDistance: 4
-        )
-        XCTAssertGreaterThan(offset.width, 0)
-        XCTAssertEqual(offset.height, 0, accuracy: 0.0001)
-        XCTAssertLessThanOrEqual(hypot(offset.width, offset.height), 4.0001)
-    }
-
-    func testGooglyEyesClickMonitorTriggersBlinkFromGlobalAndLocalClicks() {
-        var globalDownHandlers: [() -> Void] = []
-        var localDownHandlers: [() -> Void] = []
-        var globalUpHandlers: [() -> Void] = []
-        var localUpHandlers: [() -> Void] = []
-        let monitor = GooglyEyesClickMonitor(
-            addGlobalDownMonitor: { handler in
-                globalDownHandlers.append(handler)
-                return MonitorToken(name: "globalDown")
-            },
-            addLocalDownMonitor: { handler in
-                localDownHandlers.append(handler)
-                return MonitorToken(name: "localDown")
-            },
-            addGlobalUpMonitor: { handler in
-                globalUpHandlers.append(handler)
-                return MonitorToken(name: "globalUp")
-            },
-            addLocalUpMonitor: { handler in
-                localUpHandlers.append(handler)
-                return MonitorToken(name: "localUp")
-            },
-            removeMonitor: { _ in }
-        )
-
-        var downCount = 0
-        var upCount = 0
-        monitor.setActive(
-            true,
-            onMouseDown: { downCount += 1 },
-            onMouseUp: { upCount += 1 }
-        )
-
-        // 4 handlers installed: globalDown, localDown, globalUp, localUp
-        XCTAssertEqual(globalDownHandlers.count, 1)
-        XCTAssertEqual(localDownHandlers.count, 1)
-        XCTAssertEqual(globalUpHandlers.count, 1)
-        XCTAssertEqual(localUpHandlers.count, 1)
-
-        // Simulate mouseDown events
-        globalDownHandlers[0]()
-        localDownHandlers[0]()
-        XCTAssertEqual(downCount, 2)
-        XCTAssertEqual(upCount, 0)
-
-        // Simulate mouseUp events
-        globalUpHandlers[0]()
-        localUpHandlers[0]()
-        XCTAssertEqual(downCount, 2)
-        XCTAssertEqual(upCount, 2)
-    }
-
-    func testGooglyEyesClickMonitorDoesNotDuplicateMonitorsAndRemovesThemWhenInactive() {
-        var installCount = 0
-        var removedTokens: [String] = []
-        let monitor = GooglyEyesClickMonitor(
-            addGlobalDownMonitor: { _ in
-                installCount += 1
-                return MonitorToken(name: "globalDown")
-            },
-            addLocalDownMonitor: { _ in
-                installCount += 1
-                return MonitorToken(name: "localDown")
-            },
-            addGlobalUpMonitor: { _ in
-                installCount += 1
-                return MonitorToken(name: "globalUp")
-            },
-            addLocalUpMonitor: { _ in
-                installCount += 1
-                return MonitorToken(name: "localUp")
-            },
-            removeMonitor: { token in
-                removedTokens.append((token as? MonitorToken)?.name ?? "unknown")
-            }
-        )
-
-        monitor.setActive(true, onMouseDown: {}, onMouseUp: {})
-        monitor.setActive(true, onMouseDown: {}, onMouseUp: {})
-        monitor.setActive(false)
-        monitor.setActive(false)
-
-        // 4 monitors: globalDown + localDown + globalUp + localUp
-        XCTAssertEqual(installCount, 4)
-        XCTAssertEqual(removedTokens.sorted(), ["globalDown", "globalUp", "localDown", "localUp"])
     }
 
     func testCharacterSizePositionAndFacingDefaultPersistAndClamp() {
@@ -2117,7 +1776,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     func testCharacterScaleContributesToAutomaticWidth() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsCat = true
-        settings.catCharacter = "googly_eyes"
+        settings.catCharacter = "cat"
         settings.catScale = 1.0
 
         let defaultWidth = StatusBarDisplayRenderer.presentation(
@@ -2133,46 +1792,15 @@ final class PreferencesAndPresentationTests: XCTestCase {
             catFrameIndex: 0
         ).width
 
-        XCTAssertGreaterThan(enlargedWidth - defaultWidth, 10)
+        // Scaling the cat up widens the status item.
+        XCTAssertGreaterThan(enlargedWidth - defaultWidth, 5)
     }
 
-
-    func testGooglyEyesCharacterCanRenderOnEitherSideOfText() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsCat = true
-        settings.catCharacter = "googly_eyes"
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
-        settings.backgroundColor = .olive
-        settings.usesSystemTextColor = false
-        settings.textColor = .black
-
-        settings.catPosition = .left
-        let leftImage = StatusBarDisplayRenderer.image(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            scale: 2,
-            catFrameIndex: 0
-        )
-
-        settings.catPosition = .right
-        let rightImage = StatusBarDisplayRenderer.image(
-            snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
-            settings: settings,
-            scale: 2,
-            catFrameIndex: 0
-        )
-
-        XCTAssertGreaterThan(whitePixelCount(in: leftImage, horizontalRegion: 0.0..<0.34), 10)
-        XCTAssertLessThan(whitePixelCount(in: leftImage, horizontalRegion: 0.66..<1.0), 5)
-        XCTAssertGreaterThan(whitePixelCount(in: rightImage, horizontalRegion: 0.66..<1.0), 10)
-        XCTAssertLessThan(whitePixelCount(in: rightImage, horizontalRegion: 0.0..<0.34), 5)
-    }
 
     func testCharacterFacingControlsMirrorDirectionAndRenderSignature() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsCat = true
-        settings.catCharacter = "googly_cat"
+        settings.catCharacter = "cat"
         settings.catFacing = .right
         settings.catHeadSwing = false
 
@@ -2606,7 +2234,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
     func testApplicationTrafficReaderUsesExternalInterfaceScope() {
         XCTAssertEqual(
-            NettopApplicationTrafficReader.arguments,
+            NettopLineParser.arguments,
             ["-P", "-L", "1", "-x", "-t", "external", "-J", "bytes_in,bytes_out"]
         )
     }
@@ -2763,7 +2391,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             loginItemManager: FakeLoginItemManager()
         )
         preferences.hidesSystemProcesses = true
-        preferences.applicationSort = .name
+        preferences.applicationSort = .activity
 
         let state = ApplicationTrafficState(
             timestamp: Date(timeIntervalSince1970: 10),
@@ -2784,7 +2412,9 @@ final class PreferencesAndPresentationTests: XCTestCase {
             searchText: "c"
         )
 
-        XCTAssertEqual(visible.map(\.displayName), ["Arc", "Xcode"])
+        // "networkd" is hidden as a system process; the remaining "c" matches sort by
+        // live activity (download+upload) descending: Xcode (7000) before Arc (6000).
+        XCTAssertEqual(visible.map(\.displayName), ["Xcode", "Arc"])
     }
 
     func testLoginItemFailureRestoresObservedState() async {
@@ -3570,18 +3200,6 @@ extension PreferencesAndPresentationTests {
         )
     }
 
-    func testLegacyHiddenApplicationSortFallsBackToRealtimeTraffic() {
-        let defaults = isolatedDefaults()
-        defaults.set(ApplicationSortMode.download.rawValue, forKey: "app.applicationSort")
-
-        let preferences = AppPreferences(
-            defaults: defaults,
-            loginItemManager: FakeLoginItemManager()
-        )
-
-        XCTAssertEqual(preferences.applicationSort, .activity)
-    }
-
     func testApplicationRowMetricsFollowSelectedDisplayMode() {
         let application = appWithResources(
             "Safari",
@@ -4030,7 +3648,6 @@ extension PreferencesAndPresentationTests {
         XCTAssertEqual(uploadHeavy.title, "Upload Heavy")
 
         let event = NetworkAnomalyEvent(
-            kind: .highTraffic,
             title: "Traffic surge",
             message: "Traffic stayed high.",
             timestamp: Date(timeIntervalSince1970: 20)

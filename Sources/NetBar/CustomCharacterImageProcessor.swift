@@ -131,10 +131,6 @@ enum CustomCharacterImageProcessor {
         }
     }
 
-    static func clearCache() {
-        try? FileManager.default.removeItem(at: cacheDirectory)
-    }
-
     static func pixelated(_ image: NSImage, scale: CustomCharacterPixelationScale) throws -> NSImage {
         let source = try bitmapRepresentation(from: image)
         guard scale != .off else {

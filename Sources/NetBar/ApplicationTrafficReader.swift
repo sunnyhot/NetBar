@@ -143,7 +143,7 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
         for i in 0..<completeLineCount {
             let line = lines[i]
             guard !line.isEmpty else { continue }
-            if let stat = NettopApplicationTrafficReader.parseLinePublic(String(line)) {
+            if let stat = NettopLineParser.parseLine(String(line)) {
                 latestStats[stat.id] = stat
             }
         }
@@ -188,9 +188,14 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     }
 }
 
-// MARK: - One-shot nettop reader (fallback)
+// MARK: - Nettop CSV line parser
 
-final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecked Sendable {
+/// Parses a single line of nettop CSV output into an `ApplicationTrafficStats`.
+///
+/// This is a shared helper for the streaming reader (`StreamingNettopReader`);
+/// the legacy one-shot reader that previously hosted these statics has been removed.
+enum NettopLineParser {
+    /// nettop arguments scoped to a single sample (`-L 1`).
     static let arguments = [
         "-P",
         "-L", "1",
@@ -199,68 +204,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         "-J", "bytes_in,bytes_out"
     ]
 
-    private let executableURL = URL(fileURLWithPath: "/usr/bin/nettop")
-
-    func readApplications() -> ApplicationTrafficReadResult {
-        let process = Process()
-        let outputPipe = Pipe()
-        let errorPipe = Pipe()
-
-        process.executableURL = executableURL
-        process.arguments = Self.arguments
-        process.standardOutput = outputPipe
-        process.standardError = errorPipe
-
-        do {
-            try process.run()
-            // Add a 10-second timeout to prevent waitUntilExit() from hanging
-            // indefinitely on some macOS versions, which would leave
-            // isReadingApplicationTraffic stuck at true forever.
-            let semaphore = DispatchSemaphore(value: 0)
-            DispatchQueue.global().async {
-                process.waitUntilExit()
-                semaphore.signal()
-            }
-            let timeoutResult = semaphore.wait(timeout: .now() + 10.0)
-            if timeoutResult == .timedOut {
-                process.terminate()
-                return ApplicationTrafficReadResult(
-                    stats: [],
-                    errorMessage: "nettop 读取超时（10秒）"
-                )
-            }
-        } catch {
-            return ApplicationTrafficReadResult(
-                stats: [],
-                errorMessage: "无法启动 nettop：\(error.localizedDescription)"
-            )
-        }
-
-        let outputData = outputPipe.fileHandleForReading.readDataToEndOfFile()
-        let errorData = errorPipe.fileHandleForReading.readDataToEndOfFile()
-
-        guard process.terminationStatus == 0 else {
-            let message = String(data: errorData, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-            return ApplicationTrafficReadResult(
-                stats: [],
-                errorMessage: message?.isEmpty == false ? message : "nettop 退出码：\(process.terminationStatus)"
-            )
-        }
-
-        let output = String(data: outputData, encoding: .utf8) ?? ""
-        return ApplicationTrafficReadResult(
-            stats: Self.parse(output),
-            errorMessage: nil
-        )
-    }
-
-    fileprivate static func parse(_ output: String) -> [ApplicationTrafficStats] {
-        output
-            .split(whereSeparator: \.isNewline)
-            .compactMap { parseLinePublic(String($0)) }
-    }
-
-    fileprivate static func parseLinePublic(_ line: String) -> ApplicationTrafficStats? {
+    static func parseLine(_ line: String) -> ApplicationTrafficStats? {
         let line = stripControlCharacters(from: line)
         guard !line.hasPrefix(",") else { return nil }
 
@@ -274,7 +218,7 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         let sentBytes = UInt64(columns[2].trimmingCharacters(in: .whitespacesAndNewlines)) ?? 0
 
         let parsedProcess = parseProcessToken(processToken)
-        let displayName = displayNamePublic(for: parsedProcess.pid, fallback: parsedProcess.name)
+        let displayName = displayName(for: parsedProcess.pid, fallback: parsedProcess.name)
         let id = parsedProcess.pid.map { "\(parsedProcess.name).\($0)" } ?? parsedProcess.name
 
         return ApplicationTrafficStats(
@@ -285,6 +229,19 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
             receivedBytes: receivedBytes,
             sentBytes: sentBytes
         )
+    }
+
+    static func parseProcessToken(_ token: String) -> (name: String, pid: Int32?) {
+        guard
+            let dotIndex = token.lastIndex(of: "."),
+            dotIndex < token.index(before: token.endIndex)
+        else {
+            return (token, nil)
+        }
+
+        let name = String(token[..<dotIndex])
+        let pidText = String(token[token.index(after: dotIndex)...])
+        return (name, Int32(pidText))
     }
 
     private static func stripControlCharacters(from line: String) -> String {
@@ -304,22 +261,9 @@ final class NettopApplicationTrafficReader: ApplicationTrafficReading, @unchecke
         return String(String.UnicodeScalarView(scalars))
     }
 
-    fileprivate static func parseProcessToken(_ token: String) -> (name: String, pid: Int32?) {
-        guard
-            let dotIndex = token.lastIndex(of: "."),
-            dotIndex < token.index(before: token.endIndex)
-        else {
-            return (token, nil)
-        }
-
-        let name = String(token[..<dotIndex])
-        let pidText = String(token[token.index(after: dotIndex)...])
-        return (name, Int32(pidText))
-    }
-
     private static let displayNameCache = LockedObjectCache<NSNumber, NSString>()
 
-    fileprivate static func displayNamePublic(for pid: Int32?, fallback: String) -> String {
+    static func displayName(for pid: Int32?, fallback: String) -> String {
         guard let pid else { return fallback }
 
         let key = NSNumber(value: pid)

@@ -141,13 +141,11 @@ enum ApplicationTrafficPresentation {
         _ applications: [ApplicationTrafficRate],
         mode: ApplicationSortMode
     ) -> [ApplicationTrafficRate] {
-        switch mode.displayModeFallback {
+        switch mode {
         case .activity:
             return applications.filter(hasVisibleRealtimeTraffic)
         case .memory, .cpu:
             return applications
-        case .download, .upload, .total, .name:
-            return displayApplications(applications, mode: .activity)
         }
     }
 
@@ -161,17 +159,6 @@ enum ApplicationTrafficPresentation {
                 let lhsActivity = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
                 let rhsActivity = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond
                 return orderedDescending(lhsActivity, rhsActivity, lhs.displayName, rhs.displayName)
-            case .download:
-                return orderedDescending(lhs.downloadBytesPerSecond, rhs.downloadBytesPerSecond, lhs.displayName, rhs.displayName)
-            case .upload:
-                return orderedDescending(lhs.uploadBytesPerSecond, rhs.uploadBytesPerSecond, lhs.displayName, rhs.displayName)
-            case .total:
-                let lhsTotal = lhs.totalReceivedBytes + lhs.totalSentBytes
-                let rhsTotal = rhs.totalReceivedBytes + rhs.totalSentBytes
-                if lhsTotal != rhsTotal {
-                    return lhsTotal > rhsTotal
-                }
-                return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             case .memory:
                 let lhsMem = lhs.residentMemory ?? 0
                 let rhsMem = rhs.residentMemory ?? 0
@@ -180,8 +167,6 @@ enum ApplicationTrafficPresentation {
                 let lhsCPU = lhs.cpuPercentage ?? -1
                 let rhsCPU = rhs.cpuPercentage ?? -1
                 return orderedDescending(lhsCPU, rhsCPU, lhs.displayName, rhs.displayName)
-            case .name:
-                return lhs.displayName.localizedStandardCompare(rhs.displayName) == .orderedAscending
             }
         }
     }
@@ -231,7 +216,7 @@ enum ApplicationTrafficPresentation {
         for applications: [ApplicationTrafficRate],
         displayMode: ApplicationSortMode
     ) -> [ApplicationTrafficMetric] {
-        switch displayMode.displayModeFallback {
+        switch displayMode {
         case .activity:
             let totalDown = applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
             let totalUp = applications.reduce(0) { $0 + $1.uploadBytesPerSecond }
@@ -245,8 +230,6 @@ enum ApplicationTrafficPresentation {
         case .cpu:
             let totalCPU = applications.reduce(0) { $0 + ($1.cpuPercentage ?? 0) }
             return [ApplicationTrafficMetric(kind: .cpu, value: String(format: "%.1f%%", totalCPU))]
-        case .download, .upload, .total, .name:
-            return summaryMetrics(for: applications, displayMode: .activity)
         }
     }
 
@@ -254,7 +237,7 @@ enum ApplicationTrafficPresentation {
         for application: ApplicationTrafficRate,
         displayMode: ApplicationSortMode
     ) -> [ApplicationTrafficMetric] {
-        switch displayMode.displayModeFallback {
+        switch displayMode {
         case .activity:
             return [
                 ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(application.downloadBytesPerSecond)),
@@ -264,8 +247,6 @@ enum ApplicationTrafficPresentation {
             return [ApplicationTrafficMetric(kind: .memory, value: ByteFormat.bytes(application.residentMemory ?? 0))]
         case .cpu:
             return [ApplicationTrafficMetric(kind: .cpu, value: String(format: "%.1f%%", application.cpuPercentage ?? 0))]
-        case .download, .upload, .total, .name:
-            return rowMetrics(for: application, displayMode: .activity)
         }
     }
 
