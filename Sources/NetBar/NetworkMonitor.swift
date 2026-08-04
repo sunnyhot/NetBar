@@ -45,6 +45,8 @@ final class NetworkMonitor: ObservableObject {
     private var isRefreshingSystemResources = false
     private var isScreenLockedForSampling = false
     private var powerSaveMode = false
+    private var showsStatusAnimation = true
+    private var animationSpeedSource: AnimationSpeedSource = .networkSpeed
     private var historyBuffer: [RatePoint] = []
     private var historyWriteIndex = 0
     private let historyCapacity = 900
@@ -80,8 +82,8 @@ final class NetworkMonitor: ObservableObject {
             isScreenLocked: isScreenLockedForSampling,
             isLowPowerModeEnabled: powerSaveMode,
             activityLevel: activityLevel,
-            showsStatusAnimation: true,
-            animationSpeedSource: .networkSpeed
+            showsStatusAnimation: showsStatusAnimation,
+            animationSpeedSource: animationSpeedSource
         ))
     }
 
@@ -120,7 +122,9 @@ final class NetworkMonitor: ObservableObject {
             refreshApplicationTraffic()
             scheduleApplicationTrafficTimer()
         }
-        refreshSystemResources()
+        if currentSamplingPolicy.isAnimationMetricSamplingEnabled {
+            refreshSystemResources()
+        }
         scheduleNextSample()
         scheduleSystemResourceTimer()
     }
@@ -162,8 +166,26 @@ final class NetworkMonitor: ObservableObject {
     }
 
     func setPowerSaveMode(_ enabled: Bool) {
+        guard powerSaveMode != enabled else { return }
         powerSaveMode = enabled
         rescheduleTimers()
+    }
+
+    func configureAnimationMetricSampling(
+        showsAnimation: Bool,
+        speedSource: AnimationSpeedSource
+    ) {
+        guard showsStatusAnimation != showsAnimation || animationSpeedSource != speedSource else { return }
+        let wasEnabled = currentSamplingPolicy.isAnimationMetricSamplingEnabled
+        showsStatusAnimation = showsAnimation
+        animationSpeedSource = speedSource
+        let isEnabled = currentSamplingPolicy.isAnimationMetricSamplingEnabled
+
+        guard isRunning else { return }
+        if isEnabled, !wasEnabled {
+            refreshSystemResources()
+        }
+        scheduleSystemResourceTimer()
     }
 
     func setScreenLockedForSampling(_ locked: Bool) {
@@ -195,7 +217,7 @@ final class NetworkMonitor: ObservableObject {
 
     private func scheduleApplicationTrafficTimer() {
         applicationTimer?.invalidate()
-        applicationTimer = Timer.scheduledTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] _ in
+        applicationTimer = makeCommonModeTimer(withTimeInterval: applicationSampleInterval, repeats: true) { [weak self] in
             Task { @MainActor in
                 self?.refreshApplicationTraffic()
             }
@@ -208,7 +230,7 @@ final class NetworkMonitor: ObservableObject {
         systemResourceTimer = nil
         guard resourceInterval > 0 else { return }
 
-        systemResourceTimer = Timer.scheduledTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] _ in
+        systemResourceTimer = makeCommonModeTimer(withTimeInterval: resourceInterval, repeats: true) { [weak self] in
             Task { @MainActor in
                 self?.refreshSystemResources()
             }
@@ -379,20 +401,32 @@ final class NetworkMonitor: ObservableObject {
         guard shouldSampleApplicationTraffic else { return }
 
         isReadingApplicationTraffic = true
-        appTraffic.isRefreshing = true
+        // The loading flag is only presented before the first result. Publishing
+        // it for every background refresh would invalidate the entire popover
+        // twice per sample without changing anything visible.
+        if appTraffic.sampleCount == 0, !appTraffic.isRefreshing {
+            appTraffic.isRefreshing = true
+        }
 
         let reader = appTrafficReader
         let resourceReader = self.resourceReader
         let systemResourceReader = self.systemResourceReader
         let generation = applicationTrafficGeneration
         Task { [weak self, reader, resourceReader, systemResourceReader] in
-            let (result, resourceUsages, systemSummary) = await Task.detached(priority: .utility) { [reader, resourceReader, systemResourceReader] in
-                let trafficResult = reader.readApplications()
+            // nettop and ps are independent subprocess-backed readers. Running
+            // them concurrently keeps a slow nettop sample from delaying process
+            // resources and makes the detail window settle sooner.
+            let trafficTask = Task.detached(priority: .utility) { [reader] in
+                reader.readApplications()
+            }
+            let resourceTask = Task.detached(priority: .utility) { [resourceReader, systemResourceReader] in
                 let resourceUsages = resourceReader.readProcessResources()
                 let processCount = resourceUsages.count
                 let systemSummary = systemResourceReader.readSystemSummary(processCount: processCount)
-                return (trafficResult, resourceUsages, systemSummary)
-            }.value
+                return (resourceUsages, systemSummary)
+            }
+            let result = await trafficTask.value
+            let (resourceUsages, systemSummary) = await resourceTask.value
 
             guard let self else { return }
             guard generation == self.applicationTrafficGeneration,
@@ -661,7 +695,7 @@ final class NetworkMonitor: ObservableObject {
         let interval = currentSamplingPolicy.interfaceInterval
         guard interval > 0 else { return }
 
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: false) { [weak self] _ in
+        timer = makeCommonModeTimer(withTimeInterval: interval, repeats: false) { [weak self] in
             Task { @MainActor in
                 self?.refresh()
                 self?.scheduleNextSample()
@@ -692,6 +726,17 @@ final class NetworkMonitor: ObservableObject {
             }
         }
         activityLevel = newLevel
+    }
+
+    private func makeCommonModeTimer(
+        withTimeInterval interval: TimeInterval,
+        repeats: Bool,
+        action: @escaping () -> Void
+    ) -> Timer {
+        let timer = Timer(timeInterval: interval, repeats: repeats) { _ in action() }
+        timer.tolerance = min(interval * 0.1, 0.5)
+        RunLoop.main.add(timer, forMode: .common)
+        return timer
     }
 
     private static func externalTrafficRates(from rates: [InterfaceRate]) -> [InterfaceRate] {

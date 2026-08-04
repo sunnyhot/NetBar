@@ -157,6 +157,10 @@ private enum PreferencesTab: Int, CaseIterable, Identifiable {
         }
     }
 
+    var keyEquivalent: KeyEquivalent {
+        KeyEquivalent(Character(String(rawValue + 1)))
+    }
+
     @MainActor
     func title(appPreferences: AppPreferences) -> String {
         switch self {
@@ -192,6 +196,7 @@ private struct PreferencesTabBar: View {
                         .modifier(SelectedTabSurface(isSelected: selectedTab == tab))
                 }
                 .buttonStyle(.plain)
+                .keyboardShortcut(tab.keyEquivalent, modifiers: .command)
             }
         }
         .livingSignalToolbarSurface(padding: 4)

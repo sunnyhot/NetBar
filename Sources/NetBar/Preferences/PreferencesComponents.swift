@@ -7,6 +7,7 @@ struct CollapsiblePreferenceSection<Content: View>: View {
     let title: String
     let systemImage: String?
     @State private var isExpanded: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @ViewBuilder var content: Content
 
     init(title: String, systemImage: String? = nil, defaultExpanded: Bool = true, @ViewBuilder content: () -> Content) {
@@ -19,7 +20,7 @@ struct CollapsiblePreferenceSection<Content: View>: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Button {
-                withAnimation(NetBarMotion.settle) {
+                withAnimation(reduceMotion ? nil : NetBarMotion.settle) {
                     isExpanded.toggle()
                 }
             } label: {
@@ -46,7 +47,7 @@ struct CollapsiblePreferenceSection<Content: View>: View {
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .livingSignalRow(tone: .neutral, padding: 12)
-                .transition(.opacity.combined(with: .move(edge: .top)).animation(NetBarMotion.settle))
+                .transition(reduceMotion ? .identity : .opacity.combined(with: .move(edge: .top)))
             }
         }
     }
@@ -107,19 +108,23 @@ struct PresetColorButton: View {
     @ObservedObject var settings: StatusBarSettings
 
     var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 16, height: 16)
-            .overlay(
-                Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
-            )
-            .onTapGesture {
-                let newColor = PersistedColor(color: color)
-                settings.catColor = newColor
-                if newColor != PersistedColor.white && settings.usesSystemTextColor {
-                    settings.usesSystemTextColor = false
-                }
+        Button {
+            let newColor = PersistedColor(color: color)
+            settings.catColor = newColor
+            if newColor != PersistedColor.white && settings.usesSystemTextColor {
+                settings.usesSystemTextColor = false
             }
+        } label: {
+            Circle()
+                .fill(color)
+                .frame(width: 16, height: 16)
+                .overlay(
+                    Circle().stroke(Color.gray.opacity(0.3), lineWidth: 0.5)
+                )
+                .frame(width: 22, height: 22)
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(label)
     }
 }
 

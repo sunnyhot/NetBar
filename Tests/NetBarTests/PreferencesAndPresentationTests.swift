@@ -1288,6 +1288,24 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.uploadBytes, 0)
     }
 
+    func testNetworkHistoryStoreDoesNotRepublishUnchangedConfiguration() throws {
+        let store = NetworkHistoryStore(
+            rootDirectory: try temporaryDirectory(),
+            calendar: fixedCalendar(),
+            retentionDays: 30,
+            now: { Date(timeIntervalSince1970: 0) }
+        )
+        var publicationCount = 0
+        let cancellable = store.$summary.dropFirst().sink { _ in
+            publicationCount += 1
+        }
+
+        store.configure(isTrackingEnabled: true, retentionDays: 30)
+
+        XCTAssertEqual(publicationCount, 0)
+        withExtendedLifetime(cancellable) {}
+    }
+
     func testNetworkHistoryStoreBacksUpUnreadableStorage() throws {
         let root = try temporaryDirectory()
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -1317,6 +1335,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(model.points.map(\.downloadBytesPerSecond), [20, 30])
         XCTAssertEqual(model.peakDownloadBytesPerSecond, 30)
         XCTAssertEqual(model.peakUploadBytesPerSecond, 3)
+        XCTAssertEqual(model.normalizedDownloadValues, [2.0 / 3.0, 1.0])
+        XCTAssertEqual(model.normalizedUploadValues, [2.0 / 3.0, 1.0])
     }
 
 

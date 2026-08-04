@@ -16,6 +16,10 @@ struct MenuBarCharacterSection: View {
         }
     }
 
+    private func characterColorLabel(_ simplifiedChinese: String, _ english: String) -> String {
+        appPreferences.text("角色颜色：\(simplifiedChinese)", "Character color: \(english)")
+    }
+
     private var selectedCustomCharacter: CustomCharacter? {
         customCharacterStore.character(id: settings.catCharacter)
     }
@@ -289,15 +293,15 @@ struct MenuBarCharacterSection: View {
                     .labelsHidden()
 
                     HStack(spacing: 4) {
-                        PresetColorButton(color: Color.white, label: "白", settings: settings)
-                        PresetColorButton(color: Color.black, label: "黑", settings: settings)
-                        PresetColorButton(color: Color.red, label: "红", settings: settings)
-                        PresetColorButton(color: Color.orange, label: "橙", settings: settings)
-                        PresetColorButton(color: Color.yellow, label: "黄", settings: settings)
-                        PresetColorButton(color: Color.green, label: "绿", settings: settings)
-                        PresetColorButton(color: Color.cyan, label: "青", settings: settings)
-                        PresetColorButton(color: Color.blue, label: "蓝", settings: settings)
-                        PresetColorButton(color: Color.purple, label: "紫", settings: settings)
+                        PresetColorButton(color: .white, label: characterColorLabel("白色", "White"), settings: settings)
+                        PresetColorButton(color: .black, label: characterColorLabel("黑色", "Black"), settings: settings)
+                        PresetColorButton(color: .red, label: characterColorLabel("红色", "Red"), settings: settings)
+                        PresetColorButton(color: .orange, label: characterColorLabel("橙色", "Orange"), settings: settings)
+                        PresetColorButton(color: .yellow, label: characterColorLabel("黄色", "Yellow"), settings: settings)
+                        PresetColorButton(color: .green, label: characterColorLabel("绿色", "Green"), settings: settings)
+                        PresetColorButton(color: .cyan, label: characterColorLabel("青色", "Cyan"), settings: settings)
+                        PresetColorButton(color: .blue, label: characterColorLabel("蓝色", "Blue"), settings: settings)
+                        PresetColorButton(color: .purple, label: characterColorLabel("紫色", "Purple"), settings: settings)
                     }
 
                     Button(appPreferences.text("重置", "Reset")) {

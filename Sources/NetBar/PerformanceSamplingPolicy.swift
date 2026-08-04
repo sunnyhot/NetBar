@@ -32,8 +32,10 @@ enum PerformanceSamplingCoordinator {
 
         let interfaceInterval = state.activityLevel.baseInterval * (state.isLowPowerModeEnabled ? 2 : 1)
         let applicationInterval: TimeInterval = state.isLowPowerModeEnabled ? 5.0 : 1.0
-        let systemInterval: TimeInterval = state.isLowPowerModeEnabled ? 10.0 : 5.0
         let needsAnimationMetrics = state.showsStatusAnimation && state.animationSpeedSource != .networkSpeed
+        let systemInterval: TimeInterval = needsAnimationMetrics
+            ? (state.isLowPowerModeEnabled ? 10.0 : 5.0)
+            : 0
 
         return PerformanceSamplingPolicy(
             interfaceInterval: interfaceInterval,

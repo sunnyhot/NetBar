@@ -3,6 +3,7 @@ import SwiftUI
 struct MenuBarDisplaySectionContent: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var textColorBinding: Binding<Color> {
         Binding(
@@ -22,7 +23,7 @@ struct MenuBarDisplaySectionContent: View {
         Binding(
             get: { !settings.showsBackground },
             set: { isTransparent in
-                withAnimation(NetBarMotion.settle) {
+                withAnimation(reduceMotion ? nil : NetBarMotion.settle) {
                     settings.showsBackground = !isTransparent
                     if isTransparent {
                         settings.backgroundOpacity = 0

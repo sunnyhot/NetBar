@@ -132,6 +132,7 @@ struct NetBarIconTile: View {
 
 struct NetBarIconButtonStyle: ButtonStyle {
     var tone: NetBarTone = .neutral
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
@@ -147,7 +148,7 @@ struct NetBarIconButtonStyle: ButtonStyle {
                     .strokeBorder(Color.primary.opacity(configuration.isPressed ? 0.12 : 0.055), lineWidth: 0.5)
             )
             .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .animation(NetBarMotion.quick, value: configuration.isPressed)
+            .animation(reduceMotion ? nil : NetBarMotion.quick, value: configuration.isPressed)
     }
 }
 
@@ -155,13 +156,18 @@ struct NetBarCardModifier: ViewModifier {
     var cornerRadius: CGFloat = 12
     var padding: CGFloat = 0
     var isProminent = false
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
 
     func body(content: Content) -> some View {
         content
             .padding(padding)
             .background(
                 RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
-                    .fill(.regularMaterial)
+                    .fill(
+                        reduceTransparency
+                            ? AnyShapeStyle(Color(nsColor: .controlBackgroundColor))
+                            : AnyShapeStyle(.regularMaterial)
+                    )
                     .overlay(
                         RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
                             .fill(isProminent ? Color.primary.opacity(0.035) : Color(nsColor: .controlBackgroundColor).opacity(0.72))

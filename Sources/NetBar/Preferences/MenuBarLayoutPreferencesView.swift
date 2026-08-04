@@ -3,11 +3,16 @@ import SwiftUI
 struct MenuBarLayoutSectionContent: View {
     @ObservedObject var settings: StatusBarSettings
     @ObservedObject var appPreferences: AppPreferences
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         Toggle(appPreferences.text("自动宽度", "Automatic width"), isOn: Binding(
             get: { settings.usesAutomaticWidth },
-            set: { newValue in withAnimation(NetBarMotion.settle) { settings.usesAutomaticWidth = newValue } }
+            set: { newValue in
+                withAnimation(reduceMotion ? nil : NetBarMotion.settle) {
+                    settings.usesAutomaticWidth = newValue
+                }
+            }
         ))
 
         if !settings.usesAutomaticWidth {

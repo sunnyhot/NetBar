@@ -1,14 +1,5 @@
 import SwiftUI
 
-enum TrafficPulseChartScale {
-    static func normalizedValues(_ values: [Double]) -> [Double] {
-        guard let maxValue = values.max(), maxValue > 0 else {
-            return values.map { _ in 0 }
-        }
-        return values.map { $0 / maxValue }
-    }
-}
-
 struct TrafficPulseChartView: View {
     let presentation: TrafficHistoryWindowPresentationModel
     @Binding var selectedWindow: TrafficHistoryWindow
@@ -49,12 +40,12 @@ struct TrafficPulseChartView: View {
                     TrafficPulseGrid()
 
                     TrafficPulseLine(
-                        values: presentation.points.map(\.uploadBytesPerSecond),
+                        normalizedValues: presentation.normalizedUploadValues,
                         size: geometry.size,
                         color: LivingSignalTone.uploadHeavy.color
                     )
                     TrafficPulseLine(
-                        values: presentation.points.map(\.downloadBytesPerSecond),
+                        normalizedValues: presentation.normalizedDownloadValues,
                         size: geometry.size,
                         color: LivingSignalTone.active.color
                     )
@@ -130,7 +121,7 @@ private struct TrafficPulseLegendDot: View {
 }
 
 private struct TrafficPulseLine: View {
-    let values: [Double]
+    let normalizedValues: [Double]
     let size: CGSize
     let color: Color
 
@@ -147,13 +138,12 @@ private struct TrafficPulseLine: View {
 
     private var linePath: Path {
         Path { path in
-            let normalized = TrafficPulseChartScale.normalizedValues(values)
-            guard normalized.count > 1 else { return }
-            let step = size.width / CGFloat(normalized.count - 1)
-            for index in normalized.indices {
+            guard normalizedValues.count > 1 else { return }
+            let step = size.width / CGFloat(normalizedValues.count - 1)
+            for index in normalizedValues.indices {
                 let x = CGFloat(index) * step
-                let y = size.height - (CGFloat(normalized[index]) * (size.height - 12)) - 6
-                if index == normalized.startIndex {
+                let y = size.height - (CGFloat(normalizedValues[index]) * (size.height - 12)) - 6
+                if index == normalizedValues.startIndex {
                     path.move(to: CGPoint(x: x, y: y))
                 } else {
                     path.addLine(to: CGPoint(x: x, y: y))
@@ -164,19 +154,18 @@ private struct TrafficPulseLine: View {
 
     private var filledPath: Path {
         Path { path in
-            let normalized = TrafficPulseChartScale.normalizedValues(values)
-            guard normalized.count > 1 else { return }
-            let step = size.width / CGFloat(normalized.count - 1)
-            for index in normalized.indices {
+            guard normalizedValues.count > 1 else { return }
+            let step = size.width / CGFloat(normalizedValues.count - 1)
+            for index in normalizedValues.indices {
                 let x = CGFloat(index) * step
-                let y = size.height - (CGFloat(normalized[index]) * (size.height - 12)) - 6
-                if index == normalized.startIndex {
+                let y = size.height - (CGFloat(normalizedValues[index]) * (size.height - 12)) - 6
+                if index == normalizedValues.startIndex {
                     path.move(to: CGPoint(x: x, y: y))
                 } else {
                     path.addLine(to: CGPoint(x: x, y: y))
                 }
             }
-            path.addLine(to: CGPoint(x: CGFloat(normalized.count - 1) * step, y: size.height))
+            path.addLine(to: CGPoint(x: CGFloat(normalizedValues.count - 1) * step, y: size.height))
             path.addLine(to: CGPoint(x: 0, y: size.height))
             path.closeSubpath()
         }

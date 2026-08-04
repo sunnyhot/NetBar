@@ -189,10 +189,8 @@ final class StatusBarController {
             }
             .store(in: &cancellables)
 
-        Publishers.CombineLatest(monitor.$snapshot, monitor.$appTraffic)
-            .removeDuplicates { previous, current in
-                previous.0 == current.0 && previous.1 == current.1
-            }
+        monitor.$snapshot
+            .removeDuplicates()
             .sink { [weak self] _ in
                 self?.handleNetworkIntelligenceUpdate()
             }
@@ -211,6 +209,7 @@ final class StatusBarController {
         settings.objectWillChange
             .debounce(for: .milliseconds(100), scheduler: DispatchQueue.main)
             .sink { [weak self] _ in
+                self?.configureAnimationMetricSampling()
                 self?.setupCatAnimationIfNeeded()
                 self?.requestRender()
             }
@@ -265,6 +264,7 @@ final class StatusBarController {
             }
             .store(in: &cancellables)
 
+        configureAnimationMetricSampling()
         setupCatAnimationIfNeeded(force: true)
     }
 
@@ -282,7 +282,6 @@ final class StatusBarController {
 
     private func handleNetworkIntelligenceUpdate() {
         let settings = appPreferences.networkIntelligenceSettings
-        monitor.configureHistory(settings: settings)
         let events = monitor.refreshIntelligence(
             settings: settings,
             language: appPreferences.resolvedLanguage
@@ -292,6 +291,13 @@ final class StatusBarController {
                 await self?.notificationController.handle(event, settings: settings)
             }
         }
+    }
+
+    private func configureAnimationMetricSampling() {
+        monitor.configureAnimationMetricSampling(
+            showsAnimation: settings.showsCat,
+            speedSource: settings.resolvedAnimationSpeedSource
+        )
     }
 
     private func setupCatAnimation() {

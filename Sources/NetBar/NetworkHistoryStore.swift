@@ -103,8 +103,11 @@ final class NetworkHistoryStore: ObservableObject {
     }
 
     func configure(isTrackingEnabled: Bool, retentionDays: Int) {
+        let normalizedRetentionDays = max(retentionDays, 1)
+        guard self.isTrackingEnabled != isTrackingEnabled
+                || self.retentionDays != normalizedRetentionDays else { return }
         self.isTrackingEnabled = isTrackingEnabled
-        self.retentionDays = max(retentionDays, 1)
+        self.retentionDays = normalizedRetentionDays
         state.recentDays = Array(state.recentDays.suffix(self.retentionDays))
         publishAndScheduleSave()
     }

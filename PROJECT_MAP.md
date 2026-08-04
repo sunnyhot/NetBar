@@ -39,10 +39,10 @@ NetBar 是一个纯 Swift 的 macOS 菜单栏网络流量监控 App。
 
 当前规模：
 
-- `Sources/NetBar`: 58 个 Swift 文件，约 14,540 行
-- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,750 行，252 个测试
+- `Sources/NetBar`: 57 个 Swift 文件，约 13,646 行
+- `Tests/NetBarTests`: 2 个 Swift 文件，约 5,373 行，238 个测试
 - `Resources/RunCat`: 35 个内置动画角色帧资源
-- 当前 App 版本：`Resources/Info.plist` 中 `0.41.2`
+- 当前 App 版本：`Resources/Info.plist` 中 `0.42.1`
 
 ## 3. 启动与对象装配
 

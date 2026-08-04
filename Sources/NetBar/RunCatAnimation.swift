@@ -339,11 +339,14 @@ final class RunCatAnimation {
     private func scheduleTimer() {
         timer?.invalidate()
         let interval = targetInterval()
-        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.advanceFrame()
             }
         }
+        timer.tolerance = min(interval * 0.08, 0.1)
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
     }
 
     private func advanceFrame() {
@@ -370,11 +373,14 @@ final class RunCatAnimation {
         let pool = rotationPool.isEmpty ? RunCatCharacter.allCharacters : rotationPool
         guard pool.count > 1 else { return }  // No rotation needed with only 1 character
         let interval = max(rotationIntervalMinutes * 60, 10)  // Minimum 10 seconds
-        rotationTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+        let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
                 self?.rotateToNextCharacter()
             }
         }
+        timer.tolerance = min(interval * 0.05, 2)
+        RunLoop.main.add(timer, forMode: .common)
+        rotationTimer = timer
     }
 
     func configureRotation(enabled: Bool, intervalMinutes: Double, pool: [RunCatCharacter]) {

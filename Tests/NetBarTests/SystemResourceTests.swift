@@ -326,7 +326,7 @@ final class SystemResourceTests: XCTestCase {
 
         XCTAssertEqual(policy.interfaceInterval, 3.0)
         XCTAssertFalse(policy.isApplicationTrafficEnabled)
-        XCTAssertEqual(policy.systemResourceInterval, 5.0)
+        XCTAssertEqual(policy.systemResourceInterval, 0)
         XCTAssertFalse(policy.isAnimationMetricSamplingEnabled)
     }
 
@@ -742,11 +742,14 @@ final class SystemResourceTests: XCTestCase {
 
         monitor.start()
         XCTAssertFalse(monitor.currentSamplingPolicy.isApplicationTrafficEnabled)
-        XCTAssertEqual(monitor.currentSamplingPolicy.systemResourceInterval, 5.0)
+        XCTAssertEqual(monitor.currentSamplingPolicy.systemResourceInterval, 0)
 
         monitor.isApplicationTrafficVisible = true
         XCTAssertTrue(monitor.currentSamplingPolicy.isApplicationTrafficEnabled)
         XCTAssertEqual(monitor.currentSamplingPolicy.applicationTrafficInterval, 1.0)
+
+        monitor.configureAnimationMetricSampling(showsAnimation: true, speedSource: .cpuUsage)
+        XCTAssertEqual(monitor.currentSamplingPolicy.systemResourceInterval, 5.0)
 
         monitor.setPowerSaveMode(true)
         XCTAssertEqual(monitor.currentSamplingPolicy.applicationTrafficInterval, 5.0)
