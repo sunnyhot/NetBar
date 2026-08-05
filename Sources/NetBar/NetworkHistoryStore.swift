@@ -20,7 +20,6 @@ final class NetworkHistoryStore: ObservableObject {
     private var encoder = JSONEncoder()
     private var decoder = JSONDecoder()
     private var isTrackingEnabled = true
-    private var retentionDays: Int
     private let saveDebounceInterval: TimeInterval
     private var pendingSaveTimer: Timer?
     private var isDirty = false
@@ -28,13 +27,11 @@ final class NetworkHistoryStore: ObservableObject {
     init(
         rootDirectory: URL? = nil,
         calendar: Calendar = .current,
-        retentionDays: Int = 30,
         now: @escaping () -> Date = Date.init,
         saveDebounceInterval: TimeInterval = 20
     ) {
         self.calendar = calendar
         self.now = now
-        self.retentionDays = max(retentionDays, 1)
         self.saveDebounceInterval = saveDebounceInterval
         let root = rootDirectory ?? FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             .appendingPathComponent("NetBar", isDirectory: true)
@@ -45,11 +42,7 @@ final class NetworkHistoryStore: ObservableObject {
         if let data = try? Data(contentsOf: fileURL) {
             do {
                 let decoded = try decoder.decode(PersistedNetworkHistory.self, from: data)
-                self.state = Self.normalizedState(
-                    decoded,
-                    todayKey: currentDateKey,
-                    retentionDays: self.retentionDays
-                )
+                self.state = Self.normalizedState(decoded, todayKey: currentDateKey)
                 shouldSaveLoadedState = true
             } catch {
                 let backupURL = fileURL
@@ -63,7 +56,6 @@ final class NetworkHistoryStore: ObservableObject {
                 self.storageStatus = .unreadableBackupCreated(backupURL)
                 self.state = PersistedNetworkHistory(
                     today: .empty(dateKey: currentDateKey),
-                    recentDays: [],
                     animationPlaybackCountsByCharacter: [:]
                 )
                 shouldSaveLoadedState = false
@@ -71,7 +63,6 @@ final class NetworkHistoryStore: ObservableObject {
         } else {
             self.state = PersistedNetworkHistory(
                 today: .empty(dateKey: currentDateKey),
-                recentDays: [],
                 animationPlaybackCountsByCharacter: [:]
             )
             shouldSaveLoadedState = false
@@ -79,7 +70,6 @@ final class NetworkHistoryStore: ObservableObject {
         self.summary = NetworkIntelligenceSummary(
             latestEvent: nil,
             today: state.today,
-            recentDays: state.recentDays,
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         if shouldSaveLoadedState {
@@ -102,13 +92,9 @@ final class NetworkHistoryStore: ObservableObject {
         fileURL.path
     }
 
-    func configure(isTrackingEnabled: Bool, retentionDays: Int) {
-        let normalizedRetentionDays = max(retentionDays, 1)
-        guard self.isTrackingEnabled != isTrackingEnabled
-                || self.retentionDays != normalizedRetentionDays else { return }
+    func configure(isTrackingEnabled: Bool) {
+        guard self.isTrackingEnabled != isTrackingEnabled else { return }
         self.isTrackingEnabled = isTrackingEnabled
-        self.retentionDays = normalizedRetentionDays
-        state.recentDays = Array(state.recentDays.suffix(self.retentionDays))
         publishAndScheduleSave()
     }
 
@@ -153,7 +139,6 @@ final class NetworkHistoryStore: ObservableObject {
     func clear() {
         state = PersistedNetworkHistory(
             today: .empty(dateKey: Self.dateKey(for: now(), calendar: calendar)),
-            recentDays: [],
             animationPlaybackCountsByCharacter: [:]
         )
         lastSnapshot = nil
@@ -164,8 +149,7 @@ final class NetworkHistoryStore: ObservableObject {
     private func rolloverIfNeeded(for date: Date) {
         let key = Self.dateKey(for: date, calendar: calendar)
         guard state.today.dateKey != key else { return }
-        state.recentDays.append(state.today)
-        state.recentDays = Array(state.recentDays.suffix(retentionDays))
+        // Multi-day history is no longer retained; just reset today.
         state.today = .empty(dateKey: key)
         lastSnapshot = nil
     }
@@ -174,7 +158,6 @@ final class NetworkHistoryStore: ObservableObject {
         summary = NetworkIntelligenceSummary(
             latestEvent: summary.latestEvent,
             today: state.today,
-            recentDays: state.recentDays,
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
         scheduleSave()
@@ -240,45 +223,24 @@ final class NetworkHistoryStore: ObservableObject {
 
     private static func normalizedState(
         _ state: PersistedNetworkHistory,
-        todayKey: String,
-        retentionDays: Int
+        todayKey: String
     ) -> PersistedNetworkHistory {
+        // Multi-day history was removed; only today + global animation counts are kept.
+        // Carry over the persisted global animation counts (independent of recentDays).
         var today = state.today
-        var recentDays = state.recentDays
-
         if today.dateKey != todayKey {
-            recentDays.append(today)
             today = .empty(dateKey: todayKey)
         }
 
-        var normalizedState = PersistedNetworkHistory(
+        return PersistedNetworkHistory(
             today: today,
-            recentDays: Array(recentDays.suffix(max(retentionDays, 1))),
             animationPlaybackCountsByCharacter: state.animationPlaybackCountsByCharacter
         )
-        if normalizedState.animationPlaybackCountsByCharacter.isEmpty {
-            normalizedState.animationPlaybackCountsByCharacter = mergedAnimationPlaybackCounts(
-                today: normalizedState.today,
-                recentDays: normalizedState.recentDays
-            )
-        }
-        return normalizedState
     }
 
     private static func dateKey(for date: Date, calendar: Calendar) -> String {
         let components = calendar.dateComponents([.year, .month, .day], from: date)
         return String(format: "%04d-%02d-%02d", components.year ?? 1970, components.month ?? 1, components.day ?? 1)
-    }
-
-    private static func mergedAnimationPlaybackCounts(
-        today: NetworkDailySummary,
-        recentDays: [NetworkDailySummary]
-    ) -> [String: UInt64] {
-        ([today] + recentDays).reduce(into: [:]) { result, summary in
-            for (characterID, count) in summary.animationPlaybackCountsByCharacter {
-                result[characterID, default: 0] += count
-            }
-        }
     }
 }
 
@@ -289,27 +251,32 @@ private struct TrafficCounterTotals: Equatable {
 
 private struct PersistedNetworkHistory: Codable, Equatable {
     var today: NetworkDailySummary
-    var recentDays: [NetworkDailySummary]
     var animationPlaybackCountsByCharacter: [String: UInt64]
 
     init(
         today: NetworkDailySummary,
-        recentDays: [NetworkDailySummary],
         animationPlaybackCountsByCharacter: [String: UInt64]
     ) {
         self.today = today
-        self.recentDays = recentDays
         self.animationPlaybackCountsByCharacter = animationPlaybackCountsByCharacter
     }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         today = try container.decode(NetworkDailySummary.self, forKey: .today)
-        recentDays = try container.decode([NetworkDailySummary].self, forKey: .recentDays)
+        // `recentDays` is decoded-and-discarded for backward compatibility with older
+        // history files that still carry multi-day data.
+        _ = try container.decodeIfPresent([NetworkDailySummary].self, forKey: .recentDays)
         animationPlaybackCountsByCharacter = try container.decodeIfPresent(
             [String: UInt64].self,
             forKey: .animationPlaybackCountsByCharacter
         ) ?? [:]
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.container(keyedBy: CodingKeys.self)
+        try container.encode(today, forKey: .today)
+        try container.encode(animationPlaybackCountsByCharacter, forKey: .animationPlaybackCountsByCharacter)
     }
 
     private enum CodingKeys: String, CodingKey {

@@ -24,22 +24,19 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
     var isSystemNotificationEnabled: Bool
     var highTrafficThreshold: HighTrafficThreshold
     var isHistoryTrackingEnabled: Bool
-    var historyRetentionDays: Int
 
     init(
         hasSeenNotificationOnboarding: Bool,
         isAnomalyDetectionEnabled: Bool,
         isSystemNotificationEnabled: Bool,
         highTrafficThreshold: HighTrafficThreshold,
-        isHistoryTrackingEnabled: Bool,
-        historyRetentionDays: Int = 30
+        isHistoryTrackingEnabled: Bool
     ) {
         self.hasSeenNotificationOnboarding = hasSeenNotificationOnboarding
         self.isAnomalyDetectionEnabled = isAnomalyDetectionEnabled
         self.isSystemNotificationEnabled = isSystemNotificationEnabled
         self.highTrafficThreshold = highTrafficThreshold
         self.isHistoryTrackingEnabled = isHistoryTrackingEnabled
-        self.historyRetentionDays = historyRetentionDays
     }
 
     init(from decoder: Decoder) throws {
@@ -66,10 +63,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
             Bool.self,
             forKey: .isHistoryTrackingEnabled
         ) ?? defaultSettings.isHistoryTrackingEnabled
-        historyRetentionDays = try container.decodeIfPresent(
-            Int.self,
-            forKey: .historyRetentionDays
-        ) ?? defaultSettings.historyRetentionDays
     }
 
     func encode(to encoder: Encoder) throws {
@@ -80,7 +73,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         try container.encode(isSystemNotificationEnabled, forKey: .isSystemNotificationEnabled)
         try container.encode(highTrafficThreshold, forKey: .highTrafficThreshold)
         try container.encode(isHistoryTrackingEnabled, forKey: .isHistoryTrackingEnabled)
-        try container.encode(historyRetentionDays, forKey: .historyRetentionDays)
     }
 
     static let `default` = NetworkIntelligenceSettings(
@@ -88,8 +80,7 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         isAnomalyDetectionEnabled: true,
         isSystemNotificationEnabled: false,
         highTrafficThreshold: .mbps10,
-        isHistoryTrackingEnabled: true,
-        historyRetentionDays: 30
+        isHistoryTrackingEnabled: true
     )
 
     private enum CodingKeys: String, CodingKey {
@@ -98,7 +89,6 @@ struct NetworkIntelligenceSettings: Codable, Equatable {
         case isSystemNotificationEnabled
         case highTrafficThreshold
         case isHistoryTrackingEnabled
-        case historyRetentionDays
     }
 }
 
@@ -218,7 +208,6 @@ struct NetworkDailySummary: Codable, Equatable, Identifiable {
 struct NetworkIntelligenceSummary: Equatable {
     var latestEvent: NetworkAnomalyEvent?
     var today: NetworkDailySummary
-    var recentDays: [NetworkDailySummary]
     var animationPlaybackCountsByCharacter: [String: UInt64]
 
     var favoriteAnimationCharacterID: String? {
@@ -234,7 +223,6 @@ struct NetworkIntelligenceSummary: Equatable {
     static let empty = NetworkIntelligenceSummary(
         latestEvent: nil,
         today: .empty(dateKey: "1970-01-01"),
-        recentDays: [],
         animationPlaybackCountsByCharacter: [:]
     )
 }

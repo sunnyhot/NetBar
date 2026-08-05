@@ -123,17 +123,16 @@ protocol SystemResourceReading: Sendable {
     func readMemoryUsage() -> MemoryUsage
     func readCPUTicks() -> CPUTickSample
     func readThermalState() -> ThermalInfo
-    func readSystemSummary(processCount: Int) -> SystemResourceSummary
+    func readSystemSummary() -> SystemResourceSummary
 }
 
 extension SystemResourceReading {
-    func readSystemSummary(processCount: Int) -> SystemResourceSummary {
+    func readSystemSummary() -> SystemResourceSummary {
         let mem = readMemoryUsage()
         return SystemResourceSummary(
             totalMemory: mem.totalBytes,
             usedMemory: mem.usedBytes,
-            cpuUsage: nil,
-            processCount: processCount
+            cpuUsage: nil
         )
     }
 }

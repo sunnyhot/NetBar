@@ -388,37 +388,14 @@ final class DetailsWindowController: NSObject, NSWindowDelegate {
             minimumSize: minimumSize,
             visibleFrame: visibleFrame,
             anchorFrame: anchorFrame,
-            padding: padding,
-            horizontalAlignment: horizontalAlignment(for: appPreferences.popoverPosition)
+            padding: padding
         )
 
         window.setFrame(frame, display: true)
     }
-
-    private func horizontalAlignment(for position: PopoverPosition) -> DetailsWindowLayout.HorizontalAlignment {
-        switch position {
-        case .left:
-            return .leading
-        case .right:
-            return .trailing
-        }
-    }
 }
 
 enum DetailsWindowLayout {
-    /// Horizontal placement of the details window relative to the menu bar anchor.
-    ///
-    /// - `.center`: window is centered on the anchor (legacy behavior).
-    /// - `.leading`: window opens to the left of the anchor, flipping to the right
-    ///   when there is not enough room on the left screen edge.
-    /// - `.trailing`: window opens to the right of the anchor, flipping to the left
-    ///   when there is not enough room on the right screen edge.
-    enum HorizontalAlignment {
-        case center
-        case leading
-        case trailing
-    }
-
     static func minimumSize(
         baseMinimumSize: NSSize,
         visibleFrame: NSRect,
@@ -454,8 +431,7 @@ enum DetailsWindowLayout {
         visibleFrame: NSRect,
         anchorFrame: NSRect?,
         padding: CGFloat,
-        anchorGap: CGFloat = 0,
-        horizontalAlignment: HorizontalAlignment = .center
+        anchorGap: CGFloat = 0
     ) -> NSRect {
         let availableWidth = max(visibleFrame.width - padding * 2, 1)
         let availableHeight = max(visibleFrame.height - padding * 2, 1)
@@ -473,12 +449,11 @@ enum DetailsWindowLayout {
                 min: visibleFrame.minY + padding,
                 max: topEdge - fittedSize.height
             )
-            x = horizontalOrigin(
-                alignment: horizontalAlignment,
-                anchorFrame: anchorFrame,
-                width: fittedSize.width,
-                visibleFrame: visibleFrame,
-                padding: padding
+            // Center on the anchor horizontally, clamped to stay fully on screen.
+            x = clamp(
+                anchorFrame.midX - fittedSize.width / 2,
+                min: visibleFrame.minX + padding,
+                max: visibleFrame.maxX - fittedSize.width - padding
             )
         } else {
             x = clamp(
@@ -494,52 +469,6 @@ enum DetailsWindowLayout {
         }
 
         return NSRect(origin: CGPoint(x: x, y: y), size: fittedSize)
-    }
-
-    /// Computes the horizontal origin for an anchored window.
-    ///
-    /// `.leading`/`.trailing` place the window beside the anchor with a small gap; if the chosen
-    /// side lacks room within `visibleFrame`, the window flips to the opposite side. `.center` keeps
-    /// the legacy behavior of centering on (and clamping to) the anchor.
-    private static func horizontalOrigin(
-        alignment: HorizontalAlignment,
-        anchorFrame: NSRect,
-        width: CGFloat,
-        visibleFrame: NSRect,
-        padding: CGFloat
-    ) -> CGFloat {
-        let hGap: CGFloat = 6
-
-        switch alignment {
-        case .center:
-            return clamp(
-                anchorFrame.midX - width / 2,
-                min: visibleFrame.minX + padding,
-                max: visibleFrame.maxX - width - padding
-            )
-        case .leading:
-            let leadingX = anchorFrame.minX - hGap - width
-            if leadingX >= visibleFrame.minX + padding {
-                return leadingX
-            }
-            // No room on the leading side; flip to the trailing side.
-            return clamp(
-                anchorFrame.maxX + hGap,
-                min: visibleFrame.minX + padding,
-                max: visibleFrame.maxX - width - padding
-            )
-        case .trailing:
-            let trailingX = anchorFrame.maxX + hGap
-            if trailingX + width <= visibleFrame.maxX - padding {
-                return trailingX
-            }
-            // No room on the trailing side; flip to the leading side.
-            return clamp(
-                anchorFrame.minX - hGap - width,
-                min: visibleFrame.minX + padding,
-                max: visibleFrame.maxX - width - padding
-            )
-        }
     }
 
     private static func clamp(_ value: CGFloat, min minimum: CGFloat, max maximum: CGFloat) -> CGFloat {

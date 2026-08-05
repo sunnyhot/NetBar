@@ -3,8 +3,6 @@ import Foundation
 enum ApplicationTrafficMetricKind: Equatable {
     case download
     case upload
-    case memory
-    case cpu
 }
 
 struct ApplicationTrafficMetric: Equatable, Identifiable {
@@ -100,7 +98,6 @@ enum ApplicationTrafficPresentation {
             snapshot: .empty,
             state: state,
             hidesSystemProcesses: preferences.hidesSystemProcesses,
-            sortMode: preferences.applicationSort,
             searchText: searchText,
             limit: limit
         ).visibleApplications
@@ -110,7 +107,6 @@ enum ApplicationTrafficPresentation {
         snapshot: NetworkSnapshot,
         state: ApplicationTrafficState,
         hidesSystemProcesses: Bool,
-        sortMode: ApplicationSortMode,
         searchText: String,
         limit: Int = 18
     ) -> ApplicationTrafficPresentationModel {
@@ -127,47 +123,29 @@ enum ApplicationTrafficPresentation {
             return searchableText.localizedStandardContains(normalizedSearch)
         }
 
-        let displayFiltered = displayApplications(filtered, mode: sortMode)
-        let visible = Array(sorted(displayFiltered, by: sortMode).prefix(limit))
+        let displayFiltered = displayApplications(filtered)
+        let visible = Array(sorted(displayFiltered).prefix(limit))
 
         return ApplicationTrafficPresentationModel(
             visibleApplications: visible,
-            summaryMetrics: summaryMetrics(for: visible, displayMode: sortMode),
+            summaryMetrics: summaryMetrics(for: visible),
             attributionSummary: attributionSummary(snapshot: snapshot, applications: state.applications)
         )
     }
 
     static func displayApplications(
-        _ applications: [ApplicationTrafficRate],
-        mode: ApplicationSortMode
+        _ applications: [ApplicationTrafficRate]
     ) -> [ApplicationTrafficRate] {
-        switch mode {
-        case .activity:
-            return applications.filter(hasVisibleRealtimeTraffic)
-        case .memory, .cpu:
-            return applications
-        }
+        applications.filter(hasVisibleRealtimeTraffic)
     }
 
     static func sorted(
-        _ applications: [ApplicationTrafficRate],
-        by sortMode: ApplicationSortMode
+        _ applications: [ApplicationTrafficRate]
     ) -> [ApplicationTrafficRate] {
         applications.sorted { lhs, rhs in
-            switch sortMode {
-            case .activity:
-                let lhsActivity = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
-                let rhsActivity = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond
-                return orderedDescending(lhsActivity, rhsActivity, lhs.displayName, rhs.displayName)
-            case .memory:
-                let lhsMem = lhs.residentMemory ?? 0
-                let rhsMem = rhs.residentMemory ?? 0
-                return orderedDescending(Double(lhsMem), Double(rhsMem), lhs.displayName, rhs.displayName)
-            case .cpu:
-                let lhsCPU = lhs.cpuPercentage ?? -1
-                let rhsCPU = rhs.cpuPercentage ?? -1
-                return orderedDescending(lhsCPU, rhsCPU, lhs.displayName, rhs.displayName)
-            }
+            let lhsActivity = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
+            let rhsActivity = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond
+            return orderedDescending(lhsActivity, rhsActivity, lhs.displayName, rhs.displayName)
         }
     }
 
@@ -176,7 +154,7 @@ enum ApplicationTrafficPresentation {
         applications: [ApplicationTrafficRate]
     ) -> ApplicationAttributionSummary {
         let interfaceBytes = snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond
-        let trafficApplications = displayApplications(applications, mode: .activity)
+        let trafficApplications = displayApplications(applications)
         let applicationBytes = trafficApplications.reduce(0) {
             $0 + $1.downloadBytesPerSecond + $1.uploadBytesPerSecond
         }
@@ -213,41 +191,23 @@ enum ApplicationTrafficPresentation {
     }
 
     static func summaryMetrics(
-        for applications: [ApplicationTrafficRate],
-        displayMode: ApplicationSortMode
+        for applications: [ApplicationTrafficRate]
     ) -> [ApplicationTrafficMetric] {
-        switch displayMode {
-        case .activity:
-            let totalDown = applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
-            let totalUp = applications.reduce(0) { $0 + $1.uploadBytesPerSecond }
-            return [
-                ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(totalDown)),
-                ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(totalUp))
-            ]
-        case .memory:
-            let totalMemory = applications.reduce(UInt64(0)) { $0 + ($1.residentMemory ?? 0) }
-            return [ApplicationTrafficMetric(kind: .memory, value: ByteFormat.bytes(totalMemory))]
-        case .cpu:
-            let totalCPU = applications.reduce(0) { $0 + ($1.cpuPercentage ?? 0) }
-            return [ApplicationTrafficMetric(kind: .cpu, value: String(format: "%.1f%%", totalCPU))]
-        }
+        let totalDown = applications.reduce(0) { $0 + $1.downloadBytesPerSecond }
+        let totalUp = applications.reduce(0) { $0 + $1.uploadBytesPerSecond }
+        return [
+            ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(totalDown)),
+            ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(totalUp))
+        ]
     }
 
     static func rowMetrics(
-        for application: ApplicationTrafficRate,
-        displayMode: ApplicationSortMode
+        for application: ApplicationTrafficRate
     ) -> [ApplicationTrafficMetric] {
-        switch displayMode {
-        case .activity:
-            return [
-                ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(application.downloadBytesPerSecond)),
-                ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(application.uploadBytesPerSecond))
-            ]
-        case .memory:
-            return [ApplicationTrafficMetric(kind: .memory, value: ByteFormat.bytes(application.residentMemory ?? 0))]
-        case .cpu:
-            return [ApplicationTrafficMetric(kind: .cpu, value: String(format: "%.1f%%", application.cpuPercentage ?? 0))]
-        }
+        [
+            ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(application.downloadBytesPerSecond)),
+            ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(application.uploadBytesPerSecond))
+        ]
     }
 
     private static let systemProcessCache = LockedObjectCache<NSString, NSNumber>()

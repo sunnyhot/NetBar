@@ -84,17 +84,6 @@ struct GeneralPreferencesView: View {
                         "跟随系统会使用 macOS 当前外观；浅色和暗黑会立即应用",
                         "System follows macOS appearance. Light and Dark apply immediately"
                     ))
-
-                    Picker(appPreferences.text("弹出位置", "Popover position"), selection: $appPreferences.popoverPosition) {
-                        ForEach(PopoverPosition.allCases) { position in
-                            Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .help(appPreferences.text(
-                        "选择悬浮框相对于菜单栏图标的弹出方向",
-                        "Choose the popover direction relative to the menu bar icon"
-                    ))
                 }
 
                 PreferenceSection(
@@ -106,13 +95,6 @@ struct GeneralPreferencesView: View {
                         "隐藏 system services 等后台服务，浏览器和 IDE 等用户应用仍会显示",
                         "Hide background services. Browsers, IDEs, and other user apps remain visible"
                     ))
-
-                    Picker(appPreferences.text("默认排序", "Default sort"), selection: $appPreferences.applicationSort) {
-                        ForEach(ApplicationSortMode.displayModes) { sortMode in
-                            Text(sortMode.title(language: appPreferences.resolvedLanguage)).tag(sortMode)
-                        }
-                    }
-                    .pickerStyle(.menu)
                 }
 
                 HStack {

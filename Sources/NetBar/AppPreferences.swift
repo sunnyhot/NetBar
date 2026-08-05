@@ -2,27 +2,6 @@ import AppKit
 import SwiftUI
 import ServiceManagement
 
-enum ApplicationSortMode: String, CaseIterable, Identifiable {
-    case activity
-    case memory
-    case cpu
-
-    var id: String { rawValue }
-
-    static let displayModes: [ApplicationSortMode] = [.activity, .memory, .cpu]
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .activity:
-            return language.text("实时流量", "Live traffic")
-        case .memory:
-            return language.text("内存占用", "Memory")
-        case .cpu:
-            return language.text("CPU 占用", "CPU")
-        }
-    }
-}
-
 enum AppLanguage: String, CaseIterable, Identifiable {
     case system
     case simplifiedChinese
@@ -53,22 +32,6 @@ enum AppLanguage: String, CaseIterable, Identifiable {
 
     func text(_ simplifiedChinese: String, _ english: String) -> String {
         resolved == .english ? english : simplifiedChinese
-    }
-}
-
-enum PopoverPosition: String, CaseIterable, Identifiable {
-    case left
-    case right
-
-    var id: String { rawValue }
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .left:
-            return language.text("左侧", "Left")
-        case .right:
-            return language.text("右侧", "Right")
-        }
     }
 }
 
@@ -224,10 +187,8 @@ final class AppPreferences: ObservableObject {
         }
     }
     @Published var hidesSystemProcesses: Bool { didSet { save() } }
-    @Published var applicationSort: ApplicationSortMode { didSet { save() } }
     @Published var language: AppLanguage { didSet { save() } }
     @Published var appearanceMode: AppAppearanceMode { didSet { save() } }
-    @Published var popoverPosition: PopoverPosition { didSet { save() } }
     @Published private(set) var hasCompletedOnboarding: Bool { didSet { save() } }
     @Published var networkIntelligenceSettings: NetworkIntelligenceSettings { didSet { save() } }
     @Published private(set) var launchesAtLogin: Bool
@@ -245,10 +206,8 @@ final class AppPreferences: ObservableObject {
         self.loginItemManager = loginItemManager
         showsDockIcon = defaults.object(forKey: Keys.showsDockIcon) as? Bool ?? Defaults.showsDockIcon
         hidesSystemProcesses = defaults.object(forKey: Keys.hidesSystemProcesses) as? Bool ?? Defaults.hidesSystemProcesses
-        applicationSort = ApplicationSortMode(rawValue: defaults.string(forKey: Keys.applicationSort) ?? "") ?? Defaults.applicationSort
         language = AppLanguage(rawValue: defaults.string(forKey: Keys.language) ?? "") ?? Defaults.language
         appearanceMode = AppAppearanceMode(rawValue: defaults.string(forKey: Keys.appearanceMode) ?? "") ?? Defaults.appearanceMode
-        popoverPosition = PopoverPosition(rawValue: defaults.string(forKey: Keys.popoverPosition) ?? "") ?? Defaults.popoverPosition
         hasCompletedOnboarding = defaults.object(forKey: Keys.hasCompletedOnboarding) as? Bool ?? Defaults.hasCompletedOnboarding
         if let data = defaults.data(forKey: Keys.networkIntelligenceSettings),
            let decoded = try? JSONDecoder().decode(NetworkIntelligenceSettings.self, from: data) {
@@ -314,20 +273,16 @@ final class AppPreferences: ObservableObject {
     func resetAppPreferences() {
         showsDockIcon = Defaults.showsDockIcon
         hidesSystemProcesses = Defaults.hidesSystemProcesses
-        applicationSort = Defaults.applicationSort
         language = Defaults.language
         appearanceMode = Defaults.appearanceMode
-        popoverPosition = Defaults.popoverPosition
         networkIntelligenceSettings = Defaults.networkIntelligenceSettings
     }
 
     private func save() {
         defaults.set(showsDockIcon, forKey: Keys.showsDockIcon)
         defaults.set(hidesSystemProcesses, forKey: Keys.hidesSystemProcesses)
-        defaults.set(applicationSort.rawValue, forKey: Keys.applicationSort)
         defaults.set(language.rawValue, forKey: Keys.language)
         defaults.set(appearanceMode.rawValue, forKey: Keys.appearanceMode)
-        defaults.set(popoverPosition.rawValue, forKey: Keys.popoverPosition)
         defaults.set(hasCompletedOnboarding, forKey: Keys.hasCompletedOnboarding)
         if let data = try? JSONEncoder().encode(networkIntelligenceSettings) {
             defaults.set(data, forKey: Keys.networkIntelligenceSettings)
@@ -337,10 +292,8 @@ final class AppPreferences: ObservableObject {
     private enum Defaults {
         static let showsDockIcon = true
         static let hidesSystemProcesses = true
-        static let applicationSort = ApplicationSortMode.activity
         static let language = AppLanguage.system
         static let appearanceMode = AppAppearanceMode.system
-        static let popoverPosition = PopoverPosition.right
         static let hasCompletedOnboarding = false
         static let networkIntelligenceSettings = NetworkIntelligenceSettings.default
     }
@@ -348,10 +301,8 @@ final class AppPreferences: ObservableObject {
     private enum Keys {
         static let showsDockIcon = "app.showsDockIcon"
         static let hidesSystemProcesses = "app.hidesSystemProcesses"
-        static let applicationSort = "app.applicationSort"
         static let language = "app.language"
         static let appearanceMode = "app.appearanceMode"
-        static let popoverPosition = "app.popoverPosition"
         static let hasCompletedOnboarding = "app.hasCompletedOnboarding"
         static let networkIntelligenceSettings = "app.networkIntelligenceSettings"
     }

@@ -2,6 +2,44 @@
 
 ## Unreleased
 
+## v0.43.0 (2026-08-05)
+
+### Cleanup — 历史统计精简为仅今日
+
+- **移除**详情窗口的「最近 7 天」统计卡片,详情窗口只保留「今日统计」
+- **移除**偏好设置中的「历史保留 N 天」步进器(7~30 天),历史开关文案改为「记录今日统计」
+- 删除底层多日存储管线:`NetworkHistoryStore` 不再保留 `recentDays`/`retentionDays`,`rolloverIfNeeded` 跨天时直接重置今日(不再 push 到历史);`NetworkIntelligenceSettings.historyRetentionDays` 字段移除
+- **保留**全时段动画播放计数(`animationPlaybackCountsByCharacter`),「最爱英雄」卡和角色播放次数仍按全时段累计,行为不变
+- 旧版历史文件(`NetworkHistory.json` 中的 `recentDays`)在加载时被安全丢弃,今日数据与全局动画计数不受影响
+
+### Performance — 优化菜单栏偏好设置滚动流畅度
+
+- 预览动画的 Timer 改用 `.default` RunLoop 模式(原 `.common`),滚动偏好设置页时动画自动暂停,避免每帧在主线程重新执行 CoreGraphics 预览渲染;滚动停止后动画恢复
+
+### Cleanup — 移除菜单栏预设
+
+- **移除**菜单栏偏好设置中的「预设」(极简/上下行/总流量/应用关注/宠物模式) 下拉框
+- 预设本质是一次性批量应用 6 个已有设置字段(显示模式/箭头/角色缩放等)的快捷方式,与下方详细控件完全冗余;且 `matching()` 反推逻辑因比对 `fontSize` 而在用户调字号后失效
+- 删除 `MenuBarPreset` 枚举、UI 控件及 3 个测试;用户的现有设置全部保留,零迁移影响
+
+### Cleanup — 移除「弹出位置」偏好 + 内存/CPU 排序与进程数
+
+- **移除**「外观」中的「弹出位置」(左侧/右侧) 选项:详情窗口统一居中于菜单栏图标下方弹出，与系统 menu bar 行为一致
+- 删除 `PopoverPosition` 枚举、偏好持久化、UI 控件及 `DetailsWindowLayout.HorizontalAlignment` 分支，回退到内联居中 clamp
+- 已设过该偏好的用户会在升级后自动改为居中弹出
+
+### Cleanup — 移除内存/CPU 排序模式、进程数显示及 per-app 资源读取管线
+
+- **移除**应用列表的「内存占用 / CPU 占用」排序模式及其驱动的指标显示，应用列表统一按实时流量排序
+- **移除**系统资源卡片的「进程 (Procs)」格
+- 删除整条每进程资源读取管线:`ProcessResourceUsage`、`ApplicationResourceReading` 协议、`PSApplicationResourceReader`(`/bin/ps`)，以及 `ApplicationTrafficRate` 的 `residentMemory`/`cpuPercentage` 字段、`NetworkMonitor.resourceOnlyApplicationRates` 与 `groupApplications` 中的资源聚合
+- 系统资源卡片仍显示系统级内存/CPU；动画速度不受影响，仍由系统级 Mach API(`SystemResourceReading`)驱动
+- `SystemResourceSummary` 去掉 `processCount` 字段
+
+- **移除**「外观」中的「弹出位置」(左侧/右侧) 选项:详情窗口统一居中于菜单栏图标下方弹出，与系统 menu bar 行为一致
+- 删除 `PopoverPosition` 枚举、偏好持久化、UI 控件及 `DetailsWindowLayout.HorizontalAlignment` 分支，回退到内联居中 clamp
+- 已设过该偏好的用户会在升级后自动改为居中弹出
+
 ## v0.42.1 (2026-08-04)
 
 ### Performance — 降低后台开销并提升交互流畅度

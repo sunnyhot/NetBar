@@ -81,10 +81,6 @@ struct ApplicationTrafficRate: Identifiable, Equatable {
     let uploadBytesPerSecond: Double
     let totalReceivedBytes: UInt64
     let totalSentBytes: UInt64
-    /// Total resident memory in bytes (nil if unavailable).
-    let residentMemory: UInt64?
-    /// Total CPU usage percentage (nil if unavailable).
-    let cpuPercentage: Double?
 
     var processLabel: String {
         let pidText = pids.prefix(3).map(String.init).joined(separator: ", ")

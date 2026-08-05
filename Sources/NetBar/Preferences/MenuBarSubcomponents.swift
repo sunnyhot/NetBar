@@ -384,7 +384,12 @@ struct AnimatedPreviewSection: View {
                 characterName: selectedCharacterAsset.displayName
             )
         }
-        .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .common).autoconnect()) { _ in
+        // Use `.default` RunLoop mode (not `.common`) so the timer pauses during
+        // scroll tracking (NSEventTrackingRunLoopMode). Otherwise every 8 FPS tick
+        // forces a CoreGraphics re-render of the preview on the main thread while the
+        // user scrolls, causing jank. The preview freezes while scrolling and resumes
+        // once scrolling stops — the expected behavior for a decorative animation.
+        .onReceive(Timer.publish(every: Self.previewFrameInterval, on: .main, in: .default).autoconnect()) { _ in
             guard settings.showsCat else {
                 previewFrameTimeline.reset()
                 return

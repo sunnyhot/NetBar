@@ -60,11 +60,6 @@ struct NetworkPopoverView: View {
                         retry: monitor.refreshApplicationTraffic
                     )
 
-                    SevenDaySummaryPanel(
-                        summaries: monitor.intelligenceSummary.recentDays,
-                        appPreferences: appPreferences
-                    )
-
                     InterfaceAndSystemPanel(
                         snapshot: monitor.snapshot,
                         systemResources: monitor.appTraffic.systemResources,

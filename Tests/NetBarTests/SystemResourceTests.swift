@@ -184,7 +184,6 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(empty.totalMemory, 0)
         XCTAssertEqual(empty.usedMemory, 0)
         XCTAssertNil(empty.cpuUsage)
-        XCTAssertEqual(empty.processCount, 0)
         XCTAssertNil(empty.memoryUsagePercentage)
     }
 
@@ -192,8 +191,7 @@ final class SystemResourceTests: XCTestCase {
         let summary = SystemResourceSummary(
             totalMemory: 16_000_000_000,
             usedMemory: 8_000_000_000,
-            cpuUsage: 25.5,
-            processCount: 300
+            cpuUsage: 25.5
         )
         XCTAssertEqual(summary.memoryUsagePercentage!, 50.0, accuracy: 0.01)
     }
@@ -202,113 +200,23 @@ final class SystemResourceTests: XCTestCase {
         let summary = SystemResourceSummary(
             totalMemory: 0,
             usedMemory: 0,
-            cpuUsage: nil,
-            processCount: 0
+            cpuUsage: nil
         )
         XCTAssertNil(summary.memoryUsagePercentage)
     }
 
     func testSystemResourceSummaryEquality() {
-        let a = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0, processCount: 100)
-        let b = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0, processCount: 100)
+        let a = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0)
+        let b = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0)
         XCTAssertEqual(a, b)
     }
 
-    // MARK: - ProcessResourceUsage Tests (LUC-227)
-
-    func testProcessResourceUsageEquality() {
-        let a = ProcessResourceUsage(pid: 123, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0)
-        let b = ProcessResourceUsage(pid: 123, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0)
-        XCTAssertEqual(a, b)
-    }
-
-    func testProcessResourceUsageWithNilFields() {
-        let usage = ProcessResourceUsage(pid: 456, processName: "kernel", displayName: "kernel", residentMemory: nil, cpuPercentage: nil)
-        XCTAssertNil(usage.residentMemory)
-        XCTAssertNil(usage.cpuPercentage)
-        XCTAssertEqual(usage.pid, 456)
-    }
-
-    // MARK: - ApplicationTrafficRate Resource Fields (LUC-227)
-
-    func testApplicationTrafficRateWithResources() {
-        let rate = ApplicationTrafficRate(
-            id: "Safari",
-            displayName: "Safari",
-            processNames: ["Safari"],
-            pids: [123],
-            downloadBytesPerSecond: 1000,
-            uploadBytesPerSecond: 500,
-            totalReceivedBytes: 10000,
-            totalSentBytes: 5000,
-            residentMemory: 1024 * 1024 * 500, // 500 MB
-            cpuPercentage: 12.5
-        )
-        XCTAssertEqual(rate.residentMemory, 524_288_000)
-        XCTAssertEqual(rate.cpuPercentage, 12.5)
-    }
-
-    func testApplicationTrafficRateWithoutResources() {
-        let rate = ApplicationTrafficRate(
-            id: "unknown",
-            displayName: "unknown",
-            processNames: ["unknown"],
-            pids: [999],
-            downloadBytesPerSecond: 0,
-            uploadBytesPerSecond: 0,
-            totalReceivedBytes: 100,
-            totalSentBytes: 50,
-            residentMemory: nil,
-            cpuPercentage: nil
-        )
-        XCTAssertNil(rate.residentMemory)
-        XCTAssertNil(rate.cpuPercentage)
-    }
+    // MARK: - ApplicationTrafficState
 
     func testApplicationTrafficStateEmptyHasSystemResources() {
         let empty = ApplicationTrafficState.empty
         // Empty state should have .empty systemResources
         XCTAssertEqual(empty.systemResources, SystemResourceSummary.empty)
-    }
-
-    // MARK: - Mock ApplicationResourceReader Tests (LUC-227)
-
-    func testMockApplicationResourceReader() {
-        let mock = MockApplicationResourceReader(processes: [
-            ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0),
-            ProcessResourceUsage(pid: 200, processName: "Mail", displayName: "Mail", residentMemory: 2048, cpuPercentage: 2.0),
-        ])
-        let results = mock.readProcessResources()
-        XCTAssertEqual(results.count, 2)
-        XCTAssertEqual(results[0].processName, "Safari")
-        XCTAssertEqual(results[1].processName, "Mail")
-    }
-
-    func testPSApplicationResourceReaderDrainsLargeOutputWithoutHanging() throws {
-        let scriptURL = try makeExecutableScript(
-            """
-            #!/bin/sh
-            i=1
-            while [ "$i" -le 20000 ]; do
-              printf "%d 1024 0.0 /Applications/TestApp.app/Contents/MacOS/TestApp\\n" "$i"
-              i=$((i + 1))
-            done
-            """
-        )
-        let reader = PSApplicationResourceReader(
-            executableURL: scriptURL,
-            arguments: [],
-            timeout: 5
-        )
-
-        let startedAt = Date()
-        let processes = reader.readProcessResources()
-        let elapsed = Date().timeIntervalSince(startedAt)
-
-        XCTAssertLessThan(elapsed, 5, "Reader should drain stdout while the process is still running instead of blocking on a full pipe")
-        XCTAssertEqual(processes.count, 20_000)
-        XCTAssertEqual(processes.first?.residentMemory, 1_048_576)
-        XCTAssertEqual(processes.first?.cpuPercentage, 0)
     }
 
     // MARK: - NetworkMonitor System Resource Integration
@@ -386,7 +294,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: [])
         )
 
         monitor.setPowerSaveMode(true)
@@ -432,7 +339,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             historyStore: NetworkHistoryStore(rootDirectory: root, now: { currentDate }),
             now: { currentDate }
         )
@@ -462,7 +368,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             historyStore: NetworkHistoryStore(rootDirectory: root, now: { currentDate }, saveDebounceInterval: 20),
             now: { currentDate }
         )
@@ -496,7 +401,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             historyStore: NetworkHistoryStore(rootDirectory: try temporaryDirectoryForSystemTests(), now: { currentDate }),
             now: { currentDate }
         )
@@ -529,7 +433,6 @@ final class SystemResourceTests: XCTestCase {
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
             systemResourceReader: mock,
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -558,7 +461,6 @@ final class SystemResourceTests: XCTestCase {
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
             systemResourceReader: mock,
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -592,7 +494,6 @@ final class SystemResourceTests: XCTestCase {
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
             systemResourceReader: mock,
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -612,7 +513,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -624,14 +524,9 @@ final class SystemResourceTests: XCTestCase {
     }
 
     func testNetworkMonitorRefreshesApplicationTraffic() async {
-        let mockResourceReader = MockApplicationResourceReader(processes: [
-            ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 1024, cpuPercentage: 5.0),
-        ])
-
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
-            resourceReader: mockResourceReader,
             now: Date.init
         )
 
@@ -641,29 +536,6 @@ final class SystemResourceTests: XCTestCase {
 
         monitor.stop()
         XCTAssertFalse(monitor.isRunning)
-    }
-
-    func testNetworkMonitorIncludesResourceOnlyApplicationsWhenTrafficIsEmpty() async {
-        let monitor = NetworkMonitor(
-            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
-            appTrafficReader: EmptyApplicationTrafficReader(),
-            systemResourceReader: MockSystemResourceReader(
-                memory: MemoryUsage(totalBytes: 16_000_000_000, usedBytes: 8_000_000_000, swapTotalBytes: 0, swapUsedBytes: 0),
-                cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
-                thermal: ThermalInfo(state: .nominal)
-            ),
-            resourceReader: MockApplicationResourceReader(processes: [
-                ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 512_000_000, cpuPercentage: 7.5)
-            ]),
-            now: Date.init
-        )
-
-        monitor.isApplicationTrafficVisible = true
-        try? await Task.sleep(nanoseconds: 500_000_000)
-
-        XCTAssertEqual(monitor.appTraffic.applications.map(\.displayName), ["Safari"])
-        XCTAssertEqual(monitor.appTraffic.applications.first?.residentMemory, 512_000_000)
-        XCTAssertEqual(monitor.appTraffic.applications.first?.cpuPercentage, 7.5)
     }
 
     func testNetworkMonitorDoesNotDuplicateTrafficApplicationsWhenAddingResources() async {
@@ -688,9 +560,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: [
-                ProcessResourceUsage(pid: 100, processName: "Safari", displayName: "Safari", residentMemory: 512_000_000, cpuPercentage: 7.5)
-            ]),
             now: {
                 defer { dateIndex += 1 }
                 return sampleDates[min(dateIndex, sampleDates.count - 1)]
@@ -707,15 +576,12 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(application?.displayName, "Safari")
         XCTAssertEqual(application?.downloadBytesPerSecond, 300)
         XCTAssertEqual(application?.uploadBytesPerSecond, 120)
-        XCTAssertEqual(application?.residentMemory, 512_000_000)
-        XCTAssertEqual(application?.cpuPercentage, 7.5)
     }
 
     func testNetworkMonitorPowerSaveMode() {
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -737,7 +603,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: [])
         )
 
         monitor.start()
@@ -767,7 +632,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 0, user: 0, system: 0, idle: 0),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: [])
         )
 
         monitor.start()
@@ -783,7 +647,6 @@ final class SystemResourceTests: XCTestCase {
         let monitor = NetworkMonitor(
             reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
             appTrafficReader: EmptyApplicationTrafficReader(),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -806,7 +669,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -834,7 +696,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -855,7 +716,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -905,7 +765,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -933,7 +792,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -957,7 +815,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -979,7 +836,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -1014,7 +870,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -1043,7 +898,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -1073,7 +927,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -1095,7 +948,6 @@ final class SystemResourceTests: XCTestCase {
                 cpu: CPUTickSample(total: 1000, user: 300, system: 100, idle: 600),
                 thermal: ThermalInfo(state: .nominal)
             ),
-            resourceReader: MockApplicationResourceReader(processes: []),
             now: Date.init
         )
 
@@ -1284,16 +1136,6 @@ private final class MockSystemResourceReader: SystemResourceReading, @unchecked 
     func readMemoryUsage() -> MemoryUsage { memory }
     func readCPUTicks() -> CPUTickSample { cpu }
     func readThermalState() -> ThermalInfo { thermal }
-}
-
-private final class MockApplicationResourceReader: ApplicationResourceReading, @unchecked Sendable {
-    let processes: [ProcessResourceUsage]
-
-    init(processes: [ProcessResourceUsage]) {
-        self.processes = processes
-    }
-
-    func readProcessResources() -> [ProcessResourceUsage] { processes }
 }
 
 // MARK: - Test Helpers

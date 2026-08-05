@@ -111,20 +111,9 @@ struct AlertsAndHistoryPreferencesView: View {
             systemImage: "calendar.badge.clock"
         ) {
             Toggle(
-                appPreferences.text("记录今日与最近 30 天", "Track today and recent 30 days"),
+                appPreferences.text("记录今日统计", "Track today's stats"),
                 isOn: settingsBinding(\.isHistoryTrackingEnabled)
             )
-
-            Stepper(
-                value: settingsBinding(\.historyRetentionDays),
-                in: 7...30,
-                step: 1
-            ) {
-                Text(appPreferences.text(
-                    "历史保留 \(appPreferences.networkIntelligenceSettings.historyRetentionDays) 天",
-                    "Keep \(appPreferences.networkIntelligenceSettings.historyRetentionDays) days"
-                ))
-            }
 
             Button(appPreferences.text("清空历史数据", "Clear History"), role: .destructive) {
                 clearHistory()

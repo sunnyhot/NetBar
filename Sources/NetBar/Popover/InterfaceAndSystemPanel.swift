@@ -301,17 +301,6 @@ private struct SystemResourceCard: View {
                 }
             }
             .frame(maxWidth: .infinity, alignment: .leading)
-
-            // Process count
-            VStack(alignment: .center, spacing: 2) {
-                Text(appPreferences.text("进程", "Procs"))
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
-                Text("\(summary.processCount)")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(.secondary)
-            }
-            .frame(width: 52)
         }
         .livingSignalRow(tone: .neutral, padding: 10)
     }

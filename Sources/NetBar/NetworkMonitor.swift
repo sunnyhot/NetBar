@@ -26,7 +26,6 @@ final class NetworkMonitor: ObservableObject {
     private let appTrafficReader: ApplicationTrafficReading
     let streamingReader: StreamingNettopReader?
     private let systemResourceReader: SystemResourceReading
-    private let resourceReader: ApplicationResourceReading
     private let historyStore: NetworkHistoryStore
     private let now: () -> Date
     private var previousStats: [String: InterfaceStats] = [:]
@@ -91,7 +90,6 @@ final class NetworkMonitor: ObservableObject {
         reader: NetworkStatsReading = SystemNetworkStatsReader(),
         appTrafficReader: ApplicationTrafficReading? = nil,
         systemResourceReader: SystemResourceReading = LiveSystemResourceReader(),
-        resourceReader: ApplicationResourceReading? = nil,
         historyStore: NetworkHistoryStore? = nil,
         now: @escaping () -> Date = Date.init
     ) {
@@ -108,7 +106,6 @@ final class NetworkMonitor: ObservableObject {
             self.appTrafficReader = streaming
             self.streamingReader = streaming
         }
-        self.resourceReader = resourceReader ?? PSApplicationResourceReader()
     }
 
     func start() {
@@ -384,10 +381,7 @@ final class NetworkMonitor: ObservableObject {
     }
 
     func configureHistory(settings: NetworkIntelligenceSettings) {
-        historyStore.configure(
-            isTrackingEnabled: settings.isHistoryTrackingEnabled,
-            retentionDays: settings.historyRetentionDays
-        )
+        historyStore.configure(isTrackingEnabled: settings.isHistoryTrackingEnabled)
         syncIntelligenceSummaryFromHistory()
     }
 
@@ -409,35 +403,29 @@ final class NetworkMonitor: ObservableObject {
         }
 
         let reader = appTrafficReader
-        let resourceReader = self.resourceReader
         let systemResourceReader = self.systemResourceReader
         let generation = applicationTrafficGeneration
-        Task { [weak self, reader, resourceReader, systemResourceReader] in
-            // nettop and ps are independent subprocess-backed readers. Running
-            // them concurrently keeps a slow nettop sample from delaying process
-            // resources and makes the detail window settle sooner.
+        Task { [weak self, reader, systemResourceReader] in
+            // Run nettop and the system resource read concurrently so a slow
+            // nettop sample does not delay the system resource summary.
             let trafficTask = Task.detached(priority: .utility) { [reader] in
                 reader.readApplications()
             }
-            let resourceTask = Task.detached(priority: .utility) { [resourceReader, systemResourceReader] in
-                let resourceUsages = resourceReader.readProcessResources()
-                let processCount = resourceUsages.count
-                let systemSummary = systemResourceReader.readSystemSummary(processCount: processCount)
-                return (resourceUsages, systemSummary)
+            let summaryTask = Task.detached(priority: .utility) { [systemResourceReader] in
+                systemResourceReader.readSystemSummary()
             }
             let result = await trafficTask.value
-            let (resourceUsages, systemSummary) = await resourceTask.value
+            let systemSummary = await summaryTask.value
 
             guard let self else { return }
             guard generation == self.applicationTrafficGeneration,
                   self.shouldSampleApplicationTraffic else { return }
-            self.applyApplicationTraffic(result, resourceUsages: resourceUsages, systemSummary: systemSummary, sampledAt: self.now())
+            self.applyApplicationTraffic(result, systemSummary: systemSummary, sampledAt: self.now())
         }
     }
 
     private func applyApplicationTraffic(
         _ result: ApplicationTrafficReadResult,
-        resourceUsages: [ProcessResourceUsage],
         systemSummary: SystemResourceSummary,
         sampledAt: Date
     ) {
@@ -455,20 +443,12 @@ final class NetworkMonitor: ObservableObject {
             return
         }
 
-        // Build a pid-based lookup for resource data
-        var resourceByPID: [Int32: ProcessResourceUsage] = [:]
-        for usage in resourceUsages {
-            resourceByPID[usage.pid] = usage
-        }
-
         let currentByID = Dictionary(result.stats.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         guard let previousDate = previousApplicationSampleDate else {
             previousApplicationStats = currentByID
             previousApplicationSampleDate = sampledAt
-            let trafficPIDs = Set(result.stats.compactMap(\.pid))
             let processRates = result.stats.map { stat in
-                let res = stat.pid.flatMap { resourceByPID[$0] }
-                return ApplicationTrafficRate(
+                ApplicationTrafficRate(
                     id: stat.id,
                     displayName: stat.displayName,
                     processNames: [stat.processName],
@@ -476,15 +456,10 @@ final class NetworkMonitor: ObservableObject {
                     downloadBytesPerSecond: 0,
                     uploadBytesPerSecond: 0,
                     totalReceivedBytes: stat.receivedBytes,
-                    totalSentBytes: stat.sentBytes,
-                    residentMemory: res?.residentMemory,
-                    cpuPercentage: res?.cpuPercentage
+                    totalSentBytes: stat.sentBytes
                 )
-            } + resourceOnlyApplicationRates(
-                from: resourceUsages,
-                excluding: trafficPIDs
-            )
-            let applications = groupApplications(processRates, resourceByPID: resourceByPID)
+            }
+            let applications = groupApplications(processRates)
             appTraffic = ApplicationTrafficState(
                 timestamp: sampledAt,
                 applications: applications,
@@ -497,12 +472,10 @@ final class NetworkMonitor: ObservableObject {
         }
 
         let interval = max(sampledAt.timeIntervalSince(previousDate), 0.2)
-        let trafficPIDs = Set(result.stats.compactMap(\.pid))
         let processRates = result.stats.map { current -> ApplicationTrafficRate in
             let previous = previousApplicationStats[current.id]
             let receivedDelta = Self.positiveDelta(current.receivedBytes, previous?.receivedBytes)
             let sentDelta = Self.positiveDelta(current.sentBytes, previous?.sentBytes)
-            let res = current.pid.flatMap { resourceByPID[$0] }
 
             return ApplicationTrafficRate(
                 id: current.id,
@@ -512,18 +485,13 @@ final class NetworkMonitor: ObservableObject {
                 downloadBytesPerSecond: Double(receivedDelta) / interval,
                 uploadBytesPerSecond: Double(sentDelta) / interval,
                 totalReceivedBytes: current.receivedBytes,
-                totalSentBytes: current.sentBytes,
-                residentMemory: res?.residentMemory,
-                cpuPercentage: res?.cpuPercentage
+                totalSentBytes: current.sentBytes
             )
-        } + resourceOnlyApplicationRates(
-            from: resourceUsages,
-            excluding: trafficPIDs
-        )
+        }
 
         previousApplicationStats = currentByID
         previousApplicationSampleDate = sampledAt
-        let applications = groupApplications(processRates, resourceByPID: resourceByPID)
+        let applications = groupApplications(processRates)
         appTraffic = ApplicationTrafficState(
             timestamp: sampledAt,
             applications: applications,
@@ -545,30 +513,7 @@ final class NetworkMonitor: ObservableObject {
         intelligenceSummary = summary
     }
 
-    private func resourceOnlyApplicationRates(
-        from resourceUsages: [ProcessResourceUsage],
-        excluding trafficPIDs: Set<Int32>
-    ) -> [ApplicationTrafficRate] {
-        resourceUsages.compactMap { usage in
-            guard !trafficPIDs.contains(usage.pid) else { return nil }
-            guard usage.residentMemory != nil || usage.cpuPercentage != nil else { return nil }
-
-            return ApplicationTrafficRate(
-                id: "\(usage.processName).\(usage.pid)",
-                displayName: usage.displayName,
-                processNames: [usage.processName],
-                pids: [usage.pid],
-                downloadBytesPerSecond: 0,
-                uploadBytesPerSecond: 0,
-                totalReceivedBytes: 0,
-                totalSentBytes: 0,
-                residentMemory: usage.residentMemory,
-                cpuPercentage: usage.cpuPercentage
-            )
-        }
-    }
-
-    private func groupApplications(_ processRates: [ApplicationTrafficRate], resourceByPID: [Int32: ProcessResourceUsage]) -> [ApplicationTrafficRate] {
+    private func groupApplications(_ processRates: [ApplicationTrafficRate]) -> [ApplicationTrafficRate] {
         let grouped = Dictionary(grouping: processRates) { $0.displayName }
 
         return grouped.map { displayName, rates in
@@ -581,12 +526,6 @@ final class NetworkMonitor: ObservableObject {
             let download = rates.reduce(0) { $0 + $1.downloadBytesPerSecond }
             let upload = rates.reduce(0) { $0 + $1.uploadBytesPerSecond }
 
-            // Aggregate memory and CPU across all PIDs of this group
-            let memoryValues = pids.compactMap { resourceByPID[$0]?.residentMemory }
-            let cpuValues = pids.compactMap { resourceByPID[$0]?.cpuPercentage }
-            let totalMemory: UInt64? = memoryValues.isEmpty ? nil : memoryValues.reduce(0, +)
-            let totalCPU: Double? = cpuValues.isEmpty ? nil : cpuValues.reduce(0, +)
-
             return ApplicationTrafficRate(
                 id: displayName,
                 displayName: displayName,
@@ -595,14 +534,10 @@ final class NetworkMonitor: ObservableObject {
                 downloadBytesPerSecond: download,
                 uploadBytesPerSecond: upload,
                 totalReceivedBytes: totalReceived,
-                totalSentBytes: totalSent,
-                residentMemory: totalMemory,
-                cpuPercentage: totalCPU
+                totalSentBytes: totalSent
             )
         }
-        // Keep apps with network traffic OR resource data (memory/CPU),
-        // so memory/CPU sort modes show meaningful results even for idle apps.
-        .filter { $0.totalReceivedBytes > 0 || $0.totalSentBytes > 0 || $0.residentMemory != nil || $0.cpuPercentage != nil }
+        .filter { $0.totalReceivedBytes > 0 || $0.totalSentBytes > 0 }
         .sorted { lhs, rhs in
             let lhsTraffic = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
             let rhsTraffic = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond

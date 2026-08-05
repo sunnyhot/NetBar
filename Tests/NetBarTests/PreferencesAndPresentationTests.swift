@@ -380,31 +380,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(catalogSource.contains("characterPickerFrameTick ?? 0"))
     }
 
-    func testMenuBarPresetAppliesTotalTrafficMode() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-
-        MenuBarPreset.totalTraffic.apply(to: settings)
-
-        XCTAssertEqual(settings.trafficDisplayMode, .total)
-        XCTAssertFalse(settings.showsArrows)
-    }
-
-    func testMenuBarPresetDetectsCustomAfterManualEdit() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        MenuBarPreset.upDown.apply(to: settings)
-
-        XCTAssertEqual(MenuBarPreset.matching(settings: settings), .upDown)
-
-        settings.fontSize = settings.fontSize + 1
-
-        XCTAssertNil(MenuBarPreset.matching(settings: settings))
-    }
-
-    func testMenuBarPresetTitlesAreLocalized() {
-        XCTAssertEqual(MenuBarPreset.minimal.title(language: .simplifiedChinese), "极简")
-        XCTAssertEqual(MenuBarPreset.petMode.title(language: .english), "Pet Mode")
-    }
-
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true
@@ -515,65 +490,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(source.contains("LivingSignalLayout.preferredPopoverHeight"))
         XCTAssertTrue(source.contains("LivingSignalLayout.minimumPopoverWidth"))
         XCTAssertTrue(source.contains("LivingSignalLayout.minimumPopoverHeight"))
-    }
-
-    func testPopoverPositionLeadingPlacesWindowLeftOfAnchor() {
-        let visibleFrame = NSRect(x: 0, y: 0, width: 1400, height: 900)
-        let anchorFrame = NSRect(x: 700, y: 880, width: 24, height: 24)
-        let windowWidth = LivingSignalLayout.preferredPopoverWidth
-
-        let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: windowWidth, height: LivingSignalLayout.preferredPopoverHeight),
-            visibleFrame: visibleFrame,
-            anchorFrame: anchorFrame,
-            padding: 10,
-            horizontalAlignment: .leading
-        )
-
-        // Leading alignment opens the window to the left of the anchor, touching its left edge.
-        XCTAssertEqual(frame.width, windowWidth)
-        XCTAssertLessThanOrEqual(frame.maxX, anchorFrame.minX)
-        XCTAssertGreaterThan(frame.maxX, visibleFrame.minX)
-    }
-
-    func testPopoverPositionTrailingPlacesWindowRightOfAnchor() {
-        let visibleFrame = NSRect(x: 0, y: 0, width: 1400, height: 900)
-        let anchorFrame = NSRect(x: 700, y: 880, width: 24, height: 24)
-        let windowWidth = LivingSignalLayout.preferredPopoverWidth
-
-        let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: windowWidth, height: LivingSignalLayout.preferredPopoverHeight),
-            visibleFrame: visibleFrame,
-            anchorFrame: anchorFrame,
-            padding: 10,
-            horizontalAlignment: .trailing
-        )
-
-        XCTAssertEqual(frame.width, windowWidth)
-        XCTAssertGreaterThanOrEqual(frame.minX, anchorFrame.maxX)
-        XCTAssertLessThan(frame.minX, visibleFrame.maxX)
-    }
-
-    func testPopoverPositionLeadingFlipsToTrailingWhenNoRoomOnLeft() {
-        // Anchor hugs the left screen edge: no room to open on the leading (left) side.
-        let visibleFrame = NSRect(x: 0, y: 0, width: 1400, height: 900)
-        let anchorFrame = NSRect(x: 0, y: 880, width: 24, height: 24)
-        let windowWidth = LivingSignalLayout.preferredPopoverWidth
-
-        let frame = DetailsWindowLayout.frame(
-            forWindowSize: NSSize(width: windowWidth, height: LivingSignalLayout.preferredPopoverHeight),
-            visibleFrame: visibleFrame,
-            anchorFrame: anchorFrame,
-            padding: 10,
-            horizontalAlignment: .leading
-        )
-
-        // Flipped to the trailing (right) side of the anchor.
-        XCTAssertEqual(frame.width, windowWidth)
-        XCTAssertGreaterThanOrEqual(frame.minX, anchorFrame.maxX)
-        // Still fully on screen.
-        XCTAssertGreaterThanOrEqual(frame.minX, visibleFrame.minX + 10)
-        XCTAssertLessThanOrEqual(frame.maxX, visibleFrame.maxX - 10)
     }
 
     func testDetailsWindowDismissesForOutsideClickButKeepsInsideClick() {
@@ -857,7 +773,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(settings.isSystemNotificationEnabled)
         XCTAssertEqual(settings.highTrafficThreshold, .mbps10)
         XCTAssertTrue(settings.isHistoryTrackingEnabled)
-        XCTAssertEqual(settings.historyRetentionDays, 30)
     }
 
     func testNetworkIntelligenceSettingsDecodeMissingFieldsFromDefaults() throws {
@@ -898,7 +813,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(decoded.hasSeenNotificationOnboarding)
         XCTAssertFalse(decoded.isAnomalyDetectionEnabled)
         XCTAssertEqual(decoded.highTrafficThreshold, .mbps25)
-        XCTAssertEqual(decoded.historyRetentionDays, 30)
 
         let encoded = String(decoding: try JSONEncoder().encode(decoded), as: UTF8.self)
         XCTAssertFalse(encoded.contains("isInsightStreamEnabled"))
@@ -1105,7 +1019,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let summary = NetworkIntelligenceSummary(
             latestEvent: nil,
             today: today,
-            recentDays: [],
             animationPlaybackCountsByCharacter: [
                 "cat": 11,
                 "cat_b": 31
@@ -1138,7 +1051,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let summary = NetworkIntelligenceSummary(
             latestEvent: nil,
             today: today,
-            recentDays: [],
             animationPlaybackCountsByCharacter: [
                 "cat": 100_000,
                 "dog": 500_000
@@ -1223,8 +1135,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         currentDate = isoDate("2026-06-09T00:00:01Z")
         store.recordAnimationPlayback(count: 1, characterID: "cat", at: currentDate)
 
-        XCTAssertEqual(store.summary.recentDays.last?.animationPlaybackCount, 5)
-        XCTAssertEqual(store.summary.recentDays.last?.animationPlaybackCountsByCharacter["dog"], 3)
+        // After day rollover, today resets but global animation counts persist across days.
         XCTAssertEqual(store.summary.today.dateKey, "2026-06-09")
         XCTAssertEqual(store.summary.today.animationPlaybackCount, 1)
         XCTAssertEqual(store.summary.today.animationPlaybackCountsByCharacter["cat"], 1)
@@ -1260,27 +1171,31 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(store.summary.today.uploadBytes, 600)
     }
 
-    func testNetworkHistoryStoreRollsOverAndRetainsThirtyDays() throws {
+    func testNetworkHistoryStoreResetsTodayAcrossDays() throws {
         let root = try temporaryDirectory()
         let startDate = isoDate("2026-06-01T12:00:00Z")
         var currentDate = startDate
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
 
-        for dayOffset in 0..<35 {
-            currentDate = fixedCalendar().date(byAdding: .day, value: dayOffset, to: startDate)!
-            store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: UInt64(dayOffset * 1_000 + 1_000), sent: UInt64(dayOffset * 1_000 + 2_000), timestamp: currentDate))
-        }
+        // Day 1: record two snapshots so a byte delta is accumulated.
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000, timestamp: currentDate))
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_800, sent: 2_600, timestamp: isoDate("2026-06-01T12:00:01Z")))
+        XCTAssertEqual(store.summary.today.dateKey, "2026-06-01")
+        XCTAssertEqual(store.summary.today.downloadBytes, 800)
 
-        XCTAssertEqual(store.summary.recentDays.count, 30)
-        XCTAssertEqual(store.summary.today.dateKey, "2026-07-05")
-        XCTAssertEqual(store.summary.recentDays.first?.dateKey, "2026-06-05")
-        XCTAssertEqual(store.summary.recentDays.last?.dateKey, "2026-07-04")
+        // Day 2: today resets; multi-day history is no longer retained
+        currentDate = fixedCalendar().date(byAdding: .day, value: 1, to: startDate)!
+        store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 3_000, sent: 4_000, timestamp: currentDate))
+
+        XCTAssertEqual(store.summary.today.dateKey, "2026-06-02")
+        // Only the delta from the day-2 first sample (no previous snapshot yet) — counts as 0 bytes.
+        XCTAssertEqual(store.summary.today.downloadBytes, 0)
     }
 
     func testNetworkHistoryStoreSkipsWritesWhenTrackingDisabled() throws {
         let root = try temporaryDirectory()
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { Date(timeIntervalSince1970: 0) })
-        store.configure(isTrackingEnabled: false, retentionDays: 30)
+        store.configure(isTrackingEnabled: false)
 
         store.record(snapshot: sampleSnapshot(download: 100, upload: 50, received: 1_000, sent: 2_000))
 
@@ -1292,7 +1207,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let store = NetworkHistoryStore(
             rootDirectory: try temporaryDirectory(),
             calendar: fixedCalendar(),
-            retentionDays: 30,
             now: { Date(timeIntervalSince1970: 0) }
         )
         var publicationCount = 0
@@ -1300,7 +1214,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             publicationCount += 1
         }
 
-        store.configure(isTrackingEnabled: true, retentionDays: 30)
+        store.configure(isTrackingEnabled: true)
 
         XCTAssertEqual(publicationCount, 0)
         withExtendedLifetime(cancellable) {}
@@ -1340,7 +1254,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
     }
 
 
-    func testNetworkHistoryStoreRollsPersistedYesterdayIntoRecentDaysOnInit() throws {
+    func testNetworkHistoryStoreResetsStaleTodayOnReloadAcrossDays() throws {
         let root = try temporaryDirectory()
         var currentDate = isoDate("2026-06-01T12:00:00Z")
         let store = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
@@ -1348,15 +1262,13 @@ final class PreferencesAndPresentationTests: XCTestCase {
         store.record(snapshot: sampleSnapshot(download: 300, upload: 200, received: 1_800, sent: 2_600, timestamp: isoDate("2026-06-01T12:00:01Z")))
         store.flushNow()
 
+        // Reload on the next day: stale yesterday's `today` is dropped (no multi-day retention).
         currentDate = isoDate("2026-06-02T12:00:00Z")
         let reloaded = NetworkHistoryStore(rootDirectory: root, calendar: fixedCalendar(), now: { currentDate })
 
         XCTAssertEqual(reloaded.summary.today.dateKey, "2026-06-02")
         XCTAssertEqual(reloaded.summary.today.downloadBytes, 0)
         XCTAssertEqual(reloaded.summary.today.uploadBytes, 0)
-        XCTAssertEqual(reloaded.summary.recentDays.last?.dateKey, "2026-06-01")
-        XCTAssertEqual(reloaded.summary.recentDays.last?.downloadBytes, 800)
-        XCTAssertEqual(reloaded.summary.recentDays.last?.uploadBytes, 600)
     }
 
     // MARK: - DockIconVisibility
@@ -2411,7 +2323,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             loginItemManager: FakeLoginItemManager()
         )
         preferences.hidesSystemProcesses = true
-        preferences.applicationSort = .activity
 
         let state = ApplicationTrafficState(
             timestamp: Date(timeIntervalSince1970: 10),
@@ -2591,9 +2502,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
         download: Double,
         upload: Double,
         received: UInt64 = 0,
-        sent: UInt64 = 0,
-        memory: UInt64? = nil,
-        cpu: Double? = nil
+        sent: UInt64 = 0
     ) -> ApplicationTrafficRate {
         ApplicationTrafficRate(
             id: name,
@@ -2603,9 +2512,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             downloadBytesPerSecond: download,
             uploadBytesPerSecond: upload,
             totalReceivedBytes: received,
-            totalSentBytes: sent,
-            residentMemory: memory,
-            cpuPercentage: cpu
+            totalSentBytes: sent
         )
     }
 
@@ -2698,23 +2605,19 @@ final class PreferencesAndPresentationTests: XCTestCase {
             downloadBytesPerSecond: download,
             uploadBytesPerSecond: upload,
             totalReceivedBytes: total / 2,
-            totalSentBytes: total / 2,
-            residentMemory: nil,
-            cpuPercentage: nil
+            totalSentBytes: total / 2
         )
     }
 
-    /// Variant of `app()` that supports optional memory/CPU fields for testing
-    /// memory and CPU sort modes with apps that have no network traffic.
+    /// Variant of `app()` with explicit traffic totals, for apps that may have
+    /// no realtime activity in a given sample.
     private func appWithResources(
         _ displayName: String,
         processNames: [String],
         download: Double = 0,
         upload: Double = 0,
         totalReceived: UInt64 = 0,
-        totalSent: UInt64 = 0,
-        residentMemory: UInt64? = nil,
-        cpuPercentage: Double? = nil
+        totalSent: UInt64 = 0
     ) -> ApplicationTrafficRate {
         ApplicationTrafficRate(
             id: displayName,
@@ -2724,9 +2627,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             downloadBytesPerSecond: download,
             uploadBytesPerSecond: upload,
             totalReceivedBytes: totalReceived,
-            totalSentBytes: totalSent,
-            residentMemory: residentMemory,
-            cpuPercentage: cpuPercentage
+            totalSentBytes: totalSent
         )
     }
 
@@ -3208,79 +3109,49 @@ extension PreferencesAndPresentationTests {
     }
 }
 
-// MARK: - Memory & CPU Sort Tests
+// MARK: - Application Traffic Presentation Tests
 
 extension PreferencesAndPresentationTests {
 
-    func testApplicationSortModeDisplayModesOnlyIncludeTrafficMemoryAndCPU() {
-        XCTAssertEqual(ApplicationSortMode.displayModes, [.activity, .memory, .cpu])
-        XCTAssertEqual(
-            ApplicationSortMode.displayModes.map { $0.title(language: .simplifiedChinese) },
-            ["实时流量", "内存占用", "CPU 占用"]
-        )
-    }
-
-    func testApplicationRowMetricsFollowSelectedDisplayMode() {
+    func testApplicationRowMetricsShowRealtimeTraffic() {
         let application = appWithResources(
             "Safari",
             processNames: ["Safari"],
             download: 1_500,
-            upload: 500,
-            residentMemory: 512 * 1024 * 1024,
-            cpuPercentage: 7.5
+            upload: 500
         )
 
         XCTAssertEqual(
-            ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: .activity),
+            ApplicationTrafficPresentation.rowMetrics(for: application),
             [
                 ApplicationTrafficMetric(kind: .download, value: "1.46 KB/s"),
                 ApplicationTrafficMetric(kind: .upload, value: "500 B/s")
             ]
         )
-        XCTAssertEqual(
-            ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: .memory),
-            [ApplicationTrafficMetric(kind: .memory, value: "512 MB")]
-        )
-        XCTAssertEqual(
-            ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: .cpu),
-            [ApplicationTrafficMetric(kind: .cpu, value: "7.5%")]
-        )
     }
 
-    func testApplicationSummaryMetricsFollowSelectedDisplayMode() {
+    func testApplicationSummaryMetricsShowRealtimeTraffic() {
         let applications = [
             appWithResources(
                 "Safari",
                 processNames: ["Safari"],
                 download: 1_500,
-                upload: 500,
-                residentMemory: 512 * 1024 * 1024,
-                cpuPercentage: 7.5
+                upload: 500
             ),
             appWithResources(
                 "Xcode",
                 processNames: ["Xcode"],
                 download: 500,
-                upload: 250,
-                residentMemory: 1024 * 1024 * 1024,
-                cpuPercentage: 12.0
+                upload: 250
             )
         ]
 
         XCTAssertEqual(
-            ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .activity),
+            ApplicationTrafficPresentation.summaryMetrics(for: applications),
             [
                 ApplicationTrafficMetric(kind: .download, value: "1.95 KB/s"),
                 ApplicationTrafficMetric(kind: .upload, value: "750 B/s")
             ]
-        )
-        XCTAssertEqual(
-            ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .memory),
-            [ApplicationTrafficMetric(kind: .memory, value: "1.50 GB")]
-        )
-        XCTAssertEqual(
-            ApplicationTrafficPresentation.summaryMetrics(for: applications, displayMode: .cpu),
-            [ApplicationTrafficMetric(kind: .cpu, value: "19.5%")]
         )
     }
 
@@ -3290,7 +3161,7 @@ extension PreferencesAndPresentationTests {
             timestamp: Date(timeIntervalSince1970: 10),
             applications: [
                 appRate("Safari", download: 1_500, upload: 500, received: 10_000, sent: 2_000),
-                appRate("Helper", download: 0, upload: 0, received: 0, sent: 0, memory: 1_024, cpu: 2)
+                appRate("Helper", download: 0, upload: 0, received: 0, sent: 0)
             ],
             sampleCount: 2,
             isRefreshing: false,
@@ -3302,7 +3173,6 @@ extension PreferencesAndPresentationTests {
             snapshot: snapshot,
             state: state,
             hidesSystemProcesses: false,
-            sortMode: .activity,
             searchText: "",
             limit: 18
         )
@@ -3313,32 +3183,6 @@ extension PreferencesAndPresentationTests {
             ApplicationTrafficMetric(kind: .upload, value: "500 B/s")
         ])
         XCTAssertEqual(model.attributionSummary.applicationBytesPerSecond, 2_000)
-    }
-
-    func testApplicationTrafficPresentationModelKeepsMemoryModeResourceOnlyApps() {
-        let state = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appRate("Safari", download: 0, upload: 0, memory: 2_048, cpu: 1),
-                appRate("Mail", download: 0, upload: 0, memory: 4_096, cpu: 3)
-            ],
-            sampleCount: 1,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let model = ApplicationTrafficPresentation.makeModel(
-            snapshot: .empty,
-            state: state,
-            hidesSystemProcesses: false,
-            sortMode: .memory,
-            searchText: "mail",
-            limit: 18
-        )
-
-        XCTAssertEqual(model.visibleApplications.map(\.displayName), ["Mail"])
-        XCTAssertEqual(model.summaryMetrics, [ApplicationTrafficMetric(kind: .memory, value: "4.00 KB")])
     }
 
     func testApplicationAttributionSummaryShowsCoverageAndLikelyProxy() {
@@ -3405,14 +3249,12 @@ extension PreferencesAndPresentationTests {
             defaults: isolatedDefaults(),
             loginItemManager: FakeLoginItemManager()
         )
-        preferences.applicationSort = .activity
 
         let state = ApplicationTrafficState(
             timestamp: Date(timeIntervalSince1970: 10),
             applications: [
-                appWithResources("Idle Memory App", processNames: ["Idle Memory App"], residentMemory: 500_000_000),
-                appWithResources("Idle CPU App", processNames: ["Idle CPU App"], cpuPercentage: 12),
-                appWithResources("Browser", processNames: ["Browser"], download: 2_000, upload: 800, residentMemory: 600_000_000),
+                appWithResources("Idle App", processNames: ["Idle App"]),
+                appWithResources("Browser", processNames: ["Browser"], download: 2_000, upload: 800),
                 appWithResources("Uploader", processNames: ["Uploader"], download: 0, upload: 1_500)
             ],
             sampleCount: 3,
@@ -3430,161 +3272,22 @@ extension PreferencesAndPresentationTests {
         XCTAssertEqual(visible.map(\.displayName), ["Browser", "Uploader"])
     }
 
-    func testApplicationSummaryUsesVisibleApplicationsForSelectedDisplayMode() {
+    func testApplicationSummaryUsesVisibleApplications() {
         let applications = [
-            appWithResources("Idle Memory App", processNames: ["Idle Memory App"], residentMemory: 500_000_000),
-            appWithResources("Browser", processNames: ["Browser"], download: 2_000, upload: 800, residentMemory: 600_000_000),
+            appWithResources("Idle App", processNames: ["Idle App"]),
+            appWithResources("Browser", processNames: ["Browser"], download: 2_000, upload: 800),
             appWithResources("Uploader", processNames: ["Uploader"], download: 0, upload: 1_500)
         ]
 
         XCTAssertEqual(
             ApplicationTrafficPresentation.summaryMetrics(
-                for: ApplicationTrafficPresentation.displayApplications(applications, mode: .activity),
-                displayMode: .activity
+                for: ApplicationTrafficPresentation.displayApplications(applications)
             ),
             [
                 ApplicationTrafficMetric(kind: .download, value: "1.95 KB/s"),
                 ApplicationTrafficMetric(kind: .upload, value: "2.25 KB/s")
             ]
         )
-        XCTAssertEqual(
-            ApplicationTrafficPresentation.summaryMetrics(
-                for: ApplicationTrafficPresentation.displayApplications(applications, mode: .memory),
-                displayMode: .memory
-            ),
-            [ApplicationTrafficMetric(kind: .memory, value: "1.02 GB")]
-        )
-    }
-
-    /// Apps with no network traffic but valid memory data should appear in memory sort mode,
-    /// sorted by residentMemory descending.
-    func testMemorySortShowsAppsWithoutNetworkTraffic() {
-        let preferences = AppPreferences(
-            defaults: isolatedDefaults(),
-            loginItemManager: FakeLoginItemManager()
-        )
-        preferences.applicationSort = .memory
-
-        let state = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                // Safari: no network traffic, but 500 MB memory
-                appWithResources("Safari", processNames: ["Safari"], residentMemory: 500_000_000),
-                // Xcode: no network traffic, 1.2 GB memory (should appear first)
-                appWithResources("Xcode", processNames: ["Xcode"], residentMemory: 1_200_000_000),
-                // Arc: has network traffic but no memory data (should appear last with memory=0)
-                app("Arc", processNames: ["Arc"], download: 5_000, upload: 2_000, total: 7_000)
-            ],
-            sampleCount: 3,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let visible = ApplicationTrafficPresentation.visibleApplications(
-            from: state,
-            preferences: preferences,
-            searchText: ""
-        )
-
-        // Xcode (1.2 GB) > Safari (500 MB) > Arc (0, no memory data)
-        XCTAssertEqual(visible.map(\.displayName), ["Xcode", "Safari", "Arc"])
-    }
-
-    /// Apps with no network traffic but valid CPU data should appear in CPU sort mode,
-    /// sorted by cpuPercentage descending.
-    func testCPUSortShowsAppsWithoutNetworkTraffic() {
-        let preferences = AppPreferences(
-            defaults: isolatedDefaults(),
-            loginItemManager: FakeLoginItemManager()
-        )
-        preferences.applicationSort = .cpu
-
-        let state = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                // Docker: no network traffic, 45% CPU
-                appWithResources("Docker", processNames: ["Docker"], cpuPercentage: 45.0),
-                // Final Cut: no network traffic, 82% CPU (should appear first)
-                appWithResources("Final Cut", processNames: ["Final Cut"], cpuPercentage: 82.0),
-                // Firefox: has network traffic but no CPU data (should appear last with cpu=-1)
-                app("Firefox", processNames: ["Firefox"], download: 3_000, upload: 1_000, total: 4_000)
-            ],
-            sampleCount: 3,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let visible = ApplicationTrafficPresentation.visibleApplications(
-            from: state,
-            preferences: preferences,
-            searchText: ""
-        )
-
-        // Final Cut (82%) > Docker (45%) > Firefox (-1, no CPU data)
-        XCTAssertEqual(visible.map(\.displayName), ["Final Cut", "Docker", "Firefox"])
-    }
-
-    /// In CPU sort, apps with equal CPU percentage should be sorted by display name.
-    func testCPUSortBreaksTiesByName() {
-        let preferences = AppPreferences(
-            defaults: isolatedDefaults(),
-            loginItemManager: FakeLoginItemManager()
-        )
-        preferences.applicationSort = .cpu
-
-        let state = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appWithResources("Zephyr", processNames: ["Zephyr"], cpuPercentage: 10.0),
-                appWithResources("Alpha", processNames: ["Alpha"], cpuPercentage: 10.0),
-                appWithResources("Middle", processNames: ["Middle"], cpuPercentage: 10.0)
-            ],
-            sampleCount: 3,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let visible = ApplicationTrafficPresentation.visibleApplications(
-            from: state,
-            preferences: preferences,
-            searchText: ""
-        )
-
-        // All have same CPU %, so sorted by display name ascending
-        XCTAssertEqual(visible.map(\.displayName), ["Alpha", "Middle", "Zephyr"])
-    }
-
-    /// In memory sort, apps with equal memory should be sorted by display name.
-    func testMemorySortBreaksTiesByName() {
-        let preferences = AppPreferences(
-            defaults: isolatedDefaults(),
-            loginItemManager: FakeLoginItemManager()
-        )
-        preferences.applicationSort = .memory
-
-        let state = ApplicationTrafficState(
-            timestamp: Date(timeIntervalSince1970: 10),
-            applications: [
-                appWithResources("Zebra", processNames: ["Zebra"], residentMemory: 100_000_000),
-                appWithResources("Apple", processNames: ["Apple"], residentMemory: 100_000_000)
-            ],
-            sampleCount: 2,
-            isRefreshing: false,
-            errorMessage: nil,
-            systemResources: .empty
-        )
-
-        let visible = ApplicationTrafficPresentation.visibleApplications(
-            from: state,
-            preferences: preferences,
-            searchText: ""
-        )
-
-        // Same memory, so sorted by display name ascending
-        XCTAssertEqual(visible.map(\.displayName), ["Apple", "Zebra"])
     }
 }
 

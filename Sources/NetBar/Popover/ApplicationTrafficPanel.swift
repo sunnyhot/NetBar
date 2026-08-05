@@ -31,7 +31,6 @@ private struct ApplicationTrafficList: View {
             snapshot: snapshot,
             state: appTraffic,
             hidesSystemProcesses: preferences.hidesSystemProcesses,
-            sortMode: preferences.applicationSort,
             searchText: searchText
         )
     }
@@ -105,8 +104,7 @@ private struct ApplicationTrafficList: View {
                             ApplicationTrafficRow(
                                 application: application,
                                 role: ApplicationTrafficPresentation.attributionRole(for: application),
-                                language: preferences.resolvedLanguage,
-                                displayMode: preferences.applicationSort
+                                language: preferences.resolvedLanguage
                             )
                         }
                     }
@@ -126,12 +124,8 @@ private struct ApplicationTrafficList: View {
     }
 
 
-    /// Always show controls (search + sort picker) when:
-    /// - there is application data, OR
-    /// - user is searching, OR
-    /// - initial loading is done (so the sort picker is always accessible after startup).
-    /// This ensures the sort picker is never hidden after the first load,
-    /// so users can always switch between traffic/memory/CPU sort modes.
+    /// Always show the search box when there is application data, the user is
+    /// searching, or initial loading has finished.
     private var shouldShowControls: Bool {
         !appTraffic.applications.isEmpty
             || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -265,49 +259,10 @@ private struct AppTrafficControls: View {
     let appTraffic: ApplicationTrafficState
 
     var body: some View {
-        HStack(spacing: 8) {
-            TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
-                .textFieldStyle(.roundedBorder)
-                .font(.system(size: 12))
-
-            Menu {
-                ForEach(ApplicationSortMode.displayModes) { sortMode in
-                    Button {
-                        preferences.applicationSort = sortMode
-                    } label: {
-                        HStack {
-                            Text(sortMode.title(language: preferences.resolvedLanguage))
-                            if preferences.applicationSort == sortMode {
-                                Spacer()
-                                Image(systemName: "checkmark")
-                                    .foregroundStyle(.secondary)
-                                    .font(.system(size: 10, weight: .semibold))
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: 4) {
-                    Image(systemName: "arrow.up.arrow.down")
-                        .font(.system(size: 10, weight: .semibold))
-                    Text(preferences.applicationSort.title(language: preferences.resolvedLanguage))
-                        .font(.system(size: 11, weight: .medium))
-                        .lineLimit(1)
-                }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 6)
-                .background(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(Color.primary.opacity(0.05))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .strokeBorder(Color.primary.opacity(0.1), lineWidth: 0.5)
-                )
-            }
-            .fixedSize()
-        }
-        .livingSignalRow(tone: .neutral, padding: 8)
+        TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
+            .textFieldStyle(.roundedBorder)
+            .font(.system(size: 12))
+            .livingSignalRow(tone: .neutral, padding: 8)
     }
 }
 
@@ -350,7 +305,6 @@ struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
     let role: ApplicationAttributionRole
     let language: AppLanguage
-    let displayMode: ApplicationSortMode
 
     var body: some View {
         HStack(spacing: 8) {
@@ -374,7 +328,7 @@ struct ApplicationTrafficRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
 
             HStack(spacing: 6) {
-                ForEach(ApplicationTrafficPresentation.rowMetrics(for: application, displayMode: displayMode)) { metric in
+                ForEach(ApplicationTrafficPresentation.rowMetrics(for: application)) { metric in
                     CompactMetric(metric: metric)
                 }
             }
@@ -473,8 +427,6 @@ private extension ApplicationTrafficMetric {
         switch kind {
         case .download: return "arrow.down"
         case .upload: return "arrow.up"
-        case .memory: return "memorychip"
-        case .cpu: return "cpu"
         }
     }
 
@@ -484,10 +436,6 @@ private extension ApplicationTrafficMetric {
             return LivingSignalTone.active.color
         case .upload:
             return LivingSignalTone.uploadHeavy.color
-        case .memory:
-            return LivingSignalTone.neutral.color
-        case .cpu:
-            return LivingSignalTone.critical.color
         }
     }
 }
