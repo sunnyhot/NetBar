@@ -403,30 +403,21 @@ final class NetworkMonitor: ObservableObject {
         }
 
         let reader = appTrafficReader
-        let systemResourceReader = self.systemResourceReader
         let generation = applicationTrafficGeneration
-        Task { [weak self, reader, systemResourceReader] in
-            // Run nettop and the system resource read concurrently so a slow
-            // nettop sample does not delay the system resource summary.
-            let trafficTask = Task.detached(priority: .utility) { [reader] in
+        Task { [weak self, reader] in
+            let result = await Task.detached(priority: .utility) { [reader] in
                 reader.readApplications()
-            }
-            let summaryTask = Task.detached(priority: .utility) { [systemResourceReader] in
-                systemResourceReader.readSystemSummary()
-            }
-            let result = await trafficTask.value
-            let systemSummary = await summaryTask.value
+            }.value
 
             guard let self else { return }
             guard generation == self.applicationTrafficGeneration,
                   self.shouldSampleApplicationTraffic else { return }
-            self.applyApplicationTraffic(result, systemSummary: systemSummary, sampledAt: self.now())
+            self.applyApplicationTraffic(result, sampledAt: self.now())
         }
     }
 
     private func applyApplicationTraffic(
         _ result: ApplicationTrafficReadResult,
-        systemSummary: SystemResourceSummary,
         sampledAt: Date
     ) {
         defer { isReadingApplicationTraffic = false }
@@ -437,8 +428,7 @@ final class NetworkMonitor: ObservableObject {
                 applications: appTraffic.applications,
                 sampleCount: appTraffic.sampleCount,
                 isRefreshing: false,
-                errorMessage: result.errorMessage,
-                systemResources: systemSummary
+                errorMessage: result.errorMessage
             )
             return
         }
@@ -465,8 +455,7 @@ final class NetworkMonitor: ObservableObject {
                 applications: applications,
                 sampleCount: 1,
                 isRefreshing: false,
-                errorMessage: nil,
-                systemResources: systemSummary
+                errorMessage: nil
             )
             return
         }
@@ -497,8 +486,7 @@ final class NetworkMonitor: ObservableObject {
             applications: applications,
             sampleCount: appTraffic.sampleCount + 1,
             isRefreshing: false,
-            errorMessage: nil,
-            systemResources: systemSummary
+            errorMessage: nil
         )
     }
 

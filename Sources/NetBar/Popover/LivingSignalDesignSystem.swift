@@ -106,7 +106,7 @@ enum LivingSignalLayout {
     static let rowCornerRadius: CGFloat = 10
     static let horizontalPadding: CGFloat = 18
     static let verticalSectionSpacing: CGFloat = 14
-    static let chartHeight: CGFloat = 156
+    static let chartHeight: CGFloat = 110
     static let iconTileSize: CGFloat = 34
 }
 

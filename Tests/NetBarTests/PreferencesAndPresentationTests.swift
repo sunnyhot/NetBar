@@ -2334,7 +2334,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             sampleCount: 3,
             isRefreshing: false,
             errorMessage: nil,
-            systemResources: .empty
         )
 
         let visible = ApplicationTrafficPresentation.visibleApplications(
@@ -3166,7 +3165,6 @@ extension PreferencesAndPresentationTests {
             sampleCount: 2,
             isRefreshing: false,
             errorMessage: nil,
-            systemResources: .empty
         )
 
         let model = ApplicationTrafficPresentation.makeModel(
@@ -3260,7 +3258,6 @@ extension PreferencesAndPresentationTests {
             sampleCount: 3,
             isRefreshing: false,
             errorMessage: nil,
-            systemResources: .empty
         )
 
         let visible = ApplicationTrafficPresentation.visibleApplications(
@@ -3298,7 +3295,7 @@ extension PreferencesAndPresentationTests {
         XCTAssertEqual(LivingSignalLayout.minimumPopoverWidth, 480)
         XCTAssertEqual(LivingSignalLayout.preferredPopoverWidth, 500)
         XCTAssertEqual(LivingSignalLayout.maximumPopoverWidth, 520)
-        XCTAssertGreaterThan(LivingSignalLayout.chartHeight, 132)
+        XCTAssertGreaterThan(LivingSignalLayout.chartHeight, 90)
     }
 
     func testLivingSignalPaletteUsesRestrainedNativeInstrumentRoles() {
@@ -3424,9 +3421,6 @@ extension PreferencesAndPresentationTests {
         let appSource = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
         )
-        let interfaceSource = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
-        )
         let footerSource = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Popover", "PopoverFooterView.swift"]
         )
@@ -3436,8 +3430,6 @@ extension PreferencesAndPresentationTests {
 
         XCTAssertTrue(appSource.contains("struct ApplicationTrafficPanel"))
         XCTAssertTrue(appSource.contains("struct ApplicationTrafficRow"))
-        XCTAssertTrue(interfaceSource.contains("struct InterfaceAndSystemPanel"))
-        XCTAssertTrue(interfaceSource.contains("struct InterfaceRow"))
         XCTAssertTrue(footerSource.contains("struct PopoverFooterView"))
         XCTAssertFalse(rootSource.contains("struct ApplicationTrafficList"))
         XCTAssertFalse(rootSource.contains("struct InterfaceList"))
@@ -3470,8 +3462,7 @@ extension PreferencesAndPresentationTests {
     func testPopoverPanelsAvoidBroadSystemTrafficColorLiterals() throws {
         let panelFiles = [
             ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"],
-            ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"],
-            ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
+            ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
         ]
 
         for pathComponents in panelFiles {
@@ -3536,19 +3527,6 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(alertsSource.contains("appPreferences.text(\"智能检测\", \"Intelligence\")"))
     }
 
-    func testInterfacePanelDefaultsToPrimaryAndDisclosesAdvancedDiagnostics() throws {
-        let source = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
-        )
-
-        XCTAssertTrue(source.contains("@State private var showsAdvancedDiagnostics = false"))
-        XCTAssertTrue(source.contains("struct PrimaryInterfaceSection"))
-        XCTAssertTrue(source.contains("DisclosureGroup(isExpanded: $isExpanded)"))
-        XCTAssertTrue(source.contains("高级接口诊断"))
-        XCTAssertTrue(source.contains("showsPacketCounts: false"))
-        XCTAssertTrue(source.contains("showsPacketCounts: true"))
-    }
-
     func testMainMenuIncludesStandardUtilityMenusAndServices() throws {
         let source = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "AppDelegate.swift"]
@@ -3591,17 +3569,12 @@ extension PreferencesAndPresentationTests {
         let appSource = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
         )
-        let interfaceSource = try sourceFileContent(
-            pathComponents: ["Sources", "NetBar", "Popover", "InterfaceAndSystemPanel.swift"]
-        )
         let summarySource = try sourceFileContent(
             pathComponents: ["Sources", "NetBar", "Popover", "NetworkSummaryPanel.swift"]
         )
 
         XCTAssertFalse(designSource.contains(".fill(.regularMaterial)"))
-        XCTAssertFalse(interfaceSource.contains(".fill(.ultraThinMaterial)"))
         XCTAssertFalse(appSource.contains(".animation(NetBarMotion.quick, value: isHovering)"))
-        XCTAssertFalse(interfaceSource.contains(".animation(NetBarMotion.quick, value: isHovering)"))
         XCTAssertFalse(summarySource.contains("repeatForever"))
     }
 

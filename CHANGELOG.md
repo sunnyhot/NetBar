@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## v0.43.1 (2026-08-05)
+
+### Cleanup — 移除详情窗口的系统资源与接口诊断面板
+
+- **移除**详情窗口底部的「系统资源」(内存/CPU) 卡片:CPU 项此前硬编码为 `nil` 永远显示「--」,内存与网络监控主题无关
+- **移除**「主网络接口」卡片及其「高级接口诊断」:实时速率与接口名已在窗口头部展示(重复),累计接收/发送为开机累计(非今日数据),包计数为极小众诊断需求
+- 删除 `InterfaceAndSystemPanel`、`SystemResourceSummary` 类型、`SystemResourceReading.readSystemSummary()` 协议方法及 `ApplicationTrafficState.systemResources` 字段
+- 动画速度不受影响:仍由独立的系统级 Mach API(`SystemResourceSnapshot`)驱动
+
 ## v0.43.0 (2026-08-05)
 
 ### Cleanup — 历史统计精简为仅今日

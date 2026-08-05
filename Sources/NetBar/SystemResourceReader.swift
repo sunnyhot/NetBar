@@ -123,18 +123,6 @@ protocol SystemResourceReading: Sendable {
     func readMemoryUsage() -> MemoryUsage
     func readCPUTicks() -> CPUTickSample
     func readThermalState() -> ThermalInfo
-    func readSystemSummary() -> SystemResourceSummary
-}
-
-extension SystemResourceReading {
-    func readSystemSummary() -> SystemResourceSummary {
-        let mem = readMemoryUsage()
-        return SystemResourceSummary(
-            totalMemory: mem.totalBytes,
-            usedMemory: mem.usedBytes,
-            cpuUsage: nil
-        )
-    }
 }
 
 /// A raw CPU tick sample used for computing deltas between readings.

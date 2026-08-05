@@ -177,48 +177,6 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertNotEqual(ThermalPressureState.serious, ThermalPressureState.critical)
     }
 
-    // MARK: - SystemResourceSummary Tests (LUC-227)
-
-    func testSystemResourceSummaryEmpty() {
-        let empty = SystemResourceSummary.empty
-        XCTAssertEqual(empty.totalMemory, 0)
-        XCTAssertEqual(empty.usedMemory, 0)
-        XCTAssertNil(empty.cpuUsage)
-        XCTAssertNil(empty.memoryUsagePercentage)
-    }
-
-    func testSystemResourceSummaryMemoryPercentage() {
-        let summary = SystemResourceSummary(
-            totalMemory: 16_000_000_000,
-            usedMemory: 8_000_000_000,
-            cpuUsage: 25.5
-        )
-        XCTAssertEqual(summary.memoryUsagePercentage!, 50.0, accuracy: 0.01)
-    }
-
-    func testSystemResourceSummaryZeroMemory() {
-        let summary = SystemResourceSummary(
-            totalMemory: 0,
-            usedMemory: 0,
-            cpuUsage: nil
-        )
-        XCTAssertNil(summary.memoryUsagePercentage)
-    }
-
-    func testSystemResourceSummaryEquality() {
-        let a = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0)
-        let b = SystemResourceSummary(totalMemory: 16, usedMemory: 8, cpuUsage: 25.0)
-        XCTAssertEqual(a, b)
-    }
-
-    // MARK: - ApplicationTrafficState
-
-    func testApplicationTrafficStateEmptyHasSystemResources() {
-        let empty = ApplicationTrafficState.empty
-        // Empty state should have .empty systemResources
-        XCTAssertEqual(empty.systemResources, SystemResourceSummary.empty)
-    }
-
     // MARK: - NetworkMonitor System Resource Integration
 
     func testPerformanceSamplingPolicyForBackgroundIdleState() {

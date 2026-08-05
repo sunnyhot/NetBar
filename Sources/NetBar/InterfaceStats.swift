@@ -97,15 +97,12 @@ struct ApplicationTrafficState: Equatable {
     var sampleCount: Int
     var isRefreshing: Bool
     var errorMessage: String?
-    /// System-wide resource summary (memory, CPU).
-    var systemResources: SystemResourceSummary
 
     static let empty = ApplicationTrafficState(
         timestamp: nil,
         applications: [],
         sampleCount: 0,
         isRefreshing: false,
-        errorMessage: nil,
-        systemResources: .empty
+        errorMessage: nil
     )
 }
