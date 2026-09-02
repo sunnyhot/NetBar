@@ -1,17 +1,18 @@
 # NetBar
 
-NetBar 是一个免费的 macOS 菜单栏网络流量监控 App。它把实时下载、上传速度放进菜单栏，点击后可以查看网络趋势、接口明细、应用级流量、系统资源和网络提醒。
+NetBar 是一个免费的 macOS 菜单栏网络流量监控 App。它把实时下载、上传速度放进菜单栏，点击后可以查看网络趋势、今日统计和应用级流量，持续高流量时还会本地提醒。菜单栏里还可以养一只动态小宠物，网络越忙跑得越快。
 
 它适合想长期观察网络状态、排查网速异常、了解哪些应用正在使用网络的人。NetBar 使用 macOS 系统接口和系统自带工具读取统计数据，不抓包，不读取网页、请求、聊天、文件等网络内容，也不需要管理员权限。
 
 ## 为什么用 NetBar
 
 - **一眼看见实时网速**：菜单栏直接显示当前下载 / 上传速度，不需要打开活动监视器。
-- **知道谁在用网**：详情窗口展示应用级实时流量，并支持按实时流量、内存占用、CPU 占用查看。
+- **知道谁在用网**：详情窗口展示应用级实时流量，支持搜索和系统进程过滤。
 - **发现异常更快**：总流量持续超过自定义阈值时可发送本地提醒。
-- **趋势不只看瞬间**：内置最近趋势、今日估算和最近 7 天汇总，适合判断网络是不是持续异常。
+- **趋势不只看瞬间**：内置最近趋势图和今日流量统计，适合判断网络是不是持续异常。
+- **菜单栏养只小宠物**：35 个内置动态角色，动画速度跟随网络活动，也可以导入自己的角色。
+- **菜单栏可自定义**：多种显示模式、布局、颜色模式（纯色 / 彩虹 / 霓虹 / 火焰 / 极光）、字号、顺序、宽度和对齐方式。
 - **轻量、透明、免费**：纯 Swift 实现，无外部依赖，不抓包，不需要管理员权限。
-- **菜单栏可自定义**：支持多种菜单栏预设、字号、颜色、顺序、宽度、对齐、背景和动画角色。
 - **适合长期挂着**：低流量、低电量、锁屏等场景会自动降低采样或暂停部分刷新，减少不必要的资源消耗。
 
 ## 主要功能
@@ -25,33 +26,64 @@ NetBar 会在菜单栏显示当前网络速度，默认展示下载和上传速�
 - 下载 / 上传 / 总流量显示模式
 - 单行或双行布局
 - 自动宽度或手动宽度
-- 字号、行距、文字颜色、背景颜色
+- 字号、行距、文字颜色
+- 颜色模式：纯色、彩虹、霓虹、火焰、极光
 - 下载 / 上传顺序和对齐方式
 - 透明背景和紧凑样式
-- RunCat 动画角色，动画速度会随网络活动变化
+
+### 菜单栏动态小宠物
+
+NetBar 内置 35 个动态角色，会常驻菜单栏陪你上网。角色动画是逐帧绘制的，不占用额外窗口，也不会干扰菜单栏布局。
+
+| 分类 | 数量 | 代表角色 |
+|---|---:|---|
+| 默认 | 7 | 猫咪 α / β / γ、猫尾巴、彩虹猫、游戏猫、派对鹦鹉 |
+| 生物 | 10 | 猎豹、柴犬、兔兔、企鹅、青蛙、棱镜狐、星辉幼龙等 |
+| 非生物 | 8 | 齿轮、篝火、水滴、火箭、钟摆、咖啡杯、小云朵、小盆栽 |
+| 季节 | 4 | 驯鹿与雪橇、雪人、风铃、线香烟花 |
+| 特别 | 6 | 黄金猫、金属集群猫、闪光猫、招财猫、幻彩史莱姆、寿司 |
+
+部分角色动起来的样子（GIF 为固定帧率演示，实际动画速度跟随网络活动变化）：
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/pets/cat.gif" height="100" alt="猫咪 α"><br><sub><b>猫咪 α</b></sub></td>
+<td align="center"><img src="docs/images/pets/party-parrot.gif" height="100" alt="派对鹦鹉"><br><sub><b>派对鹦鹉</b></sub></td>
+<td align="center"><img src="docs/images/pets/mock_nyan_cat.gif" height="100" alt="彩虹猫"><br><sub><b>彩虹猫</b></sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/images/pets/shiba_inu.gif" height="100" alt="柴犬"><br><sub><b>柴犬</b></sub></td>
+<td align="center"><img src="docs/images/pets/golden_cat.gif" height="100" alt="黄金猫"><br><sub><b>黄金猫</b></sub></td>
+<td align="center"><img src="docs/images/pets/maneki_neko.gif" height="100" alt="招财猫"><br><sub><b>招财猫</b></sub></td>
+</tr>
+</table>
+
+角色系统的玩法包括：
+
+- **动画速度跟随网络活动**：网络空闲时角色慢慢踱步（约 0.5 帧/秒），流量升高后加速奔跑（最高 10 帧/秒），网速就是角色的心跳。
+- **可选的动画速度来源**：除了网速，也可以让角色跟随 CPU 使用率、内存占用、热状态或自动综合指标，把小宠物变成一块负载仪表。
+- **深浅色自适应**：单色角色会自动适配浅色 / 深色菜单栏；彩色角色保留原色，大部分角色还支持自定义色调。
+- **角色轮换**：开启后按设定间隔从你选定的角色池中随机切换，保持新鲜感。
+- **省电设计**：网络空闲超过 30 秒角色会定格休息，锁屏时动画自动暂停。
+- **最爱英雄**：详情窗口会统计每个角色的累计播放次数，告诉你最喜欢哪只小宠物。
+- **自定义角色**：支持导入静态图片、GIF 动图或多张帧图（PNG / JPG / GIF / WebP / TIFF / BMP），几步就能把自己的表情包放进菜单栏。
 
 ### 详情窗口
 
 点击菜单栏项目后，NetBar 会打开详情窗口，集中展示当前网络状态：
 
-- 当前总速率与上下行速度
-- 最近趋势图
-- 网络接口明细
-- Wi-Fi、VPN、Bridge 等接口识别
-- 每个接口的实时上下行、累计收发流量、收发包数
-- 应用级实时流量列表
-- 应用级归因覆盖率说明
-- 系统资源概览，包括内存、CPU、进程数和热状态
+- 当前总速率、上下行速度与主网络接口名称
+- 最近趋势脉冲图，可切换时间窗口
+- 今日流量统计与「最爱英雄」卡片
+- 应用级实时流量列表与应用归因说明
 
 ### 应用级流量
 
-NetBar 通过 macOS 自带的 `/usr/bin/nettop` 获取应用级网络统计，并结合 `ps` 补充每个进程的内存和 CPU 数据。
+NetBar 通过 macOS 自带的 `/usr/bin/nettop` 获取应用级网络统计。
 
 应用列表支持：
 
-- 实时流量
-- 内存占用
-- CPU 占用
+- 按实时流量排序
 - 应用搜索
 - 系统进程隐藏
 - 代理、VPN、子进程和系统服务标记
@@ -71,8 +103,7 @@ NetBar 可以在本地检测持续高流量，并通过 macOS 通知提醒你：
 NetBar 会基于本地采样维护轻量历史数据，用于趋势判断：
 
 - 最近趋势窗口
-- 今日估算流量
-- 最近 7 天汇总
+- 今日流量统计
 
 这些数据用于观察趋势，不等同于运营商账单或系统网络用量报表。
 
@@ -104,8 +135,7 @@ NetBar 使用的数据来源主要是：
 
 - `getifaddrs`：读取 macOS 网络接口累计计数器，用于计算实时接口速率。
 - `/usr/bin/nettop`：读取 macOS 自带的应用级网络统计。
-- `ps`：读取应用进程的 CPU 和内存信息。
-- Mach / SystemConfiguration：读取系统资源和主网络接口信息。
+- Mach / SystemConfiguration：读取主网络接口信息；系统资源（CPU / 内存 / 热状态）仅在动画速度来源启用时采样，用于驱动角色动画速度。
 
 ## 下载安装
 
@@ -198,7 +228,7 @@ dist/NetBar.app.zip.sha256
 
 正式发布由 GitHub Actions 自动完成，配置在 `.github/workflows/release.yml`。推送 `v*` tag 后，Actions 会根据 tag 写入 App 版本号、打包 `NetBar.app.zip`，并创建 GitHub Release。
 
-NetBar 的自动更新优先读取 Release 资产 `latest.json`，失败时回退 GitHub Releases API。Release 里必须包含固定资产名 `NetBar.app.zip`，这个名字来自 `Resources/Info.plist` 的 `NBUpdateAssetName`。
+NetBar 的自动更新优先读取 Release 资产 `latest.json`，失败后回退 GitHub Releases API。Release 里必须包含固定资产名 `NetBar.app.zip`，这个名字来自 `Resources/Info.plist` 的 `NBUpdateAssetName`。
 
 1. 确认要发布的代码已经提交，并同步到最新 `main`。
 
@@ -249,7 +279,7 @@ NetBar 是纯 Swift macOS App，无第三方依赖，主要使用 AppKit、Swift
 核心数据流如下：
 
 ```text
-getifaddrs / nettop / ps
+getifaddrs / nettop / Mach
   -> Reader 协议
   -> NetworkMonitor
   -> @Published 快照
@@ -260,16 +290,16 @@ getifaddrs / nettop / ps
 
 关键模块：
 
-- `NetworkMonitor`：核心监控引擎，负责接口速率、应用流量、系统资源和历史数据。
+- `NetworkMonitor`：核心监控引擎，负责接口速率、应用流量采样、历史数据和高流量检测。
 - `NetworkStatsReader`：读取网络接口计数器，并识别主网络接口。
 - `ApplicationTrafficReader`：通过 `nettop` 读取应用级流量。
-- `ApplicationResourceReader`：通过 `ps` 读取应用级 CPU 和内存。
-- `SystemResourceReader`：读取系统内存、CPU 和热状态。
+- `SystemResourceReader`：读取系统内存、CPU 和热状态，用于可选的角色动画速度来源。
 - `StatusBarController`：管理 macOS 菜单栏项目、点击交互和渲染刷新。
 - `StatusBarStyle`：状态栏偏好模型和持久化。
 - `StatusBarColorStyle`：状态栏颜色模式、调色板和布局枚举。
 - `StatusBarRenderer`：CoreGraphics 渲染引擎，负责菜单栏文字、背景和角色绘制。
-- `NetworkPopoverView`：SwiftUI 详情窗口内容。
+- `RunCatAnimation`：内置角色定义、帧动画推进、活动强度映射和角色轮换。
+- `NetworkPopoverView`：SwiftUI 详情窗口内容（位于 `Popover/`）。
 - `AppPreferences`：偏好设置和 UserDefaults 持久化。
 - `AppUpdater` / `AppUpdateRelease`：基于 GitHub Releases 的自动更新协调、Release 解析和完整性校验。
 
@@ -285,7 +315,9 @@ NetBar
 │   ├── StatusBarStyle.swift
 │   ├── StatusBarColorStyle.swift
 │   ├── StatusBarRenderer.swift
-│   ├── NetworkPopoverView.swift
+│   ├── RunCatAnimation.swift
+│   ├── CustomCharacter*.swift
+│   ├── Popover/
 │   ├── Preferences/
 │   └── ...
 ├── Resources
@@ -311,7 +343,7 @@ NetBar
 
 ### NetBar 会不会看到我访问了什么网站？
 
-不会。NetBar 不抓包，也不读取请求内容。它只读取系统已经汇总好的字节数、包数、进程名、CPU、内存等统计信息。
+不会。NetBar 不抓包，也不读取请求内容。它只读取系统已经汇总好的字节数、包数、进程名等统计信息。
 
 ### 为什么历史统计只是估算？
 
@@ -319,11 +351,11 @@ NetBar
 
 ### 为什么需要 `--disable-sandbox` 构建？
 
-构建脚本需要组装 `.app`、复制资源并进行本地签名。运行时还需要访问系统工具，例如 `nettop` 和 `ps`。因此本项目的构建脚本使用 `swift build --disable-sandbox -c release`。
+构建脚本需要组装 `.app`、复制资源并进行本地签名。运行时还需要访问系统工具，例如 `nettop`。因此本项目的构建脚本使用 `swift build --disable-sandbox -c release`。
 
 ### 为什么没有上架 Mac App Store？
 
-NetBar 依赖 `nettop`、`ps` 等系统工具读取本地统计数据，并包含自更新流程。目前更适合通过 GitHub Releases 分发。
+NetBar 依赖 `nettop` 等系统工具读取本地统计数据，并包含自更新流程。目前更适合通过 GitHub Releases 分发。
 
 ## 反馈与贡献
 
