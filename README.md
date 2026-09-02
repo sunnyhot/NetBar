@@ -109,16 +109,21 @@ NetBar 使用的数据来源主要是：
 
 ## 下载安装
 
-你可以从 GitHub Releases 下载最新版本：
+推荐 Homebrew（自动跟随最新 Release，且不受 Gatekeeper 未公证拦截，无「已损坏」提示）：
+
+```bash
+brew tap sunnyhot/tap
+brew install --cask sunnyhot/tap/netbar
+```
+
+或从 GitHub Releases 手动下载：
 
 [下载 NetBar 最新版本](https://github.com/sunnyhot/NetBar/releases/latest)
-
-安装方式：
 
 1. 下载 `NetBar.app.zip`。
 2. 解压得到 `NetBar.app`。
 3. 将 `NetBar.app` 拖入 `/Applications`。
-4. 双击打开，或右键选择「打开」。
+4. 双击打开，或右键选择「打开」（未公证首次打开可能提示「已损坏」，解决方法见下节）。
 
 ## macOS 提示“已损坏”的解决方法
 
