@@ -1,5 +1,9 @@
 # NetBar
 
+[![Release](https://img.shields.io/github/v/release/sunnyhot/NetBar?label=Release)](https://github.com/sunnyhot/NetBar/releases/latest)
+![Platform](https://img.shields.io/badge/platform-macOS%2013%2B-blue)
+![Swift](https://img.shields.io/badge/Swift-5.9%2B-orange)
+
 NetBar 是一个免费的 macOS 菜单栏网络流量监控 App。它把实时下载、上传速度放进菜单栏，点击后可以查看网络趋势、今日统计和应用级流量，持续高流量时还会本地提醒。菜单栏里还可以养一只动态小宠物，网络越忙跑得越快。
 
 它适合想长期观察网络状态、排查网速异常、了解哪些应用正在使用网络的人。NetBar 使用 macOS 系统接口和系统自带工具读取统计数据，不抓包，不读取网页、请求、聊天、文件等网络内容，也不需要管理员权限。
