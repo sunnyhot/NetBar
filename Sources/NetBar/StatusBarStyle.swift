@@ -11,11 +11,8 @@ final class StatusBarSettings: ObservableObject {
     @Published var alignment: StatusBarAlignment { didSet { save() } }
     @Published var showsArrows: Bool { didSet { save() } }
     @Published var isBold: Bool { didSet { save() } }
-    @Published var showsBackground: Bool { didSet { save() } }
-    @Published var backgroundOpacity: Double { didSet { save() } }
     @Published var usesSystemTextColor: Bool { didSet { save() } }
     @Published var textColor: PersistedColor { didSet { save() } }
-    @Published var backgroundColor: PersistedColor { didSet { save() } }
     @Published var showsCat: Bool { didSet { save() } }
     @Published var catCharacter: String { didSet { save() } }
     @Published var catScale: Double { didSet { save() } }
@@ -41,11 +38,8 @@ final class StatusBarSettings: ObservableObject {
         alignment = StatusBarAlignment(rawValue: defaults.string(forKey: Keys.alignment) ?? "") ?? Defaults.alignment
         showsArrows = defaults.object(forKey: Keys.showsArrows) as? Bool ?? Defaults.showsArrows
         isBold = defaults.object(forKey: Keys.isBold) as? Bool ?? Defaults.isBold
-        showsBackground = defaults.object(forKey: Keys.showsBackground) as? Bool ?? Defaults.showsBackground
-        backgroundOpacity = defaults.object(forKey: Keys.backgroundOpacity) as? Double ?? Defaults.backgroundOpacity
         usesSystemTextColor = defaults.object(forKey: Keys.usesSystemTextColor) as? Bool ?? Defaults.usesSystemTextColor
         textColor = Self.color(prefix: Keys.textColor, defaults: defaults, fallback: Defaults.textColor)
-        backgroundColor = Self.color(prefix: Keys.backgroundColor, defaults: defaults, fallback: Defaults.backgroundColor)
         showsCat = defaults.object(forKey: Keys.showsCat) as? Bool ?? Defaults.showsCat
         catCharacter = defaults.string(forKey: Keys.catCharacter) ?? Defaults.catCharacter
         catScale = defaults.object(forKey: Keys.catScale) as? Double ?? Defaults.catScale
@@ -94,11 +88,8 @@ final class StatusBarSettings: ObservableObject {
         alignment = Defaults.alignment
         showsArrows = Defaults.showsArrows
         isBold = Defaults.isBold
-        showsBackground = Defaults.showsBackground
-        backgroundOpacity = Defaults.backgroundOpacity
         usesSystemTextColor = Defaults.usesSystemTextColor
         textColor = Defaults.textColor
-        backgroundColor = Defaults.backgroundColor
         showsCat = Defaults.showsCat
         catCharacter = Defaults.catCharacter
         catScale = Defaults.catScale
@@ -122,11 +113,8 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(alignment.rawValue, forKey: Keys.alignment)
         defaults.set(showsArrows, forKey: Keys.showsArrows)
         defaults.set(isBold, forKey: Keys.isBold)
-        defaults.set(showsBackground, forKey: Keys.showsBackground)
-        defaults.set(backgroundOpacity, forKey: Keys.backgroundOpacity)
         defaults.set(usesSystemTextColor, forKey: Keys.usesSystemTextColor)
         save(textColor, prefix: Keys.textColor)
-        save(backgroundColor, prefix: Keys.backgroundColor)
         defaults.set(showsCat, forKey: Keys.showsCat)
         defaults.set(catCharacter, forKey: Keys.catCharacter)
         defaults.set(catScale, forKey: Keys.catScale)
@@ -170,11 +158,8 @@ final class StatusBarSettings: ObservableObject {
         static let alignment = StatusBarAlignment.leading
         static let showsArrows = true
         static let isBold = true
-        static let showsBackground = false
-        static let backgroundOpacity = 0.0
         static let usesSystemTextColor = true
         static let textColor = PersistedColor.white
-        static let backgroundColor = PersistedColor.olive
         static let showsCat = true
         static let catCharacter = "cat"
         static let catScale = 1.0
@@ -198,11 +183,8 @@ final class StatusBarSettings: ObservableObject {
         static let alignment = "statusBar.alignment"
         static let showsArrows = "statusBar.showsArrows"
         static let isBold = "statusBar.isBold"
-        static let showsBackground = "statusBar.showsBackground"
-        static let backgroundOpacity = "statusBar.backgroundOpacity"
         static let usesSystemTextColor = "statusBar.usesSystemTextColor"
         static let textColor = "statusBar.textColor"
-        static let backgroundColor = "statusBar.backgroundColor"
         static let showsCat = "statusBar.showsCat"
         static let catCharacter = "statusBar.catCharacter"
         static let catScale = "statusBar.catScale"

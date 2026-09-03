@@ -155,20 +155,11 @@ struct StatusBarPreview: View {
             )
             let presentation = renderOutput.presentation
 
-            if presentation.kind == .nativeTitle {
-                Text(AttributedString(StatusBarDisplayRenderer.attributedTitle(snapshot: previewSnapshot, settings: settings)))
-                    .multilineTextAlignment(textAlignment)
-                    .frame(
-                        width: presentation.width,
-                        height: max(NSStatusBar.system.thickness, 24)
-                    )
-            } else {
-                Image(nsImage: renderOutput.image)
+            Image(nsImage: renderOutput.image)
                 .frame(
                     width: presentation.width,
                     height: max(NSStatusBar.system.thickness, 24)
                 )
-            }
             Spacer()
         }
         .frame(height: 56)
@@ -203,17 +194,6 @@ struct StatusBarPreview: View {
             .clipShape(RoundedRectangle(cornerRadius: 10))
         )
     }
-
-    private var textAlignment: TextAlignment {
-        switch settings.alignment {
-        case .leading:
-            return .leading
-        case .center:
-            return .center
-        case .trailing:
-            return .trailing
-        }
-    }
 }
 
 // MARK: - Menu Bar Settings Summary
@@ -232,10 +212,6 @@ struct MenuBarSettingsSummary: View {
             NetBarBadge(
                 text: settings.usesAutomaticWidth ? appPreferences.text("自动宽度", "Auto width") : appPreferences.text("手动宽度", "Manual width"),
                 tone: .neutral
-            )
-            NetBarBadge(
-                text: settings.showsBackground ? appPreferences.text("背景开启", "Background on") : appPreferences.text("透明背景", "Transparent"),
-                tone: settings.showsBackground ? .success : .neutral
             )
             if settings.showsCat {
                 NetBarBadge(text: String(format: "%.1fx", settings.catSpeedMultiplier), tone: .upload)

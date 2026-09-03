@@ -33,16 +33,14 @@ final class PreferencesAndPresentationTests: XCTestCase {
         }
     }
 
-    func testStatusBarAlwaysUsesRetinaImage() {
+    func testStatusBarPresentationExposesLinesAndStableWidth() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsBackground = false
 
         let presentation = StatusBarDisplayRenderer.presentation(
             snapshot: sampleSnapshot(download: 42_000, upload: 9_500),
             settings: settings
         )
 
-        XCTAssertEqual(presentation.kind, .retinaImage)
         XCTAssertEqual(presentation.lines.count, 2)
         XCTAssertGreaterThanOrEqual(
             presentation.width,
@@ -50,9 +48,8 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
-    func testStatusBarBackgroundAutomaticWidthUsesCompactHorizontalPadding() {
+    func testStatusBarAutomaticWidthUsesHorizontalTextPadding() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsBackground = true
         settings.showsCat = false
         settings.trafficDisplayMode = .upDown
         settings.showsArrows = true
@@ -75,10 +72,10 @@ final class PreferencesAndPresentationTests: XCTestCase {
             settings: settings
         )
 
-        XCTAssertEqual(presentation.width, ceil(stableTextWidth + 6))
+        XCTAssertEqual(presentation.width, ceil(stableTextWidth + 4))
         XCTAssertEqual(
             StatusBarDisplayRenderer.stableMinimumWidth(settings: settings),
-            ceil(stableTextWidth + 6)
+            ceil(stableTextWidth + 4)
         )
     }
 
@@ -190,77 +187,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         )
     }
 
-    func testStatusBarPulseRenderPolicyDisablesBucketForIdleAndReducedMotion() {
-        XCTAssertEqual(
-            StatusBarPulseRenderPolicy.timeBucket(
-                snapshot: sampleSnapshot(download: 0, upload: 0),
-                reduceMotion: false,
-                renderTime: 12.4
-            ),
-            0
-        )
-
-        XCTAssertEqual(
-            StatusBarPulseRenderPolicy.timeBucket(
-                snapshot: sampleSnapshot(download: 2_000_000, upload: 100_000),
-                reduceMotion: true,
-                renderTime: 12.4
-            ),
-            0
-        )
-    }
-
-    func testStatusBarPulseRenderPolicyQuantizesActiveTrafficAtTwoHz() {
-        let snapshot = sampleSnapshot(download: 2_000_000, upload: 100_000)
-
-        XCTAssertEqual(
-            StatusBarPulseRenderPolicy.timeBucket(
-                snapshot: snapshot,
-                reduceMotion: false,
-                renderTime: 10.24
-            ),
-            20
-        )
-        XCTAssertEqual(
-            StatusBarPulseRenderPolicy.timeBucket(
-                snapshot: snapshot,
-                reduceMotion: false,
-                renderTime: 10.26
-            ),
-            20
-        )
-        XCTAssertEqual(
-            StatusBarPulseRenderPolicy.timeBucket(
-                snapshot: snapshot,
-                reduceMotion: false,
-                renderTime: 10.51
-            ),
-            21
-        )
-    }
-
-    func testStatusBarSignatureIncludesPulseBucketOnlyForActiveTraffic() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-
-        let idleSignature = StatusBarDisplayRenderer.signature(
-            snapshot: sampleSnapshot(download: 0, upload: 0),
-            settings: settings,
-            appearanceName: "NSAppearanceNameAqua",
-            renderTime: 10.51,
-            reduceMotion: false
-        )
-        XCTAssertEqual(idleSignature.statusPulseTimeBucket, 0)
-
-        let activeSignature = StatusBarDisplayRenderer.signature(
-            snapshot: sampleSnapshot(download: 2_000_000, upload: 100_000),
-            settings: settings,
-            appearanceName: "NSAppearanceNameAqua",
-            renderTime: 10.51,
-            reduceMotion: false
-        )
-        XCTAssertEqual(activeSignature.statusPulseTimeBucket, 21)
-    }
-
     func testStatusBarTextLayoutCacheReusesMatchingInputs() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         let cache = StatusBarTextLayoutCache(limit: 2)
@@ -268,8 +194,7 @@ final class PreferencesAndPresentationTests: XCTestCase {
             lines: ["down", "up"],
             fontSize: settings.fontSize,
             isBold: settings.isBold,
-            alignment: settings.alignment,
-            showsBackground: settings.showsBackground
+            alignment: settings.alignment
         )
         let layout = StatusBarCachedTextLayout(
             width: 48,
@@ -352,19 +277,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         settings.reset()
 
         XCTAssertEqual(settings.trafficDisplayMode, .upDown)
-    }
-
-    func testStatusBarRetinaImageWithBackground() {
-        let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsBackground = true
-        settings.backgroundOpacity = 0.7
-
-        let presentation = StatusBarDisplayRenderer.presentation(
-            snapshot: sampleSnapshot(download: 1_500_000, upload: 750_000),
-            settings: settings
-        )
-
-        XCTAssertEqual(presentation.kind, .retinaImage)
     }
 
     func testAnimatedCharacterCatalogDoesNotRunItsOwnTimer() throws {
@@ -501,18 +413,15 @@ final class PreferencesAndPresentationTests: XCTestCase {
 
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
         settings.usesSystemTextColor = false
         settings.textColor = .white
-        settings.backgroundColor = .olive
 
         let image = StatusBarDisplayRenderer.image(
             snapshot: sampleSnapshot(download: 310_000, upload: 153_000),
             settings: settings,
             scale: 2
         )
-        let textBounds = foregroundPixelBounds(in: image, background: settings.backgroundColor)
+        let textBounds = foregroundPixelBounds(in: image, background: .olive)
 
         XCTAssertLessThanOrEqual(abs(textBounds.topMargin - textBounds.bottomMargin), 2)
     }
@@ -1706,9 +1615,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         settings.catCharacter = "golden_cat"
         settings.catColorMode = CatColorMode.solid.rawValue
         settings.catColor = PersistedColor(red: 0.02, green: 0.18, blue: 1.0, alpha: 1)
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
-        settings.backgroundColor = .olive
         settings.usesSystemTextColor = false
         settings.textColor = .black
 
@@ -2130,9 +2036,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsCat = true
         settings.catCharacter = imported.id
-        settings.showsBackground = true
-        settings.backgroundOpacity = 1
-        settings.backgroundColor = .olive
         settings.usesSystemTextColor = false
         settings.textColor = .black
 

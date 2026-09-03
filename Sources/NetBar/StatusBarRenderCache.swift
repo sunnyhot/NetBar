@@ -114,7 +114,6 @@ struct StatusBarTextLayoutCacheKey: Hashable {
     let fontSize: Double
     let isBold: Bool
     let alignment: StatusBarAlignment
-    let showsBackground: Bool
 }
 
 struct StatusBarCachedTextLayout: Equatable {

@@ -1,13 +1,6 @@
 import AppKit
 
-@MainActor
-enum StatusBarPresentationKind: Equatable {
-    case nativeTitle
-    case retinaImage
-}
-
 struct StatusBarPresentation: Equatable {
-    let kind: StatusBarPresentationKind
     let width: CGFloat
     let lines: [String]
 }
@@ -22,12 +15,8 @@ struct StatusBarRenderSignature: Equatable {
     let alignment: StatusBarAlignment
     let showsArrows: Bool
     let isBold: Bool
-    let showsBackground: Bool
-    let backgroundOpacity: Double
     let usesSystemTextColor: Bool
     let textColor: PersistedColor
-    let backgroundColor: PersistedColor
-    let statusPulseTimeBucket: Int
     let appearanceName: String
     let catFrameIndex: Int?
     let catCharacter: String
@@ -39,35 +28,6 @@ struct StatusBarRenderSignature: Equatable {
     let catColorTimeBucket: Int  // For dynamic modes: time quantized to ~250ms buckets
     let catHeadSwing: Bool
     let customCharacterRevision: Int
-}
-
-enum StatusBarPulseRenderPolicy {
-    static let activeTrafficThresholdBytesPerSecond: Double = 100_000
-
-    static func isActive(snapshot: NetworkSnapshot) -> Bool {
-        snapshot.downloadBytesPerSecond + snapshot.uploadBytesPerSecond >= activeTrafficThresholdBytesPerSecond
-    }
-
-    static func timeBucket(
-        snapshot: NetworkSnapshot,
-        reduceMotion: Bool,
-        renderTime: TimeInterval
-    ) -> Int {
-        guard !reduceMotion, isActive(snapshot: snapshot) else { return 0 }
-        return Int(renderTime * 2)
-    }
-
-    static func pulseAlpha(
-        snapshot: NetworkSnapshot,
-        reduceMotion: Bool,
-        renderTime: TimeInterval
-    ) -> CGFloat {
-        guard timeBucket(snapshot: snapshot, reduceMotion: reduceMotion, renderTime: renderTime) > 0 else {
-            return 0
-        }
-        let wave = 0.5 + 0.5 * sin(renderTime * .pi * 2)
-        return CGFloat(0.08 + wave * 0.1)
-    }
 }
 
 @MainActor
@@ -185,7 +145,6 @@ enum StatusBarDisplayRenderer {
             catFrameIndex: catFrameIndex
         )
         return StatusBarPresentation(
-            kind: .retinaImage,
             width: layout.width,
             lines: layout.lines
         )
@@ -219,16 +178,8 @@ enum StatusBarDisplayRenderer {
             alignment: settings.alignment,
             showsArrows: settings.showsArrows,
             isBold: settings.isBold,
-            showsBackground: settings.showsBackground,
-            backgroundOpacity: settings.backgroundOpacity,
             usesSystemTextColor: settings.usesSystemTextColor,
             textColor: settings.textColor,
-            backgroundColor: settings.backgroundColor,
-            statusPulseTimeBucket: StatusBarPulseRenderPolicy.timeBucket(
-                snapshot: snapshot,
-                reduceMotion: reduceMotion,
-                renderTime: renderTime
-            ),
             appearanceName: appearanceName,
             catFrameIndex: catFrameIndex,
             catCharacter: effectiveCharacter.id,
@@ -241,11 +192,6 @@ enum StatusBarDisplayRenderer {
             catHeadSwing: settings.catHeadSwing,
             customCharacterRevision: customCharacterStore?.revision ?? 0
         )
-    }
-
-    static func attributedTitle(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSAttributedString {
-        let layout = layout(snapshot: snapshot, settings: settings, customCharacterStore: nil)
-        return attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings)
     }
 
     static func image(snapshot: NetworkSnapshot, settings: StatusBarSettings) -> NSImage {
@@ -314,25 +260,6 @@ enum StatusBarDisplayRenderer {
         NSColor.clear.setFill()
         NSRect(origin: .zero, size: size).fill()
 
-        if settings.showsBackground {
-            settings.backgroundColor.nsColor
-                .withAlphaComponent(CGFloat(settings.backgroundOpacity.clamped(to: 0...1)))
-                .setFill()
-            NSRect(origin: .zero, size: size).fill()
-            let pulseAlpha = StatusBarPulseRenderPolicy.pulseAlpha(
-                snapshot: snapshot,
-                reduceMotion: NSWorkspace.shared.accessibilityDisplayShouldReduceMotion,
-                renderTime: renderTime
-            )
-            if pulseAlpha > 0 {
-                let pulseColor = snapshot.uploadBytesPerSecond > snapshot.downloadBytesPerSecond
-                    ? NSColor.systemOrange
-                    : NSColor.systemTeal
-                pulseColor.withAlphaComponent(pulseAlpha).setFill()
-                NSRect(origin: .zero, size: size).fill()
-            }
-        }
-
         // Determine if cat has custom coloring (non-default-white solid or fancy mode)
         let colorMode = CatColorMode(rawValue: settings.catColorMode) ?? .solid
         let catHasCustomColor: Bool
@@ -357,7 +284,7 @@ enum StatusBarDisplayRenderer {
         // When cat has custom colors, we cannot use template image mode
         // because macOS would re-tint the entire image, inverting custom colors.
         // Instead, render with explicit colors for both cat and text.
-        let useTemplate = settings.usesSystemTextColor && !settings.showsBackground && !catHasCustomColor
+        let useTemplate = settings.usesSystemTextColor && !catHasCustomColor
         let textColor = useTemplate ? NSColor.black : settings.effectiveTextColor
 
         var textRect = NSRect(
@@ -573,13 +500,12 @@ enum StatusBarDisplayRenderer {
         max(2, 3 * settings.clampedCatScale)
     }
 
+    /// 状态项内容与两侧边缘的水平内距(背景模式曾用 3,背景移除后统一为 2)。
+    private static let horizontalTextPadding: CGFloat = 2
+
     /// 两行上下行布局的固定行高修正。原为用户偏好 statusBar.lineSpacing
     /// (默认 -2.0),精简设置面后固定为原默认值。
     private static let statusBarLineSpacingAdjustment: CGFloat = -2.0
-
-    private static func horizontalPadding(settings: StatusBarSettings) -> CGFloat {
-        settings.showsBackground ? 3 : 2
-    }
 
     static func shouldMirrorCharacter(settings: StatusBarSettings, frameIndex: Int) -> Bool {
         let baseMirror = settings.catFacing == .left
@@ -604,7 +530,7 @@ enum StatusBarDisplayRenderer {
             ofSize: settings.clampedFontSize,
             weight: settings.fontWeight
         )
-        let horizontalPadding = horizontalPadding(settings: settings)
+        let horizontalPadding = horizontalTextPadding
         let stableWidth = stableWidthTemplates(settings: settings)
             .map { NSString(string: $0).size(withAttributes: [.font: font]).width }
             .max() ?? 1
@@ -645,13 +571,12 @@ enum StatusBarDisplayRenderer {
                 return [total]
             }
         }()
-        let horizontalPadding = horizontalPadding(settings: settings)
+        let horizontalPadding = horizontalTextPadding
         let cacheKey = StatusBarTextLayoutCacheKey(
             lines: lines,
             fontSize: settings.fontSize,
             isBold: settings.isBold,
-            alignment: settings.alignment,
-            showsBackground: settings.showsBackground
+            alignment: settings.alignment
         )
         if settings.usesAutomaticWidth, let cached = textLayoutCache.layout(for: cacheKey) {
             let catExtraWidth = characterExtraWidth(
