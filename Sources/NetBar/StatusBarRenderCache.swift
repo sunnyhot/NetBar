@@ -113,7 +113,6 @@ struct StatusBarTextLayoutCacheKey: Hashable {
     let lines: [String]
     let fontSize: Double
     let isBold: Bool
-    let lineSpacing: Double
     let alignment: StatusBarAlignment
     let showsBackground: Bool
 }

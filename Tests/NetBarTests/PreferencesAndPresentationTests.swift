@@ -268,7 +268,6 @@ final class PreferencesAndPresentationTests: XCTestCase {
             lines: ["down", "up"],
             fontSize: settings.fontSize,
             isBold: settings.isBold,
-            lineSpacing: settings.lineSpacing,
             alignment: settings.alignment,
             showsBackground: settings.showsBackground
         )
@@ -421,6 +420,29 @@ final class PreferencesAndPresentationTests: XCTestCase {
         // 对齐仅在手动宽度下显示(文件中共出现两次 if !settings.usesAutomaticWidth:
         // 手动宽度滑杆 + 对齐 Picker)
         XCTAssertEqual(layoutSource.components(separatedBy: "if !settings.usesAutomaticWidth").count - 1, 2)
+    }
+
+    func testLegacyLineSpacingPreferenceIsIgnoredBySignature() {
+        let legacyDefaults = isolatedDefaults()
+        legacyDefaults.set(6.0, forKey: "statusBar.lineSpacing")
+        let legacySettings = StatusBarSettings(defaults: legacyDefaults)
+        let plainSettings = StatusBarSettings(defaults: isolatedDefaults())
+        let snapshot = sampleSnapshot(download: 42_000, upload: 9_500)
+
+        let legacySignature = StatusBarDisplayRenderer.signature(
+            snapshot: snapshot,
+            settings: legacySettings,
+            appearanceName: "NSAppearanceNameAqua",
+            reduceMotion: true
+        )
+        let plainSignature = StatusBarDisplayRenderer.signature(
+            snapshot: snapshot,
+            settings: plainSettings,
+            appearanceName: "NSAppearanceNameAqua",
+            reduceMotion: true
+        )
+
+        XCTAssertEqual(legacySignature, plainSignature)
     }
 
     func testRetinaStatusBarImageCentersTextVertically() {

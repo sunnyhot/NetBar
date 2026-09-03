@@ -6,7 +6,6 @@ final class StatusBarSettings: ObservableObject {
     @Published var fontSize: Double { didSet { save() } }
     @Published var itemWidth: Double { didSet { save() } }
     @Published var usesAutomaticWidth: Bool { didSet { save() } }
-    @Published var lineSpacing: Double { didSet { save() } }
     @Published var trafficDisplayMode: StatusBarTrafficDisplayMode { didSet { save() } }
     @Published var order: StatusBarOrder { didSet { save() } }
     @Published var alignment: StatusBarAlignment { didSet { save() } }
@@ -38,7 +37,6 @@ final class StatusBarSettings: ObservableObject {
         fontSize = defaults.object(forKey: Keys.fontSize) as? Double ?? Defaults.fontSize
         itemWidth = defaults.object(forKey: Keys.itemWidth) as? Double ?? Defaults.itemWidth
         usesAutomaticWidth = defaults.object(forKey: Keys.usesAutomaticWidth) as? Bool ?? Defaults.usesAutomaticWidth
-        lineSpacing = defaults.object(forKey: Keys.lineSpacing) as? Double ?? Defaults.lineSpacing
         trafficDisplayMode = StatusBarTrafficDisplayMode(rawValue: defaults.string(forKey: Keys.trafficDisplayMode) ?? "") ?? Defaults.trafficDisplayMode
         order = StatusBarOrder(rawValue: defaults.string(forKey: Keys.order) ?? "") ?? Defaults.order
         alignment = StatusBarAlignment(rawValue: defaults.string(forKey: Keys.alignment) ?? "") ?? Defaults.alignment
@@ -72,10 +70,6 @@ final class StatusBarSettings: ObservableObject {
         CGFloat(itemWidth.clamped(to: 36...220))
     }
 
-    var clampedLineSpacing: CGFloat {
-        CGFloat(lineSpacing.clamped(to: -5...8))
-    }
-
     var clampedCatScale: CGFloat {
         CGFloat(catScale.clamped(to: 0.7...1.3))
     }
@@ -97,7 +91,6 @@ final class StatusBarSettings: ObservableObject {
         fontSize = Defaults.fontSize
         itemWidth = Defaults.itemWidth
         usesAutomaticWidth = Defaults.usesAutomaticWidth
-        lineSpacing = Defaults.lineSpacing
         trafficDisplayMode = Defaults.trafficDisplayMode
         order = Defaults.order
         alignment = Defaults.alignment
@@ -127,7 +120,6 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(fontSize, forKey: Keys.fontSize)
         defaults.set(itemWidth, forKey: Keys.itemWidth)
         defaults.set(usesAutomaticWidth, forKey: Keys.usesAutomaticWidth)
-        defaults.set(lineSpacing, forKey: Keys.lineSpacing)
         defaults.set(trafficDisplayMode.rawValue, forKey: Keys.trafficDisplayMode)
         defaults.set(order.rawValue, forKey: Keys.order)
         defaults.set(alignment.rawValue, forKey: Keys.alignment)
@@ -177,7 +169,6 @@ final class StatusBarSettings: ObservableObject {
         static let fontSize = 11.5
         static let itemWidth = 96.0
         static let usesAutomaticWidth = true
-        static let lineSpacing = -2.0
         static let trafficDisplayMode = StatusBarTrafficDisplayMode.upDown
         static let order = StatusBarOrder.uploadFirst
         static let alignment = StatusBarAlignment.leading
@@ -207,7 +198,6 @@ final class StatusBarSettings: ObservableObject {
         static let fontSize = "statusBar.fontSize"
         static let itemWidth = "statusBar.itemWidth"
         static let usesAutomaticWidth = "statusBar.usesAutomaticWidth"
-        static let lineSpacing = "statusBar.lineSpacing"
         static let trafficDisplayMode = "statusBar.trafficDisplayMode"
         static let order = "statusBar.order"
         static let alignment = "statusBar.alignment"

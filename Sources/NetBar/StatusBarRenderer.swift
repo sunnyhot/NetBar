@@ -17,7 +17,6 @@ struct StatusBarRenderSignature: Equatable {
     let fontSize: Double
     let itemWidth: Double
     let usesAutomaticWidth: Bool
-    let lineSpacing: Double
     let trafficDisplayMode: StatusBarTrafficDisplayMode
     let order: StatusBarOrder
     let alignment: StatusBarAlignment
@@ -215,7 +214,6 @@ enum StatusBarDisplayRenderer {
             fontSize: settings.fontSize,
             itemWidth: settings.itemWidth,
             usesAutomaticWidth: settings.usesAutomaticWidth,
-            lineSpacing: settings.lineSpacing,
             trafficDisplayMode: settings.trafficDisplayMode,
             order: settings.order,
             alignment: settings.alignment,
@@ -575,6 +573,10 @@ enum StatusBarDisplayRenderer {
         max(2, 3 * settings.clampedCatScale)
     }
 
+    /// 两行上下行布局的固定行高修正。原为用户偏好 statusBar.lineSpacing
+    /// (默认 -2.0),精简设置面后固定为原默认值。
+    private static let statusBarLineSpacingAdjustment: CGFloat = -2.0
+
     private static func horizontalPadding(settings: StatusBarSettings) -> CGFloat {
         settings.showsBackground ? 3 : 2
     }
@@ -648,7 +650,6 @@ enum StatusBarDisplayRenderer {
             lines: lines,
             fontSize: settings.fontSize,
             isBold: settings.isBold,
-            lineSpacing: settings.lineSpacing,
             alignment: settings.alignment,
             showsBackground: settings.showsBackground
         )
@@ -758,7 +759,7 @@ enum StatusBarDisplayRenderer {
 
     private static func lineHeight(for font: NSFont, settings: StatusBarSettings) -> CGFloat {
         let naturalLineHeight = font.ascender - font.descender
-        return max(naturalLineHeight + settings.clampedLineSpacing, 8)
+        return max(naturalLineHeight + Self.statusBarLineSpacingAdjustment, 8)
     }
 
     private static func tintImage(_ image: NSImage, color: NSColor) -> NSImage? {

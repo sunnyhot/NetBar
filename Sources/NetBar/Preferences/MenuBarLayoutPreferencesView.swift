@@ -24,13 +24,6 @@ struct MenuBarLayoutSectionContent: View {
             )
         }
 
-        SliderPreference(
-            title: appPreferences.text("行距", "Line spacing"),
-            value: $settings.lineSpacing,
-            range: -5...8,
-            displayValue: String(format: "%.1f", settings.lineSpacing)
-        )
-
         Picker(appPreferences.text("内容", "Content"), selection: $settings.trafficDisplayMode) {
             ForEach(StatusBarTrafficDisplayMode.allCases) { mode in
                 Text(mode.title(language: appPreferences.resolvedLanguage)).tag(mode)
