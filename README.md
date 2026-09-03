@@ -30,10 +30,9 @@ NetBar 会在菜单栏显示当前网络速度，默认展示下载和上传速�
 - 下载 / 上传 / 总流量显示模式
 - 单行或双行布局
 - 自动宽度或手动宽度
-- 字号、行距、文字颜色
+- 字号、文字颜色
 - 颜色模式：纯色、彩虹、霓虹、火焰、极光
 - 下载 / 上传顺序和对齐方式
-- 透明背景和紧凑样式
 
 ### 菜单栏动态小宠物
 
@@ -356,7 +355,7 @@ getifaddrs / nettop / Mach
 - `StatusBarController`：管理 macOS 菜单栏项目、点击交互和渲染刷新。
 - `StatusBarStyle`：状态栏偏好模型和持久化。
 - `StatusBarColorStyle`：状态栏颜色模式、调色板和布局枚举。
-- `StatusBarRenderer`：CoreGraphics 渲染引擎，负责菜单栏文字、背景和角色绘制。
+- `StatusBarRenderer`：CoreGraphics 渲染引擎，负责菜单栏文字和角色绘制。
 - `RunCatAnimation`：内置角色定义、帧动画推进、活动强度映射和角色轮换。
 - `NetworkPopoverView`：SwiftUI 详情窗口内容（位于 `Popover/`）。
 - `AppPreferences`：偏好设置和 UserDefaults 持久化。
