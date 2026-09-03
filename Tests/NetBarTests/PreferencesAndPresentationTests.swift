@@ -3493,6 +3493,16 @@ extension PreferencesAndPresentationTests {
         XCTAssertFalse(exact.isTruncated, "搜索命中数低于上限时不应截断")
     }
 
+    func testApplicationTrafficRowAccessibilityCombinesChildren() throws {
+        let source = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Popover", "ApplicationTrafficPanel.swift"]
+        )
+
+        // 整行合并朗读一次,VoiceOver 不再重复读出行内装饰元素
+        XCTAssertTrue(source.contains(".accessibilityElement(children: .combine)"))
+        XCTAssertTrue(source.contains(".accessibilityHidden(true)"), "AppBadge 首字母装饰图标应对读屏隐藏")
+    }
+
     func testApplicationSummaryUsesVisibleApplications() {
         let applications = [
             appWithResources("Idle App", processNames: ["Idle App"]),

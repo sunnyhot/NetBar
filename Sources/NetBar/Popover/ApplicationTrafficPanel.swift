@@ -193,46 +193,34 @@ private struct AppTrafficAttributionCard: View {
                 .foregroundStyle(tint)
                 .frame(width: 24, height: 24)
 
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(title)
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(.primary)
-                    Text(detail)
-                        .font(.system(size: 9, weight: .semibold, design: .monospaced))
-                        .foregroundStyle(.tertiary)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.8)
-                }
-
-                if !message.isEmpty {
-                    Text(message)
-                        .font(.system(size: 10, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
+            Text(headline)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(.primary)
 
             Spacer(minLength: 8)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .livingSignalRow(tone: livingTone, padding: 9)
+        .help(details)
     }
 
-    private var title: String {
+    /// 一句话人话;细节(接口/应用速率、代理候选、采样数)收进 tooltip
+    private var headline: String {
         guard let coverage = summary.coveragePercentage else {
             return preferences.text("归因待采样", "Attribution pending")
         }
-        return "\(preferences.text("应用级归因", "App attribution")) \(coverage)%"
+        return preferences.text(
+            "应用合计约为接口总流量的 \(coverage)%",
+            "Apps account for about \(coverage)% of interface traffic"
+        )
     }
 
-    private var detail: String {
-        "\(preferences.text("接口", "Interface")) \(ByteFormat.speed(summary.interfaceBytesPerSecond)) · \(preferences.text("应用", "Apps")) \(ByteFormat.speed(summary.applicationBytesPerSecond))"
-    }
-
-    private var message: String {
+    private var details: String {
         var parts: [String] = []
+        parts.append(preferences.text(
+            "接口 \(ByteFormat.speed(summary.interfaceBytesPerSecond)) · 应用 \(ByteFormat.speed(summary.applicationBytesPerSecond))",
+            "Interface \(ByteFormat.speed(summary.interfaceBytesPerSecond)) · Apps \(ByteFormat.speed(summary.applicationBytesPerSecond))"
+        ))
         if summary.status == .partial {
             parts.append(preferences.text("总流量与应用汇总存在差异", "Interface and app totals differ"))
         }
@@ -242,7 +230,7 @@ private struct AppTrafficAttributionCard: View {
             parts.append(preferences.text("子进程：\(helper)", "Helper: \(helper)"))
         }
         parts.append("\(preferences.text("采样", "Samples")) \(sampleCount) · \(preferences.text("应用行", "Rows")) \(applicationCount)")
-        return parts.joined(separator: " · ")
+        return parts.joined(separator: "\n")
     }
 
     private var symbol: String {
@@ -419,6 +407,7 @@ struct ApplicationTrafficRow: View {
                 .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.5)
         )
         .opacity(isDimmed ? 0.55 : 1)
+        .accessibilityElement(children: .combine)
     }
 
     private var detailSubtitle: String {
@@ -538,6 +527,7 @@ struct AppBadge: View {
             )
         .frame(width: 24, height: 24)
         .clipShape(RoundedRectangle(cornerRadius: 6))
+        .accessibilityHidden(true)
     }
 
     private var initial: String {
