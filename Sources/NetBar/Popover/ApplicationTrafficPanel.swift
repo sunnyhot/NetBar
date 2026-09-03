@@ -96,7 +96,9 @@ private struct ApplicationTrafficList: View {
                     AppTrafficNotice(
                         symbol: isInitialLoading ? "arrow.triangle.2.circlepath" : "line.3.horizontal.decrease.circle",
                         title: isInitialLoading ? preferences.text("正在读取应用流量", "Reading Application Traffic") : emptyTitle,
-                        message: emptyMessage
+                        message: emptyMessage,
+                        showsProgress: isInitialLoading,
+                        minContentHeight: isInitialLoading ? 96 : nil
                     )
                 } else {
                     if appTraffic.isStale {
@@ -161,8 +163,8 @@ private struct ApplicationTrafficList: View {
     private var emptyMessage: String {
         if isInitialLoading {
             return preferences.text(
-                "应用级数据来自 macOS nettop，首次采样后会显示实时速率。",
-                "Application-level data comes from macOS nettop. Live rates appear after the first sample."
+                "应用级数据来自 macOS nettop，首次采样约需 2 秒，请稍候。",
+                "Application-level data comes from macOS nettop. The first sample takes about 2 seconds."
             )
         }
         if !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -298,13 +300,23 @@ private struct AppTrafficNotice: View {
     let message: String
     var actionTitle: String? = nil
     var action: (() -> Void)? = nil
+    /// 加载态显示旋转进度指示(替代静态图标)
+    var showsProgress: Bool = false
+    /// 加载态最小高度占位,避免数据出现时面板高度跳动
+    var minContentHeight: CGFloat? = nil
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: symbol)
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(.secondary)
-                .frame(width: 24, height: 24)
+            if showsProgress {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(width: 24, height: 24)
+            } else {
+                Image(systemName: symbol)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 24, height: 24)
+            }
 
             VStack(alignment: .leading, spacing: 3) {
                 Text(title)
@@ -324,6 +336,19 @@ private struct AppTrafficNotice: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .livingSignalRow(tone: actionTitle == nil ? .idle : .attention, padding: 12)
+        .modifier(OptionalMinHeight(height: minContentHeight))
+    }
+}
+
+private struct OptionalMinHeight: ViewModifier {
+    let height: CGFloat?
+
+    func body(content: Content) -> some View {
+        if let height {
+            content.frame(minHeight: height)
+        } else {
+            content
+        }
     }
 }
 

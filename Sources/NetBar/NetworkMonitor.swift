@@ -31,6 +31,7 @@ final class NetworkMonitor: ObservableObject {
     private var previousStats: [String: InterfaceStats] = [:]
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
+    private var needsImmediateFollowUpSample = false
     private var previousApplicationSampleDate: Date?
     private var anomalyDetector = NetworkAnomalyDetector()
     private var previousCPUTickSample: CPUTickSample?
@@ -134,6 +135,9 @@ final class NetworkMonitor: ObservableObject {
         applicationTimer?.invalidate()
         applicationTimer = nil
         streamingReader?.start()
+        // 冷启动首值加速:基线样本落地后立即跟随一次采样,让首个真实速率
+        // 提前到基线落地时刻,而非等待下一个定时器周期
+        needsImmediateFollowUpSample = true
         refreshApplicationTraffic()
         scheduleApplicationTrafficTimer()
     }
@@ -420,6 +424,13 @@ final class NetworkMonitor: ObservableObject {
             guard generation == self.applicationTrafficGeneration,
                   self.shouldSampleApplicationTraffic else { return }
             self.applyApplicationTraffic(result, sampledAt: self.now())
+            if self.needsImmediateFollowUpSample {
+                self.needsImmediateFollowUpSample = false
+                // 仅成功样本触发跟随采样;错误样本保留错误卡片等待用户手动重试
+                if result.errorMessage == nil {
+                    self.refreshApplicationTraffic()
+                }
+            }
         }
     }
 

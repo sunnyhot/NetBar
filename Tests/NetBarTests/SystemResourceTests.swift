@@ -639,7 +639,7 @@ final class SystemResourceTests: XCTestCase {
         // After first sample completes, isRefreshing must be false
         XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false after first sample completes")
         XCTAssertNil(monitor.appTraffic.errorMessage, "No error expected for empty results")
-        XCTAssertEqual(monitor.appTraffic.sampleCount, 1, "sampleCount should be 1 after first sample")
+        XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1, "sampleCount should be at least 1 after first sample (基线后可能立即跟随采样)")
     }
 
     func testRefreshApplicationTrafficErrorTransitionsOutOfRefreshing() async {
@@ -867,7 +867,7 @@ final class SystemResourceTests: XCTestCase {
 
         // Empty result + no streaming → isRefreshing must be false
         XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false when streamingReader is nil and data is empty")
-        XCTAssertEqual(monitor.appTraffic.sampleCount, 1)
+        XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1)
     }
 
     func testFirstSampleWithDataStopsRefreshingRegardlessOfStreaming() async {
@@ -892,8 +892,8 @@ final class SystemResourceTests: XCTestCase {
         try? await Task.sleep(nanoseconds: 500_000_000)
 
         XCTAssertFalse(monitor.appTraffic.isRefreshing, "isRefreshing should be false when first sample has data")
-        XCTAssertEqual(monitor.appTraffic.sampleCount, 1)
-        XCTAssertEqual(monitor.appTraffic.applications.count, 1)
+        XCTAssertGreaterThanOrEqual(monitor.appTraffic.sampleCount, 1)
+        XCTAssertGreaterThanOrEqual(monitor.appTraffic.applications.count, 1)
     }
 
     func testRepeatedEmptyStreamingSamplesStayOutOfRefreshing() async {
@@ -1082,12 +1082,15 @@ final class SystemResourceTests: XCTestCase {
         func safariStats(received: UInt64, sent: UInt64) -> ApplicationTrafficStats {
             ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: received, sentBytes: sent)
         }
+        // 序列设计为稳定的 stale 终态,规避首值加速引入的时序竞态:
+        // s1 基线 → s2 差量(出速率) → 暂停重开 → s3 空(跳过) → s4 新基线(stale 保留旧列表)
+        // → s5 起恒为空(定时器持续跳过,stale 稳定) → 手动刷新消费 s6 差量后 stale 清除
         let trafficReader = SequenceApplicationTrafficReader(samples: [
-            // 首次基线 + 产生真实速率的差量样本
             ApplicationTrafficReadResult(stats: [safariStats(received: 1_000, sent: 500)], errorMessage: nil),
             ApplicationTrafficReadResult(stats: [safariStats(received: 5_000, sent: 2_500)], errorMessage: nil),
-            // 重开后的新基线(nettop 新进程,计数器从头开始)
+            ApplicationTrafficReadResult(stats: [], errorMessage: nil),
             ApplicationTrafficReadResult(stats: [safariStats(received: 9_000, sent: 4_500)], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [], errorMessage: nil),
             ApplicationTrafficReadResult(stats: [safariStats(received: 16_000, sent: 8_000)], errorMessage: nil),
         ])
         let monitor = NetworkMonitor(
@@ -1108,14 +1111,16 @@ final class SystemResourceTests: XCTestCase {
         monitor.isApplicationTrafficVisible = false
         let listBeforePause = monitor.appTraffic.applications
 
-        // 重开:首个样本是新基线(速率全 0),不应清掉旧列表,仅标记 stale
+        // 重开:空样本与新基线都不清旧列表,stale 稳定保持
         monitor.isApplicationTrafficVisible = true
-        await waitForApplicationTrafficSamples(3, monitor: monitor, timeout: 3)
+        await waitForApplicationTrafficSamples(3, monitor: monitor, timeout: 4)
+        try? await Task.sleep(nanoseconds: 300_000_000)
 
         XCTAssertTrue(monitor.appTraffic.isStale, "重开后的基线样本期间应标记 stale")
         XCTAssertEqual(monitor.appTraffic.applications, listBeforePause, "基线样本不得清空或改写旧列表")
 
-        // 第二个样本(真实速率)落地后 stale 清除、数据更新
+        // 真实速率样本落地后 stale 清除、数据更新
+        monitor.refreshApplicationTraffic()
         await waitForApplicationTrafficSamples(4, monitor: monitor, timeout: 3)
 
         XCTAssertFalse(monitor.appTraffic.isStale)
@@ -1156,6 +1161,37 @@ final class SystemResourceTests: XCTestCase {
 
         XCTAssertTrue(monitor.appTraffic.isStale)
         XCTAssertEqual(monitor.appTraffic.applications, listBeforePause, "空样本不得清空 stale 期间的旧列表")
+        monitor.stop()
+    }
+
+    func testResumeTriggersImmediateFollowUpSampleForFirstRate() async {
+        func safariStats(received: UInt64, sent: UInt64) -> ApplicationTrafficStats {
+            ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: received, sentBytes: sent)
+        }
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [safariStats(received: 1_000, sent: 500)], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [safariStats(received: 5_000, sent: 2_500)], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        // 定时器间隔为 1s:500ms 内出现第 2 个样本,说明基线落地后立即触发了
+        // 跟随采样(而非等待下一个定时器周期)
+        await waitForApplicationTrafficSamples(2, monitor: monitor, timeout: 0.5)
+
+        XCTAssertEqual(monitor.appTraffic.sampleCount, 2)
+        let safari = monitor.appTraffic.applications.first { $0.displayName == "Safari" }
+        XCTAssertNotNil(safari)
+        XCTAssertGreaterThanOrEqual(safari!.downloadBytesPerSecond, 1, "跟随样本应产生非零速率")
         monitor.stop()
     }
 
