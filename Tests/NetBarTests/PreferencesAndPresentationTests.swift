@@ -334,6 +334,24 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(layoutSource.components(separatedBy: "if !settings.usesAutomaticWidth").count - 1, 2)
     }
 
+    func testMenuBarPreferencesUseTwoCollapsibleSections() throws {
+        let rootSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarPreferencesView.swift"]
+        )
+        let animationSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarAnimationPreferencesView.swift"]
+        )
+
+        // 4 个折叠区合并为 2 个:显示与布局 / 角色与动画
+        XCTAssertEqual(rootSource.components(separatedBy: "CollapsiblePreferenceSection(").count - 1, 2)
+        XCTAssertTrue(rootSource.contains("显示与布局"))
+        XCTAssertTrue(rootSource.contains("角色与动画"))
+
+        // 动画控件改为小节内容视图,门控上移到父级角色区
+        XCTAssertTrue(animationSource.contains("struct MenuBarAnimationControls"))
+        XCTAssertFalse(animationSource.contains("showsCat"))
+    }
+
     func testLegacyLineSpacingPreferenceIsIgnoredBySignature() {
         let legacyDefaults = isolatedDefaults()
         legacyDefaults.set(6.0, forKey: "statusBar.lineSpacing")

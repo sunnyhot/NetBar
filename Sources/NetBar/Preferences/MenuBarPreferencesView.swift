@@ -26,35 +26,23 @@ struct MenuBarPreferencesView: View {
                 )
 
                 CollapsiblePreferenceSection(
-                    title: appPreferences.text("显示内容", "Display"),
+                    title: appPreferences.text("显示与布局", "Display & Layout"),
                     systemImage: "textformat.size",
                     defaultExpanded: true
                 ) {
                     MenuBarDisplaySectionContent(settings: settings, appPreferences: appPreferences)
+
+                    Divider()
+
+                    MenuBarLayoutSectionContent(settings: settings, appPreferences: appPreferences)
                 }
 
                 CollapsiblePreferenceSection(
-                    title: appPreferences.text("角色", "Character"),
+                    title: appPreferences.text("角色与动画", "Character & Animation"),
                     systemImage: "pawprint",
                     defaultExpanded: true
                 ) {
                     characterSection
-                }
-
-                CollapsiblePreferenceSection(
-                    title: appPreferences.text("动画与轮换", "Animation & Rotation"),
-                    systemImage: "hare",
-                    defaultExpanded: false
-                ) {
-                    MenuBarAnimationSection(settings: settings, appPreferences: appPreferences)
-                }
-
-                CollapsiblePreferenceSection(
-                    title: appPreferences.text("宽度与布局", "Width & Layout"),
-                    systemImage: "rectangle.split.3x1",
-                    defaultExpanded: false
-                ) {
-                    MenuBarLayoutSectionContent(settings: settings, appPreferences: appPreferences)
                 }
 
                 HStack {

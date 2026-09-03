@@ -184,6 +184,15 @@ struct MenuBarCharacterSection: View {
                 Divider()
                 characterColorControls
             }
+
+            Divider()
+
+            MenuBarSubsectionHeader(
+                systemImage: "hare",
+                title: appPreferences.text("动画与轮换", "Animation & Rotation")
+            )
+
+            MenuBarAnimationControls(settings: settings, appPreferences: appPreferences)
         } else {
             Text(appPreferences.text(
                 "开启后可选择内置角色或导入自定义角色。",
