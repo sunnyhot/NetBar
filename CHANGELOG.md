@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## v0.44.0 (2026-09-03)
+
 ### Cleanup — 菜单栏偏好设置精简
 
 - **移除**菜单栏背景设置(透明背景开关、背景颜色、不透明度):默认即透明,背景位图填充与流量脉冲高亮渲染路径一并删除,移除不可达的原生标题(nativeTitle)分支与 `StatusBarPulseRenderPolicy`
