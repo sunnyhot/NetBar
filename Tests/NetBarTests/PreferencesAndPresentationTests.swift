@@ -3458,6 +3458,41 @@ extension PreferencesAndPresentationTests {
         XCTAssertEqual(metrics.first?.value, ByteFormat.speed(activeRow.displayDownloadBytesPerSecond))
     }
 
+    func testPresentationModelReportsTruncationBeyondLimit() {
+        let manyApps = (0..<20).map { index in
+            appWithResources(
+                "App\(String(format: "%02d", index))",
+                processNames: ["App\(index)"],
+                download: Double(1_000 + index)
+            )
+        }
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: manyApps,
+            sampleCount: 5,
+            isRefreshing: false,
+            errorMessage: nil
+        )
+
+        let truncated = ApplicationTrafficPresentation.makeModel(
+            snapshot: .empty,
+            state: state,
+            hidesSystemProcesses: false,
+            searchText: ""
+        )
+        XCTAssertEqual(truncated.visibleApplications.count, 18, "默认上限 18 行")
+        XCTAssertEqual(truncated.totalMatches, 20)
+        XCTAssertTrue(truncated.isTruncated)
+
+        let exact = ApplicationTrafficPresentation.makeModel(
+            snapshot: .empty,
+            state: state,
+            hidesSystemProcesses: false,
+            searchText: "App0"
+        )
+        XCTAssertFalse(exact.isTruncated, "搜索命中数低于上限时不应截断")
+    }
+
     func testApplicationSummaryUsesVisibleApplications() {
         let applications = [
             appWithResources("Idle App", processNames: ["Idle App"]),

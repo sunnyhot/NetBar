@@ -58,8 +58,7 @@ private struct ApplicationTrafficList: View {
                 // Sort & search controls — always visible in the detail popup
                 AppTrafficControls(
                     preferences: preferences,
-                    searchText: $searchText,
-                    appTraffic: appTraffic
+                    searchText: $searchText
                 )
 
                 if appTraffic.sampleCount > 0 {
@@ -117,6 +116,16 @@ private struct ApplicationTrafficList: View {
                             )
                         }
                     }
+                    if model.isTruncated {
+                        Text(preferences.text(
+                            "仅显示前 \(visibleApplications.count) 个 · 共 \(model.totalMatches) 个命中，搜索可找到更多",
+                            "Showing top \(visibleApplications.count) of \(model.totalMatches) — search to find more"
+                        ))
+                        .font(.system(size: 10, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.top, 2)
+                    }
                 }
             }
         }
@@ -149,15 +158,6 @@ private struct ApplicationTrafficList: View {
 
     private var isInitialLoading: Bool {
         appTraffic.isRefreshing && appTraffic.sampleCount == 0
-    }
-
-
-    /// Always show the search box when there is application data, the user is
-    /// searching, or initial loading has finished.
-    private var shouldShowControls: Bool {
-        !appTraffic.applications.isEmpty
-            || !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            || !appTraffic.isRefreshing && appTraffic.errorMessage == nil
     }
 
     private var emptyMessage: String {
@@ -284,13 +284,41 @@ private struct AppTrafficAttributionCard: View {
 private struct AppTrafficControls: View {
     @ObservedObject var preferences: AppPreferences
     @Binding var searchText: String
-    let appTraffic: ApplicationTrafficState
+
+    private var hasSearchText: Bool {
+        !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
 
     var body: some View {
-        TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
-            .textFieldStyle(.roundedBorder)
-            .font(.system(size: 12))
-            .livingSignalRow(tone: .neutral, padding: 8)
+        HStack(spacing: 8) {
+            HStack(spacing: 4) {
+                TextField(preferences.text("搜索应用或进程", "Search apps or processes"), text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .font(.system(size: 12))
+                if hasSearchText {
+                    Button {
+                        searchText = ""
+                    } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                    }
+                    .buttonStyle(.plain)
+                    .help(preferences.text("清除搜索", "Clear search"))
+                    .accessibilityLabel(preferences.text("清除搜索", "Clear search"))
+                }
+            }
+            .livingSignalRow(tone: .neutral, padding: 6)
+
+            Toggle(preferences.text("隐藏系统进程", "Hide system"), isOn: $preferences.hidesSystemProcesses)
+                .toggleStyle(.checkbox)
+                .font(.system(size: 11))
+                .fixedSize()
+                .help(preferences.text(
+                    "隐藏推测为系统服务的进程（与偏好设置同步）",
+                    "Hide processes inferred as system services (synced with Preferences)"
+                ))
+        }
     }
 }
 

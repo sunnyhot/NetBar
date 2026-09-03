@@ -16,6 +16,9 @@ struct ApplicationTrafficPresentationModel: Equatable {
     let visibleApplications: [ApplicationTrafficRate]
     let summaryMetrics: [ApplicationTrafficMetric]
     let attributionSummary: ApplicationAttributionSummary
+    /// 过滤与可见性规则应用后的总命中数(截断前),用于「仅显示前 N 个」提示
+    let totalMatches: Int
+    let isTruncated: Bool
 }
 
 enum ApplicationAttributionStatus: Equatable {
@@ -129,7 +132,9 @@ enum ApplicationTrafficPresentation {
         return ApplicationTrafficPresentationModel(
             visibleApplications: visible,
             summaryMetrics: summaryMetrics(for: visible),
-            attributionSummary: attributionSummary(snapshot: snapshot, applications: state.applications)
+            attributionSummary: attributionSummary(snapshot: snapshot, applications: state.applications),
+            totalMatches: displayFiltered.count,
+            isTruncated: displayFiltered.count > visible.count
         )
     }
 
