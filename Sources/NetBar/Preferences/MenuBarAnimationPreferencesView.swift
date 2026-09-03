@@ -20,27 +20,6 @@ struct MenuBarAnimationSection: View {
 
     var body: some View {
         if settings.showsCat {
-            Picker(appPreferences.text("角色位置", "Character Position"), selection: $settings.catPosition) {
-                ForEach(StatusBarCharacterPosition.allCases) { position in
-                    Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            Picker(appPreferences.text("角色朝向", "Character Facing"), selection: $settings.catFacing) {
-                ForEach(StatusBarCharacterFacing.allCases) { facing in
-                    Text(facing.title(language: appPreferences.resolvedLanguage)).tag(facing)
-                }
-            }
-            .pickerStyle(.segmented)
-
-            SliderPreference(
-                title: appPreferences.text("角色大小", "Character Size"),
-                value: $settings.catScale,
-                range: 0.7...1.3,
-                displayValue: "\(Int((settings.catScale * 100).rounded()))%"
-            )
-
             SliderPreference(
                 title: appPreferences.text("动画速度", "Animation Speed"),
                 value: $settings.catSpeedMultiplier,
@@ -56,14 +35,6 @@ struct MenuBarAnimationSection: View {
                     Text(source.title(language: appPreferences.resolvedLanguage)).tag(source.rawValue)
                 }
             }
-
-            Text(appPreferences.text(
-                "速度倍率影响动画快慢：1.0x 为默认，2.0x 为两倍速，0.5x 为半速。",
-                "Speed multiplier affects animation rate: 1.0x is default, 2.0x is double speed, 0.5x is half speed."
-            ))
-            .font(.system(size: 11))
-            .foregroundStyle(.tertiary)
-            .fixedSize(horizontal: false, vertical: true)
 
             Divider()
 

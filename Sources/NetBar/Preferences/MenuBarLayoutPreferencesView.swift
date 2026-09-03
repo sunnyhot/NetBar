@@ -47,11 +47,13 @@ struct MenuBarLayoutSectionContent: View {
             .pickerStyle(.segmented)
         }
 
-        Picker(appPreferences.text("对齐", "Alignment"), selection: $settings.alignment) {
-            ForEach(StatusBarAlignment.allCases) { alignment in
-                Text(alignment.title(language: appPreferences.resolvedLanguage)).tag(alignment)
+        if !settings.usesAutomaticWidth {
+            Picker(appPreferences.text("对齐", "Alignment"), selection: $settings.alignment) {
+                ForEach(StatusBarAlignment.allCases) { alignment in
+                    Text(alignment.title(language: appPreferences.resolvedLanguage)).tag(alignment)
+                }
             }
+            .pickerStyle(.segmented)
         }
-        .pickerStyle(.segmented)
     }
 }

@@ -396,6 +396,33 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertFalse(subcomponentsSource.contains("enum MenuBarPreferenceGroup"))
     }
 
+    func testMenuBarSectionsRegroupCharacterAppearanceControls() throws {
+        let animationSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarAnimationPreferencesView.swift"]
+        )
+        let characterSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarCharacterPreferencesView.swift"]
+        )
+        let layoutSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarLayoutPreferencesView.swift"]
+        )
+
+        // 位置/朝向/大小属于角色外观,移入角色区
+        XCTAssertFalse(animationSource.contains("catPosition"))
+        XCTAssertFalse(animationSource.contains("catFacing"))
+        XCTAssertFalse(animationSource.contains("catScale"))
+        XCTAssertTrue(characterSource.contains("catPosition"))
+        XCTAssertTrue(characterSource.contains("catFacing"))
+        XCTAssertTrue(characterSource.contains("catScale"))
+
+        // 删除开发者视角文案
+        XCTAssertFalse(animationSource.contains("速度倍率影响动画快慢"))
+
+        // 对齐仅在手动宽度下显示(文件中共出现两次 if !settings.usesAutomaticWidth:
+        // 手动宽度滑杆 + 对齐 Picker)
+        XCTAssertEqual(layoutSource.components(separatedBy: "if !settings.usesAutomaticWidth").count - 1, 2)
+    }
+
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true

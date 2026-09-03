@@ -156,6 +156,34 @@ struct MenuBarCharacterSection: View {
                 selectedCustomCharacterControls(selectedCustomCharacter)
             }
 
+            Divider()
+
+            MenuBarSubsectionHeader(
+                systemImage: "arrow.left.and.right.square",
+                title: appPreferences.text("位置与大小", "Position & Size")
+            )
+
+            Picker(appPreferences.text("角色位置", "Character Position"), selection: $settings.catPosition) {
+                ForEach(StatusBarCharacterPosition.allCases) { position in
+                    Text(position.title(language: appPreferences.resolvedLanguage)).tag(position)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            Picker(appPreferences.text("角色朝向", "Character Facing"), selection: $settings.catFacing) {
+                ForEach(StatusBarCharacterFacing.allCases) { facing in
+                    Text(facing.title(language: appPreferences.resolvedLanguage)).tag(facing)
+                }
+            }
+            .pickerStyle(.segmented)
+
+            SliderPreference(
+                title: appPreferences.text("角色大小", "Character Size"),
+                value: $settings.catScale,
+                range: 0.7...1.3,
+                displayValue: "\(Int((settings.catScale * 100).rounded()))%"
+            )
+
             let selectedChar = selectedCharacterAsset()
             if selectedChar.supportsColorControls {
                 Divider()
