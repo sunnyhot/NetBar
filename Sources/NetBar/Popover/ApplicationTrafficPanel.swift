@@ -99,12 +99,19 @@ private struct ApplicationTrafficList: View {
                         message: emptyMessage
                     )
                 } else {
+                    if appTraffic.isStale {
+                        Text(preferences.text("重新采样中，正在显示上次数据", "Resampling — showing last data"))
+                            .font(.system(size: 10, weight: .medium))
+                            .foregroundStyle(.tertiary)
+                            .padding(.horizontal, 2)
+                    }
                     VStack(spacing: 4) {
                         ForEach(visibleApplications) { application in
                             ApplicationTrafficRow(
                                 application: application,
                                 role: ApplicationTrafficPresentation.attributionRole(for: application),
-                                language: preferences.resolvedLanguage
+                                language: preferences.resolvedLanguage,
+                                isDimmed: appTraffic.isStale
                             )
                         }
                     }
@@ -324,6 +331,7 @@ struct ApplicationTrafficRow: View {
     let application: ApplicationTrafficRate
     let role: ApplicationAttributionRole
     let language: AppLanguage
+    var isDimmed: Bool = false
 
     var body: some View {
         HStack(spacing: 8) {
@@ -357,6 +365,7 @@ struct ApplicationTrafficRow: View {
             RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .strokeBorder(Color.primary.opacity(0.055), lineWidth: 0.5)
         )
+        .opacity(isDimmed ? 0.55 : 1)
     }
 
     private var detailSubtitle: String {

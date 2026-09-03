@@ -97,6 +97,8 @@ struct ApplicationTrafficState: Equatable {
     var sampleCount: Int
     var isRefreshing: Bool
     var errorMessage: String?
+    /// 重开详情窗口后、新采样就绪前,旧列表置灰展示的标记
+    var isStale = false
 
     static let empty = ApplicationTrafficState(
         timestamp: nil,

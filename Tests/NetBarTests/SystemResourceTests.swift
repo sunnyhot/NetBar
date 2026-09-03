@@ -1078,6 +1078,87 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(monitor.appTraffic.applications.count, 1)
     }
 
+    func testPauseMarksTrafficStaleAndResumeKeepsLastList() async {
+        func safariStats(received: UInt64, sent: UInt64) -> ApplicationTrafficStats {
+            ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: received, sentBytes: sent)
+        }
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            // 首次基线 + 产生真实速率的差量样本
+            ApplicationTrafficReadResult(stats: [safariStats(received: 1_000, sent: 500)], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [safariStats(received: 5_000, sent: 2_500)], errorMessage: nil),
+            // 重开后的新基线(nettop 新进程,计数器从头开始)
+            ApplicationTrafficReadResult(stats: [safariStats(received: 9_000, sent: 4_500)], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [safariStats(received: 16_000, sent: 8_000)], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficSamples(2, monitor: monitor, timeout: 3)
+        XCTAssertFalse(monitor.appTraffic.applications.isEmpty, "差量样本后应有应用列表")
+
+        monitor.isApplicationTrafficVisible = false
+        let listBeforePause = monitor.appTraffic.applications
+
+        // 重开:首个样本是新基线(速率全 0),不应清掉旧列表,仅标记 stale
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficSamples(3, monitor: monitor, timeout: 3)
+
+        XCTAssertTrue(monitor.appTraffic.isStale, "重开后的基线样本期间应标记 stale")
+        XCTAssertEqual(monitor.appTraffic.applications, listBeforePause, "基线样本不得清空或改写旧列表")
+
+        // 第二个样本(真实速率)落地后 stale 清除、数据更新
+        await waitForApplicationTrafficSamples(4, monitor: monitor, timeout: 3)
+
+        XCTAssertFalse(monitor.appTraffic.isStale)
+        XCTAssertNotEqual(monitor.appTraffic.applications, listBeforePause, "新速率样本应刷新列表")
+        monitor.stop()
+    }
+
+    func testStaleStateSkipsEmptySamplesToKeepList() async {
+        func safariStats(received: UInt64, sent: UInt64) -> ApplicationTrafficStats {
+            ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: received, sentBytes: sent)
+        }
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [safariStats(received: 1_000, sent: 500)], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [safariStats(received: 5_000, sent: 2_500)], errorMessage: nil),
+            // 重开后 nettop 尚未吐出数据(空样本),不应清空旧列表
+            ApplicationTrafficReadResult(stats: [], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficSamples(2, monitor: monitor, timeout: 3)
+        let listBeforePause = monitor.appTraffic.applications
+        XCTAssertFalse(listBeforePause.isEmpty)
+
+        monitor.isApplicationTrafficVisible = false
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficIdle(monitor: monitor, timeout: 3)
+        try? await Task.sleep(nanoseconds: 300_000_000)
+
+        XCTAssertTrue(monitor.appTraffic.isStale)
+        XCTAssertEqual(monitor.appTraffic.applications, listBeforePause, "空样本不得清空 stale 期间的旧列表")
+        monitor.stop()
+    }
+
     private func waitForApplicationTrafficSamples(
         _ count: Int,
         monitor: NetworkMonitor,

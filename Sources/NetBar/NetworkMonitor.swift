@@ -150,6 +150,13 @@ final class NetworkMonitor: ObservableObject {
         // all subsequent refreshApplicationTraffic() calls.
         isReadingApplicationTraffic = false
         appTraffic.isRefreshing = false
+        // 重开窗口后 reader 是新进程、计数器从头累计:重置差量基线,并把旧列表
+        // 标记为 stale(置灰展示),避免「旧列表 → 空态 → 新列表」的闪烁
+        previousApplicationStats = [:]
+        previousApplicationSampleDate = nil
+        if !appTraffic.applications.isEmpty {
+            appTraffic.isStale = true
+        }
     }
 
     func stop() {
@@ -436,13 +443,29 @@ final class NetworkMonitor: ObservableObject {
                 applications: appTraffic.applications,
                 sampleCount: appTraffic.sampleCount,
                 isRefreshing: false,
-                errorMessage: result.errorMessage
+                errorMessage: result.errorMessage,
+                isStale: appTraffic.isStale
             )
             return
         }
 
         let currentByID = Dictionary(result.stats.map { ($0.id, $0) }, uniquingKeysWith: { $1 })
         guard let previousDate = previousApplicationSampleDate else {
+            // stale 期间:nettop 尚未吐出数据(空样本) → 不动旧列表继续等待;
+            // 新基线落地 → 记录基线但保留旧列表(全 0 速率会清空可见列表)
+            if appTraffic.isStale, !appTraffic.applications.isEmpty {
+                if result.stats.isEmpty {
+                    appTraffic.isRefreshing = false
+                    return
+                }
+                previousApplicationStats = currentByID
+                previousApplicationSampleDate = sampledAt
+                appTraffic.timestamp = sampledAt
+                appTraffic.sampleCount += 1
+                appTraffic.isRefreshing = false
+                return
+            }
+
             previousApplicationStats = currentByID
             previousApplicationSampleDate = sampledAt
             let processRates = result.stats.map { stat in
@@ -494,7 +517,8 @@ final class NetworkMonitor: ObservableObject {
             applications: applications,
             sampleCount: appTraffic.sampleCount + 1,
             isRefreshing: false,
-            errorMessage: nil
+            errorMessage: nil,
+            isStale: false
         )
     }
 
