@@ -132,44 +132,42 @@ struct MenuBarCharacterSection: View {
     }
 
     var body: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.character.title(language: appPreferences.resolvedLanguage)) {
-            Toggle(appPreferences.text("启用角色", "Enable Character"), isOn: $settings.showsCat)
+        Toggle(appPreferences.text("启用角色", "Enable Character"), isOn: $settings.showsCat)
 
-            if settings.showsCat {
-                MenuBarSubsectionHeader(
-                    systemImage: "pawprint",
-                    title: appPreferences.text("内置角色", "Built-in Characters")
-                )
+        if settings.showsCat {
+            MenuBarSubsectionHeader(
+                systemImage: "pawprint",
+                title: appPreferences.text("内置角色", "Built-in Characters")
+            )
 
-                AnimatedCharacterCatalog(
-                    settings: settings,
-                    characterPickerFrameTick: nil,
-                    playbackCounts: playbackCounts,
-                    language: appPreferences.resolvedLanguage
-                )
+            AnimatedCharacterCatalog(
+                settings: settings,
+                characterPickerFrameTick: nil,
+                playbackCounts: playbackCounts,
+                language: appPreferences.resolvedLanguage
+            )
 
+            Divider()
+
+            customCharacterCatalog
+
+            if let selectedCustomCharacter {
                 Divider()
-
-                customCharacterCatalog
-
-                if let selectedCustomCharacter {
-                    Divider()
-                    selectedCustomCharacterControls(selectedCustomCharacter)
-                }
-
-                let selectedChar = selectedCharacterAsset()
-                if selectedChar.supportsColorControls {
-                    Divider()
-                    characterColorControls
-                }
-            } else {
-                Text(appPreferences.text(
-                    "开启后可选择内置角色或导入自定义角色。",
-                    "Enable this to choose built-in characters or import your own."
-                ))
-                .font(.system(size: 11))
-                .foregroundStyle(.tertiary)
+                selectedCustomCharacterControls(selectedCustomCharacter)
             }
+
+            let selectedChar = selectedCharacterAsset()
+            if selectedChar.supportsColorControls {
+                Divider()
+                characterColorControls
+            }
+        } else {
+            Text(appPreferences.text(
+                "开启后可选择内置角色或导入自定义角色。",
+                "Enable this to choose built-in characters or import your own."
+            ))
+            .font(.system(size: 11))
+            .foregroundStyle(.tertiary)
         }
     }
 

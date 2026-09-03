@@ -380,6 +380,22 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertTrue(catalogSource.contains("characterPickerFrameTick ?? 0"))
     }
 
+    func testMenuBarSectionsDoNotNestPreferenceSectionInsideCollapsibleSection() throws {
+        let characterSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarCharacterPreferencesView.swift"]
+        )
+        let animationSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarAnimationPreferencesView.swift"]
+        )
+        let subcomponentsSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarSubcomponents.swift"]
+        )
+
+        XCTAssertFalse(characterSource.contains("PreferenceSection(title: MenuBarPreferenceGroup"))
+        XCTAssertFalse(animationSource.contains("PreferenceSection(title: MenuBarPreferenceGroup"))
+        XCTAssertFalse(subcomponentsSource.contains("enum MenuBarPreferenceGroup"))
+    }
+
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true

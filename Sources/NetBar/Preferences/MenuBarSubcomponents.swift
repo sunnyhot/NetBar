@@ -2,23 +2,6 @@ import AppKit
 import Combine
 import SwiftUI
 
-enum MenuBarPreferenceGroup {
-    case preview
-    case character
-    case animation
-
-    func title(language: AppLanguage) -> String {
-        switch self {
-        case .preview:
-            return language.text("实时预览", "Live Preview")
-        case .character:
-            return language.text("角色", "Character")
-        case .animation:
-            return language.text("动画与轮换", "Animation & Rotation")
-        }
-    }
-}
-
 // MARK: - Menu Bar Subsection Header
 
 struct MenuBarSubsectionHeader: View {
@@ -370,7 +353,7 @@ struct AnimatedPreviewSection: View {
     }
 
     var body: some View {
-        PreferenceSection(title: MenuBarPreferenceGroup.preview.title(language: appPreferences.resolvedLanguage)) {
+        PreferenceSection(title: appPreferences.text("实时预览", "Live Preview")) {
             StatusBarPreview(
                 settings: settings,
                 appPreferences: appPreferences,
