@@ -416,6 +416,14 @@ final class NetworkMonitor: ObservableObject {
         }
     }
 
+    /// 错误卡片「重试」入口:重启耗尽后 streaming reader 可能已停止,
+    /// 仅刷新采样无法恢复,需先拉起 reader 再采样。
+    func retryApplicationTrafficReading() {
+        guard shouldSampleApplicationTraffic else { return }
+        streamingReader?.start()
+        refreshApplicationTraffic()
+    }
+
     private func applyApplicationTraffic(
         _ result: ApplicationTrafficReadResult,
         sampledAt: Date

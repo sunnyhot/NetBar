@@ -50,7 +50,7 @@ private struct ApplicationTrafficList: View {
                 AppTrafficNotice(
                     symbol: "exclamationmark.triangle",
                     title: preferences.text("无法读取应用流量", "Unable to Read Application Traffic"),
-                    message: "\(errorMessage)\n\(preferences.text("可重试读取；如果仍失败，请确认系统自带 nettop 可运行。", "Try again. If it still fails, confirm that the built-in nettop command can run."))",
+                    message: "\(readerErrorMessage(errorMessage))\n\(preferences.text("可重试读取；如果仍失败，请确认系统自带 nettop 可运行。", "Try again. If it still fails, confirm that the built-in nettop command can run."))",
                     actionTitle: preferences.text("重试", "Retry"),
                     action: retry
                 )
@@ -117,6 +117,25 @@ private struct ApplicationTrafficList: View {
         searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
             ? preferences.text("暂无应用流量", "No Application Traffic Yet")
             : preferences.text("没有匹配的应用", "No Matching Apps")
+    }
+
+    /// reader 层上报的是语言无关的失败标识,在此映射为双语文案;
+    /// 未知字符串(如测试注入)原样展示。
+    private func readerErrorMessage(_ raw: String) -> String {
+        switch raw {
+        case ApplicationTrafficReaderFailure.spawnFailed.rawValue:
+            return preferences.text(
+                "无法启动 nettop 采样进程（/usr/bin/script）",
+                "Failed to launch the nettop sampling process (/usr/bin/script)."
+            )
+        case ApplicationTrafficReaderFailure.restartsExhausted.rawValue:
+            return preferences.text(
+                "nettop 进程多次退出，应用流量采样已暂停",
+                "nettop exited repeatedly; application traffic sampling was paused."
+            )
+        default:
+            return raw
+        }
     }
 
     private var isInitialLoading: Bool {

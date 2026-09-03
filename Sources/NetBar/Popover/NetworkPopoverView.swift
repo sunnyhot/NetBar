@@ -57,7 +57,7 @@ struct NetworkPopoverView: View {
                         appTraffic: monitor.appTraffic,
                         preferences: appPreferences,
                         searchText: $appSearchText,
-                        retry: monitor.refreshApplicationTraffic
+                        retry: monitor.retryApplicationTrafficReading
                     )
                 }
                 .padding(.horizontal, LivingSignalLayout.horizontalPadding)

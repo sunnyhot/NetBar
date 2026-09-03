@@ -7,6 +7,13 @@ struct ApplicationTrafficReadResult {
     let errorMessage: String?
 }
 
+/// Streaming reader 失败原因的稳定标识。reader 层无法访问语言偏好,
+/// 通过 rawValue 透传到 UI 层再映射为双语文案。
+enum ApplicationTrafficReaderFailure: String {
+    case spawnFailed = "spawn_failed"
+    case restartsExhausted = "restarts_exhausted"
+}
+
 protocol ApplicationTrafficReading: Sendable {
     func readApplications() -> ApplicationTrafficReadResult
 }
@@ -22,9 +29,10 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
     private var latestStats: [String: ApplicationTrafficStats] = [:]
     private var partialLine: String = ""
     private let lock = NSLock()
-    private var isRunning = false
+    private(set) var isRunning = false
     private var restartAttempts = 0
     private let maxRestartAttempts = 3
+    private var lastErrorMessage: String?
 
     private static let nettopArguments = [
         "-P",
@@ -64,18 +72,22 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
         closeOutputHandleLocked()
         latestStats.removeAll(keepingCapacity: true)
         partialLine.removeAll(keepingCapacity: true)
+        // 主动停止不是错误,清除历史错误避免下次 start() 前误报
+        lastErrorMessage = nil
     }
 
     func readApplications() -> ApplicationTrafficReadResult {
         lock.lock()
         let stats = Array(latestStats.values)
-        let hasProcess = process != nil
+        let errorMessage = lastErrorMessage
         lock.unlock()
 
-        if hasProcess && !stats.isEmpty {
+        if !stats.isEmpty {
             return ApplicationTrafficReadResult(stats: stats, errorMessage: nil)
         }
-
+        if let errorMessage {
+            return ApplicationTrafficReadResult(stats: [], errorMessage: errorMessage)
+        }
         return ApplicationTrafficReadResult(stats: [], errorMessage: nil)
     }
 
@@ -101,12 +113,15 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             self.process = process
             self.outputPipe = outputPipe
             self.isRunning = true
-            restartAttempts = 0
+            // 注意:此处不重置 restartAttempts——spawn 成功不代表健康,
+            // 只有解析到真实数据(appendOutput)才重置,否则瞬死循环无法耗尽
+            lastErrorMessage = nil
             startOutputReader(outputPipe)
         } catch {
             try? outputPipe.fileHandleForReading.close()
             self.process = nil
             self.outputPipe = nil
+            lastErrorMessage = ApplicationTrafficReaderFailure.spawnFailed.rawValue
         }
     }
 
@@ -145,6 +160,8 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             guard !line.isEmpty else { continue }
             if let stat = NettopLineParser.parseLine(String(line)) {
                 latestStats[stat.id] = stat
+                // 解析到真实数据 = 进程健康,重置重启预算
+                restartAttempts = 0
             }
         }
 
@@ -167,14 +184,21 @@ final class StreamingNettopReader: ApplicationTrafficReading, @unchecked Sendabl
             return
         }
         closeOutputHandleLocked()
-        latestStats.removeAll(keepingCapacity: true)
-        partialLine.removeAll(keepingCapacity: true)
-        lock.unlock()
 
         if restartAttempts < maxRestartAttempts {
+            // 重启尝试期间保留 latestStats:进程瞬间重启成功是常态,
+            // 清空会让 UI 在重启窗口期闪空态
             restartAttempts += 1
-            lock.lock()
             launchProcess()
+            lock.unlock()
+        } else {
+            // 放弃重启:复位 isRunning/process,让 start() 可以再次拉起
+            // (此前 isRunning 卡 true 导致耗尽后永远无法自愈)
+            isRunning = false
+            process = nil
+            latestStats.removeAll(keepingCapacity: true)
+            partialLine.removeAll(keepingCapacity: true)
+            lastErrorMessage = ApplicationTrafficReaderFailure.restartsExhausted.rawValue
             lock.unlock()
         }
     }

@@ -956,6 +956,128 @@ final class SystemResourceTests: XCTestCase {
         XCTAssertEqual(result.stats.first?.sentBytes, 2048)
     }
 
+    func testStreamingNettopReaderReportsSpawnFailure() {
+        let reader = StreamingNettopReader(
+            executableURL: URL(fileURLWithPath: "/usr/bin/netbar-missing-\(UUID().uuidString)")
+        )
+
+        reader.start()
+        let result = reader.readApplications()
+
+        XCTAssertEqual(
+            result.errorMessage,
+            ApplicationTrafficReaderFailure.spawnFailed.rawValue,
+            "spawn 失败应通过 readApplications 上报错误"
+        )
+        reader.stop()
+    }
+
+    func testStreamingNettopReaderRecoversViaRestartsWithoutError() async throws {
+        // 脚本前 3 次运行立即退出(触发重启),第 4 次输出 CSV 并存活;
+        // 重启期间不应误报错误,最终恢复出数据
+        let scriptURL = try makeExecutableScript(
+            """
+            #!/bin/sh
+            count_file="$0.count"
+            count=$(cat "$count_file" 2>/dev/null || echo 0)
+            count=$((count + 1))
+            echo "$count" > "$count_file"
+            if [ "$count" -le 3 ]; then
+              exit 0
+            fi
+            printf ',bytes_in,bytes_out,\\nSafari.123,4096,2048,\\n'
+            sleep 5
+            """
+        )
+        let reader = StreamingNettopReader(
+            executableURL: URL(fileURLWithPath: "/usr/bin/script"),
+            arguments: ["-q", "/dev/null", scriptURL.path]
+        )
+
+        reader.start()
+        var result = reader.readApplications()
+        let deadline = Date().addingTimeInterval(5)
+        while result.stats.isEmpty && Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            result = reader.readApplications()
+        }
+        reader.stop()
+
+        XCTAssertNil(result.errorMessage, "重启恢复后不应携带错误")
+        XCTAssertEqual(result.stats.first?.processName, "Safari")
+    }
+
+    func testStreamingNettopReaderReportsExhaustedRestartsAndAllowsRestart() async throws {
+        // 脚本短暂存活后退出:3 次重启耗尽后应上报错误、复位 isRunning(修复耗尽后
+        // isRunning 卡 true 导致 start() 无法再拉起的 bug),并可再次 start()
+        let scriptURL = try makeExecutableScript(
+            """
+            #!/bin/sh
+            sleep 0.2
+            exit 0
+            """
+        )
+        let reader = StreamingNettopReader(
+            executableURL: URL(fileURLWithPath: "/usr/bin/script"),
+            arguments: ["-q", "/dev/null", scriptURL.path]
+        )
+
+        reader.start()
+        var result = reader.readApplications()
+        var deadline = Date().addingTimeInterval(5)
+        while result.errorMessage == nil && Date() < deadline {
+            try await Task.sleep(nanoseconds: 100_000_000)
+            result = reader.readApplications()
+        }
+
+        XCTAssertEqual(result.errorMessage, ApplicationTrafficReaderFailure.restartsExhausted.rawValue)
+        XCTAssertEqual(result.stats.count, 0, "放弃重启后应清空死进程的残留数据")
+        XCTAssertTrue(result.stats.isEmpty)
+
+        deadline = Date().addingTimeInterval(2)
+        while reader.isRunning && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertFalse(reader.isRunning, "耗尽后 isRunning 应复位,允许 start() 重试")
+
+        reader.start()
+        deadline = Date().addingTimeInterval(2)
+        while !reader.isRunning && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        XCTAssertTrue(reader.isRunning, "耗尽后 start() 应能重新拉起进程")
+        reader.stop()
+    }
+
+    func testRetryApplicationTrafficReadingClearsErrorAfterRecovery() async {
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [], errorMessage: "nettop failed"),
+            ApplicationTrafficReadResult(stats: [
+                ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: 1000, sentBytes: 500),
+            ], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            now: Date.init
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficIdle(monitor: monitor)
+        XCTAssertNotNil(monitor.appTraffic.errorMessage, "首个样本错误应保留 errorMessage")
+
+        monitor.retryApplicationTrafficReading()
+        await waitForApplicationTrafficSamples(1, monitor: monitor)
+
+        XCTAssertNil(monitor.appTraffic.errorMessage, "重试成功后错误应清除")
+        XCTAssertEqual(monitor.appTraffic.applications.count, 1)
+    }
+
     private func waitForApplicationTrafficSamples(
         _ count: Int,
         monitor: NetworkMonitor,
