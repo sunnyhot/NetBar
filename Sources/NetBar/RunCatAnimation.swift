@@ -203,7 +203,11 @@ final class RunCatAnimation {
     // Rotation settings
     var rotationEnabled: Bool = false
     var rotationIntervalMinutes: Double = 5.0
-    var rotationPool: [RunCatCharacter] = []  // empty = all characters
+
+    // Shuffle-cycle queue: rebuilt (excluding current) when drained, so every
+    // character appears exactly once per cycle instead of uniform random
+    // sampling that repeats some characters and starves others.
+    private var rotationQueue: [RunCatCharacter] = []
 
     // Adaptive frame rate state
     private(set) var activityLevel: ActivityLevel = .idle
@@ -364,14 +368,17 @@ final class RunCatAnimation {
         advanceFrame()
     }
 
+    func rotateCharacterForTesting() {
+        rotateToNextCharacter()
+    }
+
     // MARK: - Character Rotation
 
     private func scheduleRotationTimer() {
         rotationTimer?.invalidate()
         rotationTimer = nil
         guard rotationEnabled else { return }
-        let pool = rotationPool.isEmpty ? RunCatCharacter.allCharacters : rotationPool
-        guard pool.count > 1 else { return }  // No rotation needed with only 1 character
+        guard RunCatCharacter.allCharacters.count > 1 else { return }  // No rotation needed with only 1 character
         let interval = max(rotationIntervalMinutes * 60, 10)  // Minimum 10 seconds
         let timer = Timer(timeInterval: interval, repeats: true) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -383,21 +390,31 @@ final class RunCatAnimation {
         rotationTimer = timer
     }
 
-    func configureRotation(enabled: Bool, intervalMinutes: Double, pool: [RunCatCharacter]) {
+    func configureRotation(enabled: Bool, intervalMinutes: Double) {
         rotationEnabled = enabled
         rotationIntervalMinutes = intervalMinutes
-        rotationPool = pool
         if isActive {
             scheduleRotationTimer()
         }
     }
 
     private func rotateToNextCharacter() {
-        let pool = rotationPool.isEmpty ? RunCatCharacter.allCharacters : rotationPool
-        guard pool.count > 1 else { return }
-        // Pick a random character different from current
-        let candidates = pool.filter { $0.id != character.id }
-        guard let next = candidates.randomElement() else { return }
+        let allCharacters = RunCatCharacter.allCharacters
+        guard allCharacters.count > 1 else { return }
+
+        if rotationQueue.isEmpty {
+            rotationQueue = allCharacters.filter { $0.id != character.id }.shuffled()
+        }
+
+        // A manual character switch can leave the current character in the
+        // queue; drop it so one rotation never redisplays the same character.
+        rotationQueue.removeAll { $0.id == character.id }
+        guard let next = rotationQueue.first else {
+            rotationQueue = []
+            return
+        }
+        rotationQueue.removeFirst()
+
         character = AnimatedCharacter(character: next)
         currentFrame = 0
         onCharacterChange?(next)

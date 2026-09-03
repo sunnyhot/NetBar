@@ -9,11 +9,7 @@ struct MenuBarCharacterSection: View {
     @ObservedObject var historyStore: NetworkHistoryStore
 
     private func applyCatColor(_ color: Color) {
-        let newColor = PersistedColor(color: color)
-        settings.catColor = newColor
-        if newColor != PersistedColor.white && settings.usesSystemTextColor {
-            settings.usesSystemTextColor = false
-        }
+        settings.catColor = PersistedColor(color: color)
     }
 
     private func characterColorLabel(_ simplifiedChinese: String, _ english: String) -> String {
@@ -57,7 +53,6 @@ struct MenuBarCharacterSection: View {
                 )
                 settings.catCharacter = character.id
                 settings.showsCat = true
-                settings.usesSystemTextColor = false
             } catch {
                 showImportError(error)
             }
@@ -227,7 +222,6 @@ struct MenuBarCharacterSection: View {
                     ForEach(customCharacterStore.characters) { character in
                         Button(action: {
                             settings.catCharacter = character.id
-                            settings.usesSystemTextColor = false
                         }) {
                         CharacterChoiceLabel(
                             title: character.displayName,
@@ -322,12 +316,8 @@ struct MenuBarCharacterSection: View {
                         PresetColorButton(color: .white, label: characterColorLabel("白色", "White"), settings: settings)
                         PresetColorButton(color: .black, label: characterColorLabel("黑色", "Black"), settings: settings)
                         PresetColorButton(color: .red, label: characterColorLabel("红色", "Red"), settings: settings)
-                        PresetColorButton(color: .orange, label: characterColorLabel("橙色", "Orange"), settings: settings)
-                        PresetColorButton(color: .yellow, label: characterColorLabel("黄色", "Yellow"), settings: settings)
                         PresetColorButton(color: .green, label: characterColorLabel("绿色", "Green"), settings: settings)
-                        PresetColorButton(color: .cyan, label: characterColorLabel("青色", "Cyan"), settings: settings)
                         PresetColorButton(color: .blue, label: characterColorLabel("蓝色", "Blue"), settings: settings)
-                        PresetColorButton(color: .purple, label: characterColorLabel("紫色", "Purple"), settings: settings)
                     }
 
                     Button(appPreferences.text("重置", "Reset")) {
@@ -344,20 +334,6 @@ struct MenuBarCharacterSection: View {
                 ))
                 .font(.system(size: 10))
                 .foregroundColor(.secondary)
-            }
-
-            if settings.usesSystemTextColor && (settings.catColorMode != CatColorMode.solid.rawValue || settings.catColor != PersistedColor.white) {
-                HStack(spacing: 4) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .foregroundColor(.orange)
-                        .font(.system(size: 10))
-                    Text(appPreferences.text(
-                        "系统文字颜色会覆盖角色颜色，已自动切换为自定义颜色",
-                        "System text color overrides character color, auto-switched to custom color"
-                    ))
-                    .font(.system(size: 10))
-                    .foregroundColor(.orange)
-                }
             }
         }
     }

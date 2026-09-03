@@ -39,13 +39,8 @@ struct CharacterColorModePicker: View {
             }
             .labelsHidden()
             .frame(maxWidth: 220)
-            .onChange(of: settings.catColorMode) { newMode in
-                if newMode != CatColorMode.solid.rawValue && settings.usesSystemTextColor {
-                    settings.usesSystemTextColor = false
-                }
-            }
-        }
     }
+}
 }
 
 // MARK: - Character Grid Card

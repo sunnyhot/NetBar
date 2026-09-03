@@ -26,7 +26,6 @@ final class StatusBarSettings: ObservableObject {
     @Published var catColorMode: String { didSet { save() } }
     @Published var catRotationEnabled: Bool { didSet { save() } }
     @Published var catRotationIntervalMinutes: Double { didSet { save() } }
-    @Published var catRotationPool: String { didSet { save() } }  // comma-separated character IDs
     @Published var catHeadSwing: Bool { didSet { save() } }  // horizontally flip alternate frames for head-bobbing effect
     @Published var catAnimationSpeedSource: String { didSet { save() } }  // AnimationSpeedSource raw value
 
@@ -57,7 +56,6 @@ final class StatusBarSettings: ObservableObject {
         catColorMode = defaults.string(forKey: Keys.catColorMode) ?? Defaults.catColorMode
         catRotationEnabled = defaults.object(forKey: Keys.catRotationEnabled) as? Bool ?? Defaults.catRotationEnabled
         catRotationIntervalMinutes = defaults.object(forKey: Keys.catRotationIntervalMinutes) as? Double ?? Defaults.catRotationIntervalMinutes
-        catRotationPool = defaults.string(forKey: Keys.catRotationPool) ?? Defaults.catRotationPool
         catHeadSwing = defaults.object(forKey: Keys.catHeadSwing) as? Bool ?? Defaults.catHeadSwing
         catAnimationSpeedSource = defaults.string(forKey: Keys.catAnimationSpeedSource) ?? Defaults.catAnimationSpeedSource
     }
@@ -111,7 +109,6 @@ final class StatusBarSettings: ObservableObject {
         catColorMode = Defaults.catColorMode
         catRotationEnabled = Defaults.catRotationEnabled
         catRotationIntervalMinutes = Defaults.catRotationIntervalMinutes
-        catRotationPool = Defaults.catRotationPool
         catHeadSwing = Defaults.catHeadSwing
         catAnimationSpeedSource = Defaults.catAnimationSpeedSource
     }
@@ -140,7 +137,6 @@ final class StatusBarSettings: ObservableObject {
         defaults.set(catColorMode, forKey: Keys.catColorMode)
         defaults.set(catRotationEnabled, forKey: Keys.catRotationEnabled)
         defaults.set(catRotationIntervalMinutes, forKey: Keys.catRotationIntervalMinutes)
-        defaults.set(catRotationPool, forKey: Keys.catRotationPool)
         defaults.set(catHeadSwing, forKey: Keys.catHeadSwing)
         defaults.set(catAnimationSpeedSource, forKey: Keys.catAnimationSpeedSource)
     }
@@ -189,7 +185,6 @@ final class StatusBarSettings: ObservableObject {
         static let catColorMode = CatColorMode.solid.rawValue
         static let catRotationEnabled = false
         static let catRotationIntervalMinutes = 5.0
-        static let catRotationPool = ""  // empty = all characters
         static let catHeadSwing = false
         static let catAnimationSpeedSource = AnimationSpeedSource.networkSpeed.rawValue
     }
@@ -218,7 +213,6 @@ final class StatusBarSettings: ObservableObject {
         static let catColorMode = "statusBar.catColorMode"
         static let catRotationEnabled = "statusBar.catRotationEnabled"
         static let catRotationIntervalMinutes = "statusBar.catRotationIntervalMinutes"
-        static let catRotationPool = "statusBar.catRotationPool"
         static let catHeadSwing = "statusBar.catHeadSwing"
         static let catAnimationSpeedSource = "statusBar.catAnimationSpeedSource"
     }

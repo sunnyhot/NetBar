@@ -109,11 +109,7 @@ struct PresetColorButton: View {
 
     var body: some View {
         Button {
-            let newColor = PersistedColor(color: color)
-            settings.catColor = newColor
-            if newColor != PersistedColor.white && settings.usesSystemTextColor {
-                settings.usesSystemTextColor = false
-            }
+            settings.catColor = PersistedColor(color: color)
         } label: {
             Circle()
                 .fill(color)

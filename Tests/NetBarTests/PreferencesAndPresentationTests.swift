@@ -445,6 +445,60 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(legacySignature, plainSignature)
     }
 
+    func testRotationPoolPreferenceIsRemoved() throws {
+        let sources: [[String]] = [
+            ["Sources", "NetBar", "StatusBarStyle.swift"],
+            ["Sources", "NetBar", "StatusBarController.swift"],
+            ["Sources", "NetBar", "RunCatAnimation.swift"],
+            ["Sources", "NetBar", "Preferences", "MenuBarAnimationPreferencesView.swift"]
+        ]
+        for pathComponents in sources {
+            let source = try sourceFileContent(pathComponents: pathComponents)
+            XCTAssertFalse(source.contains("catRotationPool"), "\(pathComponents.last ?? "") still references catRotationPool")
+            XCTAssertFalse(source.contains("rotationPool"), "\(pathComponents.last ?? "") still references rotationPool")
+        }
+    }
+
+    func testCharacterColorChoicesDoNotOverrideSystemTextColor() throws {
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+
+        settings.catColor = PersistedColor(red: 0.02, green: 0.18, blue: 1.0, alpha: 1)
+        settings.catColorMode = CatColorMode.solid.rawValue
+        XCTAssertTrue(settings.usesSystemTextColor)
+
+        // 角色区不再包含任何自动关闭系统文字颜色的联动代码
+        let characterSource = try sourceFileContent(
+            pathComponents: ["Sources", "NetBar", "Preferences", "MenuBarCharacterPreferencesView.swift"]
+        )
+        XCTAssertFalse(characterSource.contains("usesSystemTextColor"))
+        XCTAssertEqual(characterSource.components(separatedBy: "PresetColorButton(").count - 1, 5)
+    }
+
+    func testCharacterRotationCoversAllCharactersPerCycle() {
+        var rotatedIDs: [String] = []
+        let animation = RunCatAnimation(
+            character: CharacterAsset(builtIn: RunCatCharacter.defaultCat),
+            onFrameChange: { _ in }
+        )
+        animation.onCharacterChange = { rotatedIDs.append($0.id) }
+        animation.configureRotation(enabled: true, intervalMinutes: 1)
+
+        let total = RunCatCharacter.allCharacters.count
+        for _ in 0..<total {
+            animation.rotateCharacterForTesting()
+        }
+
+        XCTAssertEqual(rotatedIDs.count, total)
+        // 首轮洗牌循环:除初始角色外,每个角色恰好出现一次、不遗漏
+        let firstCycle = rotatedIDs.prefix(total - 1)
+        XCTAssertEqual(Set(firstCycle).count, total - 1)
+        XCTAssertFalse(firstCycle.contains(RunCatCharacter.defaultCat.id))
+        // 任意相邻两次轮换不重复
+        XCTAssertTrue(
+            zip(rotatedIDs, rotatedIDs.dropFirst()).allSatisfy { $0 != $1 }
+        )
+    }
+
     func testRetinaStatusBarImageCentersTextVertically() {
         let settings = StatusBarSettings(defaults: isolatedDefaults())
         settings.showsBackground = true

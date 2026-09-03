@@ -14,7 +14,6 @@ struct StatusBarCatAnimationConfiguration: Equatable {
     let catSpeedMultiplier: Double
     let catRotationEnabled: Bool
     let catRotationIntervalMinutes: Double
-    let catRotationPool: String
     let customCharacterRevision: Int
 
     init(settings: StatusBarSettings, customCharacterRevision: Int) {
@@ -23,7 +22,6 @@ struct StatusBarCatAnimationConfiguration: Equatable {
         self.catSpeedMultiplier = settings.catSpeedMultiplier
         self.catRotationEnabled = settings.catRotationEnabled
         self.catRotationIntervalMinutes = settings.catRotationIntervalMinutes
-        self.catRotationPool = settings.catRotationPool
         self.customCharacterRevision = customCharacterRevision
     }
 }
@@ -352,12 +350,9 @@ final class StatusBarController {
                 catAnimation?.setSpeedMultiplier(settings.catSpeedMultiplier)
             }
             // Configure rotation
-            let poolIds = settings.catRotationPool.split(separator: ",").map(String.init)
-            let pool = poolIds.isEmpty ? [] : poolIds.compactMap { id in RunCatCharacter.allCharacters.first { $0.id == id } }
             catAnimation?.configureRotation(
                 enabled: settings.catRotationEnabled && !character.isCustom,
-                intervalMinutes: settings.catRotationIntervalMinutes,
-                pool: pool
+                intervalMinutes: settings.catRotationIntervalMinutes
             )
             catAnimation?.setActive(true)
         } else {
