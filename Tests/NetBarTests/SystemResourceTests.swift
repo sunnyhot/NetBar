@@ -1195,6 +1195,100 @@ final class SystemResourceTests: XCTestCase {
         monitor.stop()
     }
 
+    @MainActor
+    func testApplicationDisplayRatesSmoothWithEMA() async {
+        func safariStats(received: UInt64) -> ApplicationTrafficStats {
+            ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: received, sentBytes: 0)
+        }
+        var clock = Date(timeIntervalSince1970: 100)
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            // 基线
+            ApplicationTrafficReadResult(stats: [safariStats(received: 1_000)], errorMessage: nil),
+            // 跟随样本(间隔被钳到 0.2s):Δ2000 → raw 10000,作为 EMA 种子
+            ApplicationTrafficReadResult(stats: [safariStats(received: 3_000)], errorMessage: nil),
+            // 后续每 1s Δ20000 → raw 20000
+            ApplicationTrafficReadResult(stats: [safariStats(received: 23_000)], errorMessage: nil),
+            ApplicationTrafficReadResult(stats: [safariStats(received: 43_000)], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            now: { clock }
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficSamples(2, monitor: monitor, timeout: 2)
+
+        let seeded = monitor.appTraffic.applications.first { $0.displayName == "Safari" }
+        XCTAssertNotNil(seeded)
+        XCTAssertEqual(seeded!.displayDownloadBytesPerSecond, 10_000, accuracy: 1, "首个差量样本作为平滑种子")
+
+        clock = clock.addingTimeInterval(1)
+        monitor.refreshApplicationTraffic()
+        await waitForApplicationTrafficSamples(3, monitor: monitor, timeout: 2)
+        let first = monitor.appTraffic.applications.first { $0.displayName == "Safari" }!
+        XCTAssertEqual(first.downloadBytesPerSecond, 20_000, accuracy: 1, "raw 值不受平滑影响")
+        XCTAssertEqual(first.displayDownloadBytesPerSecond, 20_000 * 0.4 + 10_000 * 0.6, accuracy: 1, "EMA: raw*0.4 + prev*0.6")
+
+        clock = clock.addingTimeInterval(1)
+        monitor.refreshApplicationTraffic()
+        await waitForApplicationTrafficSamples(4, monitor: monitor, timeout: 2)
+        let second = monitor.appTraffic.applications.first { $0.displayName == "Safari" }!
+        let expectedSecond = 20_000 * 0.4 + (20_000 * 0.4 + 10_000 * 0.6) * 0.6
+        XCTAssertEqual(second.displayDownloadBytesPerSecond, expectedSecond, accuracy: 1)
+        monitor.stop()
+    }
+
+    @MainActor
+    func testIdleApplicationKeepsRowInGraceThenHardExits() async {
+        func safariStats(received: UInt64) -> ApplicationTrafficStats {
+            ApplicationTrafficStats(id: "Safari.123", processName: "Safari", displayName: "Safari", pid: 123, receivedBytes: received, sentBytes: 0)
+        }
+        var clock = Date(timeIntervalSince1970: 100)
+        let trafficReader = SequenceApplicationTrafficReader(samples: [
+            ApplicationTrafficReadResult(stats: [safariStats(received: 1_000)], errorMessage: nil),
+            // 跟随样本:Δ2000@0.2s → raw 10000,活跃种子
+            ApplicationTrafficReadResult(stats: [safariStats(received: 3_000)], errorMessage: nil),
+            // 之后 raw 归零(计数器不再增长)
+            ApplicationTrafficReadResult(stats: [safariStats(received: 3_000)], errorMessage: nil),
+        ])
+        let monitor = NetworkMonitor(
+            reader: SequenceNetworkStatsReader(samples: [[InterfaceStats(name: "en0", receivedBytes: 100, sentBytes: 50, receivedPackets: 10, sentPackets: 5)]]),
+            appTrafficReader: trafficReader,
+            systemResourceReader: MockSystemResourceReader(
+                memory: MemoryUsage(totalBytes: 16, usedBytes: 8, swapTotalBytes: 0, swapUsedBytes: 0),
+                cpu: CPUTickSample(total: 100, user: 20, system: 10, idle: 70),
+                thermal: ThermalInfo(state: .nominal)
+            ),
+            now: { clock }
+        )
+
+        monitor.isApplicationTrafficVisible = true
+        await waitForApplicationTrafficSamples(2, monitor: monitor, timeout: 2)
+
+        // 空闲 1s:宽限期内,行保留、置灰、显示值衰减
+        clock = clock.addingTimeInterval(1)
+        monitor.refreshApplicationTraffic()
+        await waitForApplicationTrafficSamples(3, monitor: monitor, timeout: 2)
+        let coasting = monitor.appTraffic.applications.first { $0.displayName == "Safari" }!
+        XCTAssertTrue(coasting.isExpiring, "raw 空闲但宽限期内应标记 isExpiring")
+        XCTAssertEqual(coasting.displayDownloadBytesPerSecond, 10_000 * 0.6, accuracy: 1, "宽限期内显示值按 EMA 衰减")
+
+        // 宽限期(3s)过后:显示值硬归零,行移出列表
+        clock = clock.addingTimeInterval(4)
+        monitor.refreshApplicationTraffic()
+        try? await Task.sleep(nanoseconds: 300_000_000)
+        let expired = monitor.appTraffic.applications.first { $0.displayName == "Safari" }!
+        XCTAssertFalse(expired.isExpiring)
+        XCTAssertEqual(expired.displayDownloadBytesPerSecond, 0, "宽限期过后显示值硬归零")
+        monitor.stop()
+    }
+
     private func waitForApplicationTrafficSamples(
         _ count: Int,
         monitor: NetworkMonitor,

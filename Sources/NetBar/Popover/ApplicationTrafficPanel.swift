@@ -113,7 +113,7 @@ private struct ApplicationTrafficList: View {
                                 application: application,
                                 role: ApplicationTrafficPresentation.attributionRole(for: application),
                                 language: preferences.resolvedLanguage,
-                                isDimmed: appTraffic.isStale
+                                isDimmed: appTraffic.isStale || application.isExpiring
                             )
                         }
                     }

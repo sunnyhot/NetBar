@@ -143,8 +143,9 @@ enum ApplicationTrafficPresentation {
         _ applications: [ApplicationTrafficRate]
     ) -> [ApplicationTrafficRate] {
         applications.sorted { lhs, rhs in
-            let lhsActivity = lhs.downloadBytesPerSecond + lhs.uploadBytesPerSecond
-            let rhsActivity = rhs.downloadBytesPerSecond + rhs.uploadBytesPerSecond
+            // 排序使用平滑显示值,避免整列每秒重排
+            let lhsActivity = lhs.displayDownloadBytesPerSecond + lhs.displayUploadBytesPerSecond
+            let rhsActivity = rhs.displayDownloadBytesPerSecond + rhs.displayUploadBytesPerSecond
             return orderedDescending(lhsActivity, rhsActivity, lhs.displayName, rhs.displayName)
         }
     }
@@ -205,8 +206,8 @@ enum ApplicationTrafficPresentation {
         for application: ApplicationTrafficRate
     ) -> [ApplicationTrafficMetric] {
         [
-            ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(application.downloadBytesPerSecond)),
-            ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(application.uploadBytesPerSecond))
+            ApplicationTrafficMetric(kind: .download, value: ByteFormat.speed(application.displayDownloadBytesPerSecond)),
+            ApplicationTrafficMetric(kind: .upload, value: ByteFormat.speed(application.displayUploadBytesPerSecond))
         ]
     }
 
@@ -254,7 +255,12 @@ enum ApplicationTrafficPresentation {
     }
 
     private static func hasVisibleRealtimeTraffic(_ application: ApplicationTrafficRate) -> Bool {
-        application.downloadBytesPerSecond >= 1 || application.uploadBytesPerSecond >= 1
+        // 宽限期内的行保留(置灰展示),由 Monitor 在宽限期过后硬归零显示值
+        if application.isExpiring { return true }
+        let displayTotal =
+            application.displayDownloadBytesPerSecond
+            + application.displayUploadBytesPerSecond
+        return displayTotal >= 1
     }
 
     private static func candidateNames(

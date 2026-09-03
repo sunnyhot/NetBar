@@ -32,6 +32,21 @@ final class NetworkMonitor: ObservableObject {
     private var previousSampleDate: Date?
     private var previousApplicationStats: [String: ApplicationTrafficStats] = [:]
     private var needsImmediateFollowUpSample = false
+
+    /// 应用显示速率的 EMA 平滑状态(按聚合后的 displayName 索引)
+    private struct ApplicationDisplayRateState {
+        var smoothedDownload: Double
+        var smoothedUpload: Double
+        var lastActiveDate: Date
+    }
+    private var displayRateStates: [String: ApplicationDisplayRateState] = [:]
+
+    /// EMA 平滑系数(1s 采样下约 2.5s 收敛;低电量 5s 采样收敛更慢,可接受)
+    private static let displaySmoothingAlpha = 0.4
+    /// raw 速率低于该阈值视为空闲
+    private static let idleActivityThresholdBytesPerSecond: Double = 1
+    /// 空闲后行保留(置灰、显示值衰减)的宽限期,时间制以兼容 5s 低电量采样
+    private static let displayExpiryGracePeriod: TimeInterval = 3
     private var previousApplicationSampleDate: Date?
     private var anomalyDetector = NetworkAnomalyDetector()
     private var previousCPUTickSample: CPUTickSample?
@@ -158,6 +173,7 @@ final class NetworkMonitor: ObservableObject {
         // 标记为 stale(置灰展示),避免「旧列表 → 空态 → 新列表」的闪烁
         previousApplicationStats = [:]
         previousApplicationSampleDate = nil
+        displayRateStates = [:]
         if !appTraffic.applications.isEmpty {
             appTraffic.isStale = true
         }
@@ -522,7 +538,7 @@ final class NetworkMonitor: ObservableObject {
 
         previousApplicationStats = currentByID
         previousApplicationSampleDate = sampledAt
-        let applications = groupApplications(processRates)
+        let applications = smoothedApplications(groupApplications(processRates), sampledAt: sampledAt)
         appTraffic = ApplicationTrafficState(
             timestamp: sampledAt,
             applications: applications,
@@ -531,6 +547,61 @@ final class NetworkMonitor: ObservableObject {
             errorMessage: nil,
             isStale: false
         )
+    }
+
+    /// 对聚合后的应用做 EMA 平滑与宽限标记:raw 字段保持原值(归因/汇总用),
+    /// display 字段承载平滑显示值;raw 空闲超过宽限期后显示值硬归零、行被过滤。
+    private func smoothedApplications(
+        _ applications: [ApplicationTrafficRate],
+        sampledAt: Date
+    ) -> [ApplicationTrafficRate] {
+        let presentNames = Set(applications.map(\.displayName))
+        displayRateStates = displayRateStates.filter { presentNames.contains($0.key) }
+
+        return applications.map { application in
+            let alpha = Self.displaySmoothingAlpha
+            let previous = displayRateStates[application.displayName]
+            let smoothedDownload: Double
+            let smoothedUpload: Double
+            if let previous {
+                smoothedDownload = application.downloadBytesPerSecond * alpha + previous.smoothedDownload * (1 - alpha)
+                smoothedUpload = application.uploadBytesPerSecond * alpha + previous.smoothedUpload * (1 - alpha)
+            } else {
+                // 首次观测以 raw 种子起步,保证新出现的应用立即有显示值
+                smoothedDownload = application.downloadBytesPerSecond
+                smoothedUpload = application.uploadBytesPerSecond
+            }
+
+            let isRawActive =
+                application.downloadBytesPerSecond + application.uploadBytesPerSecond
+                >= Self.idleActivityThresholdBytesPerSecond
+            let lastActiveDate = isRawActive ? sampledAt : (previous?.lastActiveDate ?? sampledAt)
+            let idleInterval = sampledAt.timeIntervalSince(lastActiveDate)
+            let isInGrace = idleInterval <= Self.displayExpiryGracePeriod
+            let isExpiring = !isRawActive && isInGrace
+            // 宽限期过后显示值硬归零(EMA 自然衰减太慢,会让空闲行滞留十几秒)
+            let expired = !isRawActive && !isInGrace
+
+            displayRateStates[application.displayName] = ApplicationDisplayRateState(
+                smoothedDownload: smoothedDownload,
+                smoothedUpload: smoothedUpload,
+                lastActiveDate: lastActiveDate
+            )
+
+            return ApplicationTrafficRate(
+                id: application.id,
+                displayName: application.displayName,
+                processNames: application.processNames,
+                pids: application.pids,
+                downloadBytesPerSecond: application.downloadBytesPerSecond,
+                uploadBytesPerSecond: application.uploadBytesPerSecond,
+                totalReceivedBytes: application.totalReceivedBytes,
+                totalSentBytes: application.totalSentBytes,
+                displayDownloadBytesPerSecond: expired ? 0 : smoothedDownload,
+                displayUploadBytesPerSecond: expired ? 0 : smoothedUpload,
+                isExpiring: isExpiring
+            )
+        }
     }
 
     private func recordSnapshotForIntelligence() {

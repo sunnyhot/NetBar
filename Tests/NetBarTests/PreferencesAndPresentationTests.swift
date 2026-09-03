@@ -3408,6 +3408,56 @@ extension PreferencesAndPresentationTests {
         XCTAssertEqual(visible.map(\.displayName), ["Browser", "Uploader"])
     }
 
+    func testExpiringRowsStayVisibleAndMetricsUseDisplayRates() {
+        func rate(
+            _ name: String,
+            download: Double,
+            upload: Double,
+            displayDownload: Double? = nil,
+            displayUpload: Double? = nil,
+            isExpiring: Bool = false
+        ) -> ApplicationTrafficRate {
+            ApplicationTrafficRate(
+                id: name,
+                displayName: name,
+                processNames: [name],
+                pids: [],
+                downloadBytesPerSecond: download,
+                uploadBytesPerSecond: upload,
+                totalReceivedBytes: 5_000,
+                totalSentBytes: 2_500,
+                displayDownloadBytesPerSecond: displayDownload,
+                displayUploadBytesPerSecond: displayUpload,
+                isExpiring: isExpiring
+            )
+        }
+
+        // 宽限期内的行:raw 已空闲、显示值衰减,但仍应保留在列表中
+        let state = ApplicationTrafficState(
+            timestamp: Date(timeIntervalSince1970: 10),
+            applications: [
+                rate("Coasting", download: 0, upload: 0, displayDownload: 6_000, displayUpload: 0, isExpiring: true),
+                rate("Active", download: 50_000, upload: 0, displayDownload: 20_000, displayUpload: 0),
+                rate("Gone", download: 0, upload: 0, displayDownload: 0, displayUpload: 0)
+            ],
+            sampleCount: 5,
+            isRefreshing: false,
+            errorMessage: nil
+        )
+
+        let visible = ApplicationTrafficPresentation.displayApplications(state.applications)
+        XCTAssertEqual(Set(visible.map(\.displayName)), ["Coasting", "Active"], "宽限期内的行保留,宽限期外的空闲行移出")
+
+        // 排序使用平滑显示值(Active 的 display 20k < Coasting 的 6k?不,20k 更大,应排前)
+        let sorted = ApplicationTrafficPresentation.sorted(visible)
+        XCTAssertEqual(sorted.first?.displayName, "Active")
+
+        // 行指标读取显示值而非 raw
+        let activeRow = sorted.first!
+        let metrics = ApplicationTrafficPresentation.rowMetrics(for: activeRow)
+        XCTAssertEqual(metrics.first?.value, ByteFormat.speed(activeRow.displayDownloadBytesPerSecond))
+    }
+
     func testApplicationSummaryUsesVisibleApplications() {
         let applications = [
             appWithResources("Idle App", processNames: ["Idle App"]),
