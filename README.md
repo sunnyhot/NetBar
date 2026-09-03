@@ -37,28 +37,83 @@ NetBar 会在菜单栏显示当前网络速度，默认展示下载和上传速�
 
 ### 菜单栏动态小宠物
 
-NetBar 内置 35 个动态角色，会常驻菜单栏陪你上网。角色动画是逐帧绘制的，不占用额外窗口，也不会干扰菜单栏布局。
+NetBar 内置 35 个动态角色，会常驻菜单栏陪你上网。角色动画是逐帧绘制的，不占用额外窗口，也不会干扰菜单栏布局。按分类全部展示如下（GIF 为固定帧率演示，实际动画速度跟随网络活动变化）：
 
-| 分类 | 数量 | 代表角色 |
-|---|---:|---|
-| 默认 | 7 | 猫咪 α / β / γ、猫尾巴、彩虹猫、游戏猫、派对鹦鹉 |
-| 生物 | 10 | 猎豹、柴犬、兔兔、企鹅、青蛙、棱镜狐、星辉幼龙等 |
-| 非生物 | 8 | 齿轮、篝火、水滴、火箭、钟摆、咖啡杯、小云朵、小盆栽 |
-| 季节 | 4 | 驯鹿与雪橇、雪人、风铃、线香烟花 |
-| 特别 | 6 | 黄金猫、金属集群猫、闪光猫、招财猫、幻彩史莱姆、寿司 |
-
-部分角色动起来的样子（GIF 为固定帧率演示，实际动画速度跟随网络活动变化）：
+**默认 · 7 个**
 
 <table>
 <tr>
-<td align="center"><img src="docs/images/pets/cat.gif" height="100" alt="猫咪 α"><br><sub><b>猫咪 α</b></sub></td>
-<td align="center"><img src="docs/images/pets/party-parrot.gif" height="100" alt="派对鹦鹉"><br><sub><b>派对鹦鹉</b></sub></td>
-<td align="center"><img src="docs/images/pets/mock_nyan_cat.gif" height="100" alt="彩虹猫"><br><sub><b>彩虹猫</b></sub></td>
+<td align="center"><img src="docs/images/pets/cat.gif" height="80" alt="猫咪 α"><br><sub>猫咪 α</sub></td>
+<td align="center"><img src="docs/images/pets/cat_b.gif" height="80" alt="猫咪 β"><br><sub>猫咪 β</sub></td>
+<td align="center"><img src="docs/images/pets/cat_c.gif" height="80" alt="猫咪 γ"><br><sub>猫咪 γ</sub></td>
+<td align="center"><img src="docs/images/pets/cat_tail.gif" height="80" alt="猫尾巴"><br><sub>猫尾巴</sub></td>
+<td align="center"><img src="docs/images/pets/mock_nyan_cat.gif" height="80" alt="彩虹猫"><br><sub>彩虹猫</sub></td>
+<td align="center"><img src="docs/images/pets/gaming-cat.gif" height="80" alt="游戏猫"><br><sub>游戏猫</sub></td>
 </tr>
 <tr>
-<td align="center"><img src="docs/images/pets/shiba_inu.gif" height="100" alt="柴犬"><br><sub><b>柴犬</b></sub></td>
-<td align="center"><img src="docs/images/pets/golden_cat.gif" height="100" alt="黄金猫"><br><sub><b>黄金猫</b></sub></td>
-<td align="center"><img src="docs/images/pets/maneki_neko.gif" height="100" alt="招财猫"><br><sub><b>招财猫</b></sub></td>
+<td align="center"><img src="docs/images/pets/party-parrot.gif" height="80" alt="派对鹦鹉"><br><sub>派对鹦鹉</sub></td>
+</tr>
+</table>
+
+**生物 · 10 个**
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/pets/cheetah.gif" height="80" alt="猎豹"><br><sub>猎豹</sub></td>
+<td align="center"><img src="docs/images/pets/dog.gif" height="80" alt="小狗"><br><sub>小狗</sub></td>
+<td align="center"><img src="docs/images/pets/puppy.gif" height="80" alt="幼犬"><br><sub>幼犬</sub></td>
+<td align="center"><img src="docs/images/pets/rabbit.gif" height="80" alt="兔子"><br><sub>兔子</sub></td>
+<td align="center"><img src="docs/images/pets/frog.gif" height="80" alt="青蛙"><br><sub>青蛙</sub></td>
+<td align="center"><img src="docs/images/pets/prism_fox.gif" height="80" alt="棱镜狐"><br><sub>棱镜狐</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/images/pets/starlight_dragon.gif" height="80" alt="星辉幼龙"><br><sub>星辉幼龙</sub></td>
+<td align="center"><img src="docs/images/pets/shiba_inu.gif" height="80" alt="柴犬"><br><sub>柴犬</sub></td>
+<td align="center"><img src="docs/images/pets/bunny.gif" height="80" alt="兔兔"><br><sub>兔兔</sub></td>
+<td align="center"><img src="docs/images/pets/penguin.gif" height="80" alt="企鹅"><br><sub>企鹅</sub></td>
+</tr>
+</table>
+
+**非生物 · 8 个**
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/pets/cogwheel.gif" height="80" alt="齿轮"><br><sub>齿轮</sub></td>
+<td align="center"><img src="docs/images/pets/bonfire.gif" height="80" alt="篝火"><br><sub>篝火</sub></td>
+<td align="center"><img src="docs/images/pets/drop.gif" height="80" alt="水滴"><br><sub>水滴</sub></td>
+<td align="center"><img src="docs/images/pets/rocket.gif" height="80" alt="火箭"><br><sub>火箭</sub></td>
+<td align="center"><img src="docs/images/pets/pendulum.gif" height="80" alt="钟摆"><br><sub>钟摆</sub></td>
+<td align="center"><img src="docs/images/pets/coffee_cup.gif" height="80" alt="咖啡杯"><br><sub>咖啡杯</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/images/pets/little_cloud.gif" height="80" alt="小云朵"><br><sub>小云朵</sub></td>
+<td align="center"><img src="docs/images/pets/tiny_plant.gif" height="80" alt="小盆栽"><br><sub>小盆栽</sub></td>
+</tr>
+</table>
+
+**季节 · 4 个**
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/pets/reindeer.gif" height="80" alt="驯鹿与雪橇"><br><sub>驯鹿与雪橇</sub></td>
+<td align="center"><img src="docs/images/pets/snowman.gif" height="80" alt="雪人"><br><sub>雪人</sub></td>
+<td align="center"><img src="docs/images/pets/wind_chime.gif" height="80" alt="风铃"><br><sub>风铃</sub></td>
+<td align="center"><img src="docs/images/pets/sparkler.gif" height="80" alt="线香烟花"><br><sub>线香烟花</sub></td>
+</tr>
+</table>
+
+**特别 · 6 个**
+
+<table>
+<tr>
+<td align="center"><img src="docs/images/pets/golden_cat.gif" height="80" alt="黄金猫"><br><sub>黄金猫</sub></td>
+<td align="center"><img src="docs/images/pets/metal_cluster_cat.gif" height="80" alt="金属集群猫"><br><sub>金属集群猫</sub></td>
+<td align="center"><img src="docs/images/pets/flash_cat.gif" height="80" alt="闪光猫"><br><sub>闪光猫</sub></td>
+</tr>
+<tr>
+<td align="center"><img src="docs/images/pets/maneki_neko.gif" height="80" alt="招财猫"><br><sub>招财猫</sub></td>
+<td align="center"><img src="docs/images/pets/chroma_slime.gif" height="80" alt="幻彩史莱姆"><br><sub>幻彩史莱姆</sub></td>
+<td align="center"><img src="docs/images/pets/sushi.gif" height="80" alt="寿司"><br><sub>寿司</sub></td>
 </tr>
 </table>
 

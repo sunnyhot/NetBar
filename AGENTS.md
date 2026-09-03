@@ -28,7 +28,7 @@ NetBar 是一个 macOS 菜单栏网络流量监控 App，纯 Swift 编写，无�
 | `Scripts/package-release.sh` | 25 | build + release app 验证 + zip + sha256 |
 | `Scripts/verify-release-app.sh` | 48 | 验证 `.app` 可执行文件、架构和签名形态 |
 | `Scripts/generate-icon.swift` | 260 | CoreGraphics 程序化生成 AppIcon |
-| `Scripts/generate-pet-gifs.swift` | 106 | 从 `Resources/RunCat/` 帧图合成 README 展示 GIF 到 `docs/images/pets/` |
+| `Scripts/generate-pet-gifs.swift` | 102 | 从 `Resources/RunCat/` 帧图合成 README 展示 GIF 到 `docs/images/pets/`，默认生成全部内置角色 |
 | `docs/images/pets/` | — | README 角色展示 GIF（由 `Scripts/generate-pet-gifs.swift` 生成） |
 
 ### Sources/NetBar

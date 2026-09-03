@@ -5,25 +5,21 @@ import UniformTypeIdentifiers
 
 // 从 Resources/RunCat/<id>/frame_N.png 合成 README 展示用的角色 GIF（docs/images/pets/）。
 // 用法（在仓库根目录执行）：
-//   swift Scripts/generate-pet-gifs.swift              # 重新生成 README 画廊的角色
+//   swift Scripts/generate-pet-gifs.swift              # 生成全部内置角色
 //   swift Scripts/generate-pet-gifs.swift sushi cat     # 只生成指定角色
 
 let rootURL = URL(fileURLWithPath: FileManager.default.currentDirectoryPath)
 let outputURL = rootURL.appendingPathComponent("docs/images/pets")
+let runcatDirectory = rootURL.appendingPathComponent("Resources/RunCat")
 
-// README 小宠物画廊展示的角色，调整后需同步更新 README 中的引用。
-let showcaseIDs = [
-    "cat",
-    "party-parrot",
-    "mock_nyan_cat",
-    "shiba_inu",
-    "golden_cat",
-    "maneki_neko",
-]
+let allCharacterIDs = (try? FileManager.default.contentsOfDirectory(at: runcatDirectory, includingPropertiesForKeys: nil))?
+    .filter { $0.hasDirectoryPath }
+    .map { $0.lastPathComponent }
+    .sorted() ?? []
 
 let characterIDs = CommandLine.arguments.count > 1
     ? Array(CommandLine.arguments.dropFirst())
-    : showcaseIDs
+    : allCharacterIDs
 
 let frameScale = 3
 let frameDelay: Double = 0.125
