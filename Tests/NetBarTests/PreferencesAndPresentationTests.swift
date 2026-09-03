@@ -3489,6 +3489,7 @@ extension PreferencesAndPresentationTests {
         )
         XCTAssertEqual(idle.tone, .idle)
         XCTAssertEqual(idle.title, "Idle")
+        XCTAssertNil(idle.subtitle, "常规状态不应携带装饰性副标题")
 
         let active = LivingSignalStatusPresentation.make(
             snapshot: sampleSnapshot(download: 420_000, upload: 60_000),
@@ -3497,6 +3498,7 @@ extension PreferencesAndPresentationTests {
         )
         XCTAssertEqual(active.tone, .active)
         XCTAssertEqual(active.title, "Active")
+        XCTAssertNil(active.subtitle, "常规状态不应携带装饰性副标题")
 
         let uploadHeavy = LivingSignalStatusPresentation.make(
             snapshot: sampleSnapshot(download: 80_000, upload: 900_000),
@@ -3505,6 +3507,7 @@ extension PreferencesAndPresentationTests {
         )
         XCTAssertEqual(uploadHeavy.tone, .uploadHeavy)
         XCTAssertEqual(uploadHeavy.title, "Upload Heavy")
+        XCTAssertNil(uploadHeavy.subtitle, "常规状态不应携带装饰性副标题")
 
         let event = NetworkAnomalyEvent(
             title: "Traffic surge",
@@ -3518,6 +3521,7 @@ extension PreferencesAndPresentationTests {
         )
         XCTAssertEqual(anomaly.tone, .attention)
         XCTAssertEqual(anomaly.title, "Traffic surge")
+        XCTAssertEqual(anomaly.subtitle, "Traffic stayed high.", "异常事件消息应保留为副标题")
     }
 }
 

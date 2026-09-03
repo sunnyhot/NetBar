@@ -9,17 +9,15 @@ struct TrafficPulseChartView: View {
         let isActive = presentation.peakDownloadBytesPerSecond > 0 || presentation.peakUploadBytesPerSecond > 0
 
         VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(appPreferences.text("实时信号", "Realtime Signal"))
-                        .font(.system(size: 13, weight: .bold))
-                    Text(appPreferences.text(
-                        "最近 \(selectedWindow.title(language: appPreferences.resolvedLanguage)) 下载 / 上传",
-                        "Last \(selectedWindow.title(language: appPreferences.resolvedLanguage)) down / up"
-                    ))
-                    .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(.tertiary)
-                }
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
+                Text(appPreferences.text("实时信号", "Realtime Signal"))
+                    .font(.system(size: 13, weight: .bold))
+                Text(appPreferences.text(
+                    "最近 \(selectedWindow.title(language: appPreferences.resolvedLanguage)) 下载 / 上传",
+                    "last \(selectedWindow.title(language: appPreferences.resolvedLanguage)) down / up"
+                ))
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(.tertiary)
 
                 Spacer(minLength: 8)
 

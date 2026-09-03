@@ -20,8 +20,8 @@ struct NetworkPopoverView: View {
                 appPreferences: appPreferences
             )
                 .padding(.horizontal, LivingSignalLayout.horizontalPadding)
-                .padding(.top, 18)
-                .padding(.bottom, 14)
+                .padding(.top, 14)
+                .padding(.bottom, 12)
                 .layoutPriority(1)
 
             Divider().opacity(0.55)
@@ -61,7 +61,7 @@ struct NetworkPopoverView: View {
                     )
                 }
                 .padding(.horizontal, LivingSignalLayout.horizontalPadding)
-                .padding(.top, 16)
+                .padding(.top, 12)
                 .padding(.bottom, 16)
             }
             .frame(minHeight: 0)

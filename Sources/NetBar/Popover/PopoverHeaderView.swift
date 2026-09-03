@@ -6,7 +6,7 @@ struct PopoverHeaderView: View {
     @ObservedObject var appPreferences: AppPreferences
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
+        VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .center, spacing: 12) {
                 LivingSignalStatusDot(tone: presentation.tone)
 
@@ -14,10 +14,14 @@ struct PopoverHeaderView: View {
                     Text(presentation.title)
                         .font(.system(size: 16, weight: .semibold))
                         .foregroundStyle(.primary)
-                    Text(presentation.subtitle)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
+                    // 仅在异常事件时展示副标题(事件消息),常规状态不再
+                    // 显示装饰性文案,压低头部卡片高度
+                    if let subtitle = presentation.subtitle {
+                        Text(subtitle)
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(2)
+                    }
                 }
 
                 Spacer(minLength: 10)
@@ -46,7 +50,7 @@ struct PopoverHeaderView: View {
                 )
             }
         }
-        .livingSignalPanel(tone: presentation.tone, isElevated: true, padding: 14)
+        .livingSignalPanel(tone: presentation.tone, isElevated: true, padding: 12)
     }
 }
 
@@ -98,18 +102,15 @@ private struct LivingSignalSpeedMetric: View {
                 .frame(width: 18, height: 18)
                 .background(tone.softColor, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-            VStack(alignment: .leading, spacing: 1) {
-                Text(title)
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(.tertiary)
-                Text(value)
-                    .font(.system(size: 11, weight: .bold, design: .rounded))
-                    .foregroundStyle(.primary)
-                    .lineLimit(1)
-                    .minimumScaleFactor(0.7)
-            }
+            Text(value)
+                .font(.system(size: 11, weight: .bold, design: .rounded))
+                .foregroundStyle(.primary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .livingSignalRow(tone: tone, padding: 8)
+        .livingSignalRow(tone: tone, padding: 7)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("\(title) \(value)")
     }
 }

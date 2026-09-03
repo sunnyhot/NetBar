@@ -106,7 +106,7 @@ enum LivingSignalLayout {
     static let rowCornerRadius: CGFloat = 10
     static let horizontalPadding: CGFloat = 18
     static let verticalSectionSpacing: CGFloat = 14
-    static let chartHeight: CGFloat = 110
+    static let chartHeight: CGFloat = 96
     static let iconTileSize: CGFloat = 34
 }
 
@@ -144,7 +144,7 @@ struct LivingSignalMotionPolicy: Equatable {
 
 struct LivingSignalStatusPresentation: Equatable {
     let title: String
-    let subtitle: String
+    let subtitle: String?
     let tone: LivingSignalTone
     let symbolName: String
     let totalSpeed: String
@@ -174,7 +174,7 @@ struct LivingSignalStatusPresentation: Equatable {
         if snapshot.downloadBytesPerSecond < 1, snapshot.uploadBytesPerSecond < 1 {
             return LivingSignalStatusPresentation(
                 title: language.text("空闲", "Idle"),
-                subtitle: language.text("等待新的网络活动", "Waiting for network activity"),
+                subtitle: nil,
                 tone: .idle,
                 symbolName: "pause.circle.fill",
                 totalSpeed: totalSpeed,
@@ -186,7 +186,7 @@ struct LivingSignalStatusPresentation: Equatable {
            snapshot.uploadBytesPerSecond > 100_000 {
             return LivingSignalStatusPresentation(
                 title: language.text("上传占优", "Upload Heavy"),
-                subtitle: language.text("上传速率高于下载", "Upload is leading download"),
+                subtitle: nil,
                 tone: .uploadHeavy,
                 symbolName: "arrow.up.circle.fill",
                 totalSpeed: totalSpeed,
@@ -196,7 +196,7 @@ struct LivingSignalStatusPresentation: Equatable {
 
         return LivingSignalStatusPresentation(
             title: language.text("活跃", "Active"),
-            subtitle: language.text("实时信号正在流动", "Realtime signal is flowing"),
+            subtitle: nil,
             tone: .active,
             symbolName: "waveform.path.ecg",
             totalSpeed: totalSpeed,
