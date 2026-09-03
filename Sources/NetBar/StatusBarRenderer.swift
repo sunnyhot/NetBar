@@ -394,7 +394,7 @@ enum StatusBarDisplayRenderer {
         }
 
         let text = attributedText(layout.lines.joined(separator: "\n"), layout: layout, settings: settings, color: textColor)
-        let textHeight = lineHeight(for: layout.font, settings: settings) * CGFloat(layout.lines.count)
+        let textHeight = lineHeight(for: layout.font, lineCount: layout.lines.count) * CGFloat(layout.lines.count)
         textRect.origin.y = (height - textHeight) / 2
         textRect.size.height = textHeight
         text.draw(
@@ -502,10 +502,6 @@ enum StatusBarDisplayRenderer {
 
     /// 状态项内容与两侧边缘的水平内距(背景模式曾用 3,背景移除后统一为 2)。
     private static let horizontalTextPadding: CGFloat = 2
-
-    /// 两行上下行布局的固定行高修正。原为用户偏好 statusBar.lineSpacing
-    /// (默认 -2.0),精简设置面后固定为原默认值。
-    private static let statusBarLineSpacingAdjustment: CGFloat = -2.0
 
     static func shouldMirrorCharacter(settings: StatusBarSettings, frameIndex: Int) -> Bool {
         let baseMirror = settings.catFacing == .left
@@ -666,7 +662,7 @@ enum StatusBarDisplayRenderer {
         paragraphStyle.alignment = settings.alignment.nsTextAlignment
         paragraphStyle.lineBreakMode = .byClipping
         let naturalLineHeight = layout.font.ascender - layout.font.descender
-        let constrainedLineHeight = lineHeight(for: layout.font, settings: settings)
+        let constrainedLineHeight = lineHeight(for: layout.font, lineCount: layout.lines.count)
         paragraphStyle.minimumLineHeight = constrainedLineHeight
         paragraphStyle.maximumLineHeight = constrainedLineHeight
         let baselineOffset = (constrainedLineHeight - naturalLineHeight) / 2
@@ -682,9 +678,13 @@ enum StatusBarDisplayRenderer {
         )
     }
 
-    private static func lineHeight(for font: NSFont, settings: StatusBarSettings) -> CGFloat {
+    static func lineHeight(for font: NSFont, lineCount: Int) -> CGFloat {
         let naturalLineHeight = font.ascender - font.descender
-        return max(naturalLineHeight + Self.statusBarLineSpacingAdjustment, 8)
+        guard lineCount > 1 else { return naturalLineHeight }
+        // 多行(上下行速率)布局:行高均分状态栏高度,上行贴上、下行贴下,
+        // 避免两行缩成一团挤在中间。取代原 statusBar.lineSpacing 偏好
+        // (固定 -2.0 的压缩值会让自定义过行距的用户观感回退)。
+        return max(max(NSStatusBar.system.thickness, 24) / CGFloat(lineCount), 8)
     }
 
     private static func tintImage(_ image: NSImage, color: NSColor) -> NSImage? {

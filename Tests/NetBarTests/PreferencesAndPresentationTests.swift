@@ -375,6 +375,49 @@ final class PreferencesAndPresentationTests: XCTestCase {
         XCTAssertEqual(legacySignature, plainSignature)
     }
 
+    func testTwoLineLayoutStretchesLineHeightToStatusBarHeight() {
+        let font = NSFont.monospacedDigitSystemFont(ofSize: 11.5, weight: .semibold)
+
+        let twoLineHeight = StatusBarDisplayRenderer.lineHeight(for: font, lineCount: 2)
+        XCTAssertEqual(
+            twoLineHeight * 2,
+            max(NSStatusBar.system.thickness, 24),
+            accuracy: 0.5,
+            "两行上下行布局应均分状态栏高度,上行靠上、下行靠下"
+        )
+
+        let singleLineHeight = StatusBarDisplayRenderer.lineHeight(for: font, lineCount: 1)
+        XCTAssertEqual(singleLineHeight, font.ascender - font.descender, accuracy: 0.5)
+    }
+
+    func testTwoLineSpeedsSpreadAcrossStatusBarHeight() {
+        // 用户场景:小字号 + 常规字重的上下行两行,不应挤在中间,
+        // 上边距/行间距/下边距应大致均等(文字块铺满状态栏高度)
+        let settings = StatusBarSettings(defaults: isolatedDefaults())
+        settings.fontSize = 8.8
+        settings.isBold = false
+        settings.showsCat = false
+        settings.usesSystemTextColor = false
+        settings.textColor = .white
+
+        let image = StatusBarDisplayRenderer.image(
+            snapshot: sampleSnapshot(download: 310_000, upload: 153_000),
+            settings: settings,
+            scale: 2
+        )
+        let distribution = verticalInkDistribution(in: image, background: .olive)
+
+        guard let midGap = distribution.midGap else {
+            XCTFail("Expected a visible gap between the two speed lines")
+            return
+        }
+        // 行间应有清晰可见的空隙(≥3pt),且三段空隙大致均等(容差 3pt,
+        // 吸收字形 ascender/descender 不对称带来的像素级偏差)
+        XCTAssertGreaterThanOrEqual(midGap, 6)
+        XCTAssertLessThanOrEqual(abs(distribution.topMargin - midGap), 6)
+        XCTAssertLessThanOrEqual(abs(distribution.bottomMargin - midGap), 6)
+    }
+
     func testRotationPoolPreferenceIsRemoved() throws {
         let sources: [[String]] = [
             ["Sources", "NetBar", "StatusBarStyle.swift"],
@@ -2711,6 +2754,62 @@ final class PreferencesAndPresentationTests: XCTestCase {
         return (
             topMargin: bitmap.pixelsHigh - 1 - maxY,
             bottomMargin: minY
+        )
+    }
+
+    private func verticalInkDistribution(
+        in image: NSImage,
+        background: PersistedColor,
+        file: StaticString = #filePath,
+        line: UInt = #line
+    ) -> (topMargin: Int, midGap: Int?, bottomMargin: Int) {
+        guard let bitmap = image.representations.compactMap({ $0 as? NSBitmapImageRep }).first else {
+            XCTFail("Expected bitmap image representation", file: file, line: line)
+            return (0, nil, 0)
+        }
+
+        let backgroundColor = background.nsColor.usingColorSpace(.deviceRGB) ?? background.nsColor
+        var rowHasInk = [Bool](repeating: false, count: bitmap.pixelsHigh)
+        for y in 0..<bitmap.pixelsHigh {
+            for x in 0..<bitmap.pixelsWide {
+                guard
+                    let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB),
+                    color.alphaComponent > 0.5
+                else { continue }
+                let distanceFromBackground =
+                    abs(color.redComponent - backgroundColor.redComponent) +
+                    abs(color.greenComponent - backgroundColor.greenComponent) +
+                    abs(color.blueComponent - backgroundColor.blueComponent)
+                if distanceFromBackground > 0.35 {
+                    rowHasInk[y] = true
+                    break
+                }
+            }
+        }
+
+        guard let firstInk = rowHasInk.firstIndex(of: true),
+              let lastInk = rowHasInk.lastIndex(of: true)
+        else {
+            XCTFail("Expected rendered text pixels", file: file, line: line)
+            return (0, nil, 0)
+        }
+
+        // 两行文字之间的行间距 = 首末墨迹行之间最长的一段连续空白行
+        var longestGap = 0
+        var currentGap = 0
+        for row in rowHasInk[firstInk...lastInk] {
+            if row {
+                currentGap = 0
+            } else {
+                currentGap += 1
+                longestGap = max(longestGap, currentGap)
+            }
+        }
+
+        return (
+            topMargin: bitmap.pixelsHigh - 1 - lastInk,
+            midGap: longestGap > 0 ? longestGap : nil,
+            bottomMargin: firstInk
         )
     }
 
