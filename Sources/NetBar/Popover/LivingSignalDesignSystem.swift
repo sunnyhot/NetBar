@@ -96,9 +96,9 @@ enum LivingSignalTone: String, CaseIterable, Equatable {
 }
 
 enum LivingSignalLayout {
-    static let minimumPopoverWidth: CGFloat = 480
-    static let preferredPopoverWidth: CGFloat = 500
-    static let maximumPopoverWidth: CGFloat = 520
+    static let minimumPopoverWidth: CGFloat = 400
+    static let preferredPopoverWidth: CGFloat = 420
+    static let maximumPopoverWidth: CGFloat = 440
     static let minimumPopoverHeight: CGFloat = 500
     static let preferredPopoverHeight: CGFloat = 720
     static let panelCornerRadius: CGFloat = 12

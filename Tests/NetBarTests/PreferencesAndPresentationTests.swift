@@ -3526,9 +3526,9 @@ extension PreferencesAndPresentationTests {
 
 extension PreferencesAndPresentationTests {
     func testLivingSignalLayoutUsesApprovedPopoverWidth() {
-        XCTAssertEqual(LivingSignalLayout.minimumPopoverWidth, 480)
-        XCTAssertEqual(LivingSignalLayout.preferredPopoverWidth, 500)
-        XCTAssertEqual(LivingSignalLayout.maximumPopoverWidth, 520)
+        XCTAssertEqual(LivingSignalLayout.minimumPopoverWidth, 400)
+        XCTAssertEqual(LivingSignalLayout.preferredPopoverWidth, 420)
+        XCTAssertEqual(LivingSignalLayout.maximumPopoverWidth, 440)
         XCTAssertGreaterThan(LivingSignalLayout.chartHeight, 90)
     }
 
